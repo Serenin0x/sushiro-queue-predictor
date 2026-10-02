@@ -1,6 +1,6 @@
 # 实时数据接入验证手册
 
-当前本地工具为 `0.2.0.dev1`，已完成固定新主机适配、API profile 隔离、116 项离线检查和西单实际 CLI 单份快照落库；最近已发布基线仍为 `0.2.0.dev0`。60 秒采样首轮 HTTP 401 后停止，静态鉴权声明到期与失败时序吻合，正常续期未验证；30 秒阶段未执行。字段单位、来源刷新与长期连续采集未验收。完整背景和编辑记录见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)。
+当前本地与已发布工具均为 `0.2.0.dev1`，已完成固定新主机适配、API profile 隔离、本机有效期检查、116 项离线检查和西单实际 CLI 单份快照落库；代码与 E0014–E0019 已原子发布至 [455acf4d5d0cc50d82f6704d40716cb0e02be9e8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/455acf4d5d0cc50d82f6704d40716cb0e02be9e8)，27 个远端 blob 与本地逐一一致并已同步，详见 E0020。60 秒采样首轮 HTTP 401 后停止，静态鉴权声明到期与失败时序吻合，正常续期未验证；30 秒阶段未执行。字段单位、来源刷新与长期连续采集未验收。完整背景和编辑记录见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)。
 
 ## 已取得的证据
 
