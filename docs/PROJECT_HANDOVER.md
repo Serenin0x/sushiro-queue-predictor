@@ -12,11 +12,11 @@
 4. 在任务开始前判断需要哪些真实数据、用户授权或人工核验；可以独立完成的工作继续推进。
 5. 每次工作都更新本文档的编辑历史；需求、设计或版本状态改变时，同时更新对应板块。
 
-**当前本地与已发布只读工具均为 0.2.0.dev1。** 新 sapi 西单单店已捕获、独立请求并通过实际新 CLI 保存；116 项离线检查通过。代码与 E0014–E0019 的发布见 E0020，E0020–E0021 文档后续已发布；最近已核验 main 为 18d83e9676634fb7e85479bf54e9ffa5bf2a2856、27 文件一致，见 E0022。用户于 2026-10-03 恢复工作，开放字体 Light 标题与浅/深色 SVG 已本地完成、核验，E0022 检查点及本轮资产尚待发布，见 E0023。标题完成后立即回到正常鉴权更新、三店与 60/30 秒采样主线；此前首轮 HTTP 401 后停止，正常续期、字段单位、刷新与完整试点仍未验收。没有预测模型、后端服务、小程序前端或部署。接入步骤见 [DATA_ACCESS.md](DATA_ACCESS.md)。
+**当前本地只读工具为 `0.2.0.dev2`，准备发布；已发布基线仍为 `0.2.0.dev1`。** 最新已核验 main 为 [0327d154bc48d17893843e4b791161de534c5984](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0327d154bc48d17893843e4b791161de534c5984)，树 8b46985635055bf24ab15748a06998108f13b959，31 个远端 blob 逐一与当时本地一致并已同步，开放 Light 标题已发布，见 E0024。dev2 新增显式私有上下文文件、逐请求整组重读、声明到期保护和来源隔离的质量报告；主执行者独立 166 项离线检查通过，独立源码复核未发现必须修复问题，见 E0025。真实证据仍为此前西单单店成功与首轮 HTTP 401 后停止，正常鉴权更新来源、字段单位、源刷新、三店权限与 60/30 秒连续采样均未验收。2026-10-03 夜间尝试捕获约 121 秒越时且未点到微信刷新，用户随后手动多次刷新报告保留，最新 HAR 尚未收到；不将其写成新凭证或实时请求验收。没有预测模型、后端服务、小程序前端或部署，仍是接入验证阶段。接入步骤见 [DATA_ACCESS.md](DATA_ACCESS.md)。
 
 ## 1.2 项目来源与目标
 
-项目对外展示名为全大写 **SUSHIWAIT**；GitHub 仓库名保留 **sushiro-queue-predictor**。用户已选择相似开放许可 Light 字体替代 Aliment，并希望字形与寿司郎风格呼应；采用 Montserrat Light、OFL 1.1，实际字重 300。用户于 2026-10-03 恢复后，已完成浅色/深色纯路径 SVG 和视觉核验，本地 README 使用可访问的自适应标题；当前远端仍为原生文字，本轮资产未发布，见 E0023。原 Aliment 仅保留私有预览，不用于公开发布；E0022 的断网暂停检查点完整保留，暂停已由用户恢复工作解除。字体标题不属于独立 Logo 制作，不改变 R19 后期 Logo 顺序，也不称寿司郎官方同款字体。README 按最新偏好详细介绍产品价值，文字可以有吸引力，现有工具与明确标为规划的未来体验分别介绍，后续随系统更新继续改进；不得虚构已上线能力、误差或稳定覆盖，后续接手不得自行改名。
+项目对外展示名为全大写 **SUSHIWAIT**；GitHub 仓库名保留 **sushiro-queue-predictor**。用户已选择相似开放许可 Light 字体替代 Aliment，并希望字形与寿司郎风格呼应；采用 Montserrat Light、OFL 1.1，实际字重 300。用户于 2026-10-03 恢复后，已完成浅色/深色纯路径 SVG 和视觉核验，README 使用可访问的自适应标题；标题、来源和 OFL 记录已随 main 0327d154bc48d17893843e4b791161de534c5984 发布并核对，见 E0023–E0024。原 Aliment 仅保留私有预览，不用于公开发布；E0022 的断网暂停检查点完整保留，暂停已由用户恢复工作解除。字体标题不属于独立 Logo 制作，不改变 R19 后期 Logo 顺序，也不称寿司郎官方同款字体。README 按最新偏好详细介绍产品价值，文字可以有吸引力，现有工具与明确标为规划的未来体验分别介绍，后续随系统更新继续改进；不得虚构已上线能力、误差或稳定覆盖，后续接手不得自行改名。
 
 用户希望建立一个针对中国大陆寿司郎门店的排队预测和辅助排队系统。用户目前能够通过寿司郎微信小程序查看门店的实时排队信息，并希望把这些实时信息连续采集到自己的服务器，再与历史统计、日期类型、季节趋势及外部事件结合，预测叫号时间、安排取号时机、监控过号风险。
 
@@ -108,15 +108,16 @@ sushiro-queue-predictor/
 │   ├── observations.py                # 安全字段、存在状态与展示集合差异
 │   ├── storage.py                     # SQLite schema v2、profile 与真实/合成来源隔离
 │   ├── auth.py                        # 零网络本机鉴权声明时间检查
+│   ├── credentials.py                 # 显式私有上下文、整组重读与进程内修订检查
 │   └── cli.py                         # auth-status/stores/snapshot/collect/replay/report
-├── assets/                            # 本轮本地完成，标题资产待发布
+├── assets/                            # 已发布的开放 Light 标题与来源/许可
 │   ├── sushiwait-title-light.svg       # 浅色模式纯路径标题
 │   ├── sushiwait-title-dark.svg        # 深色模式同几何标题
 │   ├── Montserrat-OFL.txt             # 字体许可原文
 │   └── NOTICE.md                      # 固定来源、字体哈希与渲染说明
 ├── config/pilot-stores.json            # 三家试点；西单 3004 已核对，另两家 ID 未验收
 ├── examples/fixtures/                 # 两份明确标记的合成样例，不是真实门店
-├── tests/                             # 本轮 116 项离线测试通过
+├── tests/                             # dev2：主执行者独立 166 项离线测试通过
 ├── docs/
 │   ├── PROJECT_HANDOVER.md             # 本文档：四个顶层板块
 │   ├── REFERENCE_REVIEW.md             # 参考项目源码研究及适用范围
@@ -164,7 +165,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 | R17 | README 随系统更新，详细且有吸引力地介绍功能与价值 | 分开当前已实现工具、可验证进度和明确标为规划的未来体验；最新要求允许已标规划的产品目标介绍，替代此前只列现有功能的限定，不将规划当已上线、不虚构误差或稳定覆盖；见 2.11 |
 | R18 | 实时数据齐备以后再做前端 | 先完成真实实时数据接入、字段与刷新验证，再开始前端实现；不能先搭模拟前端 |
 | R19 | Logo 与动态图文介绍后期制作 | 本阶段不制作；具体开始时机在后期工作中确定 |
-| R20 | 展示名与仓库名 | README 全大写 SUSHIWAIT，采用开放许可 Montserrat Light（字重 300）纯路径 SVG，浅/深色自适应、alt SUSHIWAIT；本地已完成，公开发布待核验。只作风格呼应，不称寿司郎官方同款；仓库保留 sushiro-queue-predictor，标题工作不等于独立 Logo，不改变 R19 |
+| R20 | 展示名与仓库名 | README 全大写 SUSHIWAIT，采用开放许可 Montserrat Light（字重 300）纯路径 SVG，浅/深色自适应、alt SUSHIWAIT；已完成并随 E0024 的 main 发布核验。只作风格呼应，不称寿司郎官方同款；仓库保留 sushiro-queue-predictor，标题工作不等于独立 Logo，不改变 R19 |
 | R21 | 每次查询凭证的到期与实际生命周期可查 | 分开门店 ID 和会过期的查询凭证；每份新凭证记录声明签发/到期、实际成功/失败边界及正常续期，未验签声明不当服务端保证，不以一次样本推固定 TTL |
 | R22 | 电脑快捷批量测试门店 | 已核实 ID、有效本人查询授权和允许频率后有节奏批量，不要求逐店手机抓包；当前 collect 仅 1–3 店试点，全国目录与全国批量仍待实现/验收 |
 | R23 | 后期本项目小程序同步显示门店当前叫号 | 同步堂食与预约有限展示集合、更新时间/失败状态，复用服务端共享采集，减少两个小程序来回切换；过期或失败不能当作无人排队，仍须 R18 数据齐备后才实现前端 |
@@ -348,8 +349,8 @@ target_call_at = desired_arrival_at + call_offset_minutes
 - **版本说明**：区分设计基线、实际发布、开发计划；不能把 `v0.1.0` 设计基线描述成可用产品版本。
 - **更新说明**：概括实际发生的更新，并链接本文档的完整版本与编辑记录。
 - **完整交接入口**：提供 `docs/PROJECT_HANDOVER.md` 的可点击相对链接，详细要求和历史不在 README 重复堆积。
-- **文字标题与自定义字体呈现**：此前已核对 GitHub 默认 Markdown 使用 Primer $body-font、普通 h1 继承，GitHub 过滤内联 font/style；此文字方案作为历史保留。最新本地 README 在 h1 中使用 picture / SVG；字体轮廓已转换为路径，读者无需安装字体，正文继续由 GitHub 渲染。远端替换仍待本轮发布核验。[Primer Markdown 样式](https://github.com/primer/css/blob/main/src/markdown/markdown-body.scss#L9)、[Primer 字体变量](https://github.com/primer/css/blob/main/src/support/variables/typography.scss#L35)、[GitHub Markup 处理说明](https://github.com/github/markup#github-markup)
-- **已本地完成的开放许可 Light 标题**：用户已选择相似开放字体，不再等待 Aliment 许可。采用作者固定提交的 Montserrat Light / OFL 1.1，本机核验字重 300，已生成并视觉检查浅/深色纯路径 SVG；本地 README 用 prefers-color-scheme: dark 选深色，浅色默认回退，alt SUSHIWAIT，显示 480×85。来源、哈希、渲染步骤及许可原文分别见 [assets/NOTICE.md](../assets/NOTICE.md) 和 [assets/Montserrat-OFL.txt](../assets/Montserrat-OFL.txt)；本轮拟同提交，不能把本地完成当作已公开。只做全大写字体标题，与寿司郎风格呼应，不称官方同款；原 Aliment 只保留私有预览，E0021–E0022 历史保留，恢复结果见 E0023。
+- **文字标题与自定义字体呈现**：此前已核对 GitHub 默认 Markdown 使用 Primer $body-font、普通 h1 继承，GitHub 过滤内联 font/style；此文字方案作为历史保留。最新本地 README 在 h1 中使用 picture / SVG；字体轮廓已转换为路径，读者无需安装字体，正文继续由 GitHub 渲染。远端替换已随 E0024 发布并完成文件核对。[Primer Markdown 样式](https://github.com/primer/css/blob/main/src/markdown/markdown-body.scss#L9)、[Primer 字体变量](https://github.com/primer/css/blob/main/src/support/variables/typography.scss#L35)、[GitHub Markup 处理说明](https://github.com/github/markup#github-markup)
+- **已发布的开放许可 Light 标题**：用户已选择相似开放字体，不再等待 Aliment 许可。采用作者固定提交的 Montserrat Light / OFL 1.1，本机核验字重 300，已生成并视觉检查浅/深色纯路径 SVG；本地 README 用 prefers-color-scheme: dark 选深色，浅色默认回退，alt SUSHIWAIT，显示 480×85。来源、哈希、渲染步骤及许可原文分别见 [assets/NOTICE.md](../assets/NOTICE.md) 和 [assets/Montserrat-OFL.txt](../assets/Montserrat-OFL.txt)；标题资产、来源和许可已随 E0024 同提交公开并核对。只做全大写字体标题，与寿司郎风格呼应，不称官方同款；原 Aliment 只保留私有预览，E0021–E0022 历史保留，恢复结果见 E0023。
 
 **前端必须等真实实时数据齐备后再做。**先验证门店实时字段可取得、字段语义、缺失与缓存情况、源数据延迟和目标采样节奏，再进入小程序或其他前端实现。实时数据“齐备”的具体字段清单和证据应在接入报告中明确；模拟数据可用于离线验证，但不能据此提前开始前端，也不能代替真实接入验收。
 
@@ -361,31 +362,29 @@ Logo 与动态图文介绍留待后期制作，当前不创建占位视觉或宣
 
 ## 3.1 当前状态与已完成范围
 
-**当前本地与已发布工具：`v0.2.0.dev1`。** 固定新主机适配、来源隔离、116 项离线检查、实际新 CLI 单店保存与本机 auth-status 已完成；代码与 E0014–E0019 的发布见 E0020，E0020–E0021 文档已后续发布，最近已核验 main 为 18d83e9676634fb7e85479bf54e9ffa5bf2a2856、27 文件一致。2026-10-03 恢复后的 Light 标题、本地 README/AGENTS 与 E0022–E0023 准备同提交，当前尚未发布。静态鉴权有效期已成为连续采集的实际阻碍，60 秒采样首轮 401 后停止，30 秒阶段未执行。v0.2.0 的字段单位、刷新、正常续期与完整试点验收仍未完成。不存在可用预测产品、Release、版本标签或生产部署。
+**当前本地工具：`v0.2.0.dev2`，已完成离线验证、准备发布；已发布工具基线仍为 `v0.2.0.dev1`。** 最新已核验 main 为 [0327d154bc48d17893843e4b791161de534c5984](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0327d154bc48d17893843e4b791161de534c5984)，树 8b46985635055bf24ab15748a06998108f13b959。E0022–E0023、Montserrat Light 标题与 README/AGENTS 已发布，31 个远端 blob 与当时本地逐一一致，fetch/mixed reset 后同步；完整证据见 E0024。dev2 的私有文件输入、到期保护和质量报告尚未发布，最终提交以 Git 历史和后续发布核验定位，不能由本地版本号推断远端已更新。没有可用预测产品、Release、版本标签或生产部署，v0.2.0 真实接入验收仍未完成。
 
-已完成的工具基线与真实验证：
+已完成的工具基线：
 
-- 固定 legacy / miniapp_gateway profile，legacy 允许 crm stores/getStoreById，gateway 仅允许已观察的 sapi getStoreById；gateway stores 返回 unsupported_endpoint 且不请求，不跨主机转发旧凭证或失败回退。完整 TLS、禁止重定向与环境代理，15 秒 I/O 超时、2 MiB 上限、不自动重试或内置凭证。
-- stores 目录名称筛选、snapshot 单份观察、collect 1–3 店有界采样、synthetic replay 和 report；查询失败停止采样。collect 只初始化一次客户端，没有轮间凭证更新；report 当前为数量/时间范围报告，尚无错误分类统计或变化统计。gateway 仅详情，目录仍不支持。
-- auth-status 按 profile 只检查本机授权环境变量，零网络、不建客户端/CA/opener/数据库，只选取和解释 iat/exp 并输出安全时间元数据；不输出或保存其他 claims/token。iat/exp 独立核对，声明未验签、未知不填默认 TTL，CLI exit 0 / ok 仅表示检查成功，不等于授权有效。
-- 完整四组字符串展示数组、字段存在状态、未知单位与未知来源更新时间；raw_wait 独立保留。waitTimeCounter / waitTimeCap 严格按非 bool 的有符号整数保存 presence/value/unit=unknown，保留 -1 等原值；缺失、null、invalid 分别记录，旧快照缺键按 missing 比较且不改旧 JSON。公共哈希和标量变化覆盖这两字段，只比较可观察变化，不计算真实过号率或 ETA。
-- 本地 SQLite schema v2，store+data_origin+api_profile 隔离，UTC 毫秒与 ID 规范化；v1 写开事务补 legacy、冲突回滚，只读 v1 不迁移。快照格式 schema_version 仍为 1，report 输出格式为 2 并单列实际 database_schema_version，不能混为同一版本。
-- 116 项离线检查通过，覆盖固定主机/端点、凭证隔离、来源比较和 v1 迁移/回滚；实际新 CLI 20:43:01 单次成功，319 ms，保存一条 live / miniapp_gateway / 3004。20:45:16.961 进行 60 秒 / 2 轮采样，首轮 HTTP 401 / http_error 后 exit 1，未等待或执行第 2 轮，30 秒阶段未执行。report exit 0、实际数据库 schema 2，共 1 成功 1 失败，来源标签与安全失败记录正确。
-- 真实不带凭证目录请求正常 TLS 校验后 HTTP 401，证明地址回应并需要鉴权；没有取得三家门店数据。默认 Python CA 环境问题已分辨，指定已有系统 CA 后新客户端也得到 401。
+- 固定 legacy / miniapp_gateway profile：legacy 允许 crm stores/getStoreById，gateway 仅允许已观察的 sapi getStoreById；gateway stores 返回 unsupported_endpoint、零网络请求。没有跨主机转发、失败回退、任意 URL 或内置凭证；保持完整 TLS、禁止重定向与环境代理、15 秒 I/O 超时和 2 MiB 响应上限，不自动重试。
+- stores 名称筛选、snapshot 单份观察、collect 1–3 店有界采样、明确 synthetic replay 和只读 report。collect 每店 1–120 轮、周期 30–3600 秒，按每轮开始时间调度；查询或本机预检失败停止整次采样。没有守护进程、多实例锁、全国批量、通知或全天调度。
+- dev2 的 `snapshot` / `collect --credentials-file` 显式读取一个完整私有查询上下文，与 --anonymous 互斥；严格 schema 1、profile、revision、authorization 和 gateway 五个上下文键，不与环境凭证或环境上下文头混用。文件限 16 KiB，仅支持具备安全文件打开能力的 POSIX，拒绝祖先符号链接；直接父目录/文件须属当前用户、权限分别 0700/0500 与 0600/0400，文件必须为单硬链接常规文件。按每个 GET 和不超过 60 秒的等待检查重读，同进程内禁止 revision 倒退及同 revision 不同内容；完整变化后重建客户端，每个 GET 使用同一整组配置。revision 不是服务端续期证据，重启后不记得上一进程的 revision。
+- snapshot/collect 在请求前解释声明 iat/exp，声明无效、已到期或剩余不超过 30 秒时本机停采；等待会在保护期限唤醒重读。该预检为本机保护，零网络、无虚构 HTTP 状态，未知到期不推默认 TTL。文件损坏、读取不安全或上下文错误也停采。正常官方更新来源仍未知，没有登录、refresh 端点或自动续期实现。环境模式缓存首次上下文，更新需重启；`auth-status` 和 `stores` 仍只使用各 profile 的环境变量，不接受 --credentials-file。
+- auth-status 按 profile 只解释授权环境变量的 iat/exp，零网络、不建客户端/CA/opener/数据库，不输出或保存其他 claims/token；声明未验签、未知保留 null。CLI exit 0 / ok 只表示检查成功，不等于凭证有效或服务端接受。
+- 完整四组字符串展示数组、字段存在状态、raw_wait 与未知单位；waitTimeCounter / waitTimeCap 严格保留非 bool 有符号整数及 -1 原值。缺失/null/invalid 分别记录，旧快照缺新键按 missing 比较；公共变化只说明可观察值/集合变化，不计算 ETA、全局叫号游标、等待桌数或真实过号率。
+- SQLite schema 2 和快照 schema 1 保持；dev2 没有新增数据库迁移。既有 v1 写打开事务补 legacy、冲突或坏 JSON 回滚，只读 v1 虚拟 legacy 而不修改磁盘。成功/失败均按 store+data_origin+api_profile 隔离；预检失败只保存 checked_at 与安全分类/鉴权时间白名单，不保存请求头、文件路径或秘密。
+- report 输出 schema 2，单列实际 database_schema_version；全历史数量和记录时间范围与每组最新最多 10000 条的质量窗口分开。窗口按样本 ID 选取，SQL 在读取阶段将超过 2 MiB 的 payload 排除为无效，坏 JSON/未知字段形状容错。统计 request/normalization/preflight/unknown 失败、安全错误码、仅失败记录的 HTTP 分类、实际请求起始间隔与耗时、公共字段 presence 和四类数组变化。公共比较仅限同 run 的相邻有效成功，失败/坏记录/run 切换断链；实际请求间隔可包含请求/规范化失败，不含 preflight。first/last_received_at 为兼容记录时间别名，可能包含本机 checked_at，新增 first/last_recorded_at 和 record_time_semantics 明示此语义。来源新鲜度仍 unknown，统计不证明上游缓存或刷新频率。
+- 主执行者独立全套 **166 项 / 0.390 秒 OK**：client 30、observations 32、storage_cli 29、storage_profiles 9、auth 16、credentials 18、collection_credentials 16、report_quality 16。integration_research 独立源码/测试复核未发现必须修复问题；没有联网、读取真实凭证或重复运行测试。版本三处、README、AGENTS 已由主执行者同步 dev2；具体变更与验证见 E0025。
 
-仍未做：读取个人号单、真实取号/取消/重排、字段单位与来源时间语义、正常鉴权续期、60/30 秒采样验收、现场叫号标签、模型、前端、Logo/动态图文、服务器与部署。用户已授权用本人正常查询协助接入，并分别批准旧 crm 与新 sapi 单主机临时调试，查询凭证仅在本机使用。Mac 先前只取得匿名 401，正常小程序未观察到旧候选域名，电脑阶段见 E0009–E0010；其临时解密与捕获关闭，旧单域名规则保留、自动额外 MITM OFF，用户安装的 Mac CA 仍受信任，未开启局域网代理。手机新协议结果不能覆盖电脑阶段的失败历史。
+真实证据及未决事项：
 
-手机正常请求与用户交付的单条 HAR 已确认 sapi 的实际 GET getStoreById、HTTP 200、storeId=3004 及西单大悦城店公共队列对应，详细证据见 E0017。约 20:34–20:37 又完成同一固定新端点独立请求：使用系统公开 CA 保持完整 TLS 校验，补回正常请求的上下文头后 HTTP 200、182 ms，ID/店名一致；wait、groupQueuesCount 和展示号码相对原 HAR 已变化，证明不是仅重复读取捕获正文。具体白名单值、先前 TLS 与 HTTP 400 失败及限制见 E0018。单次成功不证明各头必要性、鉴权续期、源延迟或 30 秒频率；原始 HAR 和秘密值不进入公开仓库或模型。
+- 西单 3004 已通过本人正常详情 GET、query/body ID、店名及页面/队列对应核对；config 中 verification_scope=single_store_read_only、live_data_verified=false 明确连续采集未验收。中关村、成都 ID 仍 null；同 profile 的三店权限、目录及全国覆盖未验收，不使用合成 ID 访问真实门店。
+- 2026-10-02 本机 HAR 对应 20:21 页面，约 20:34–20:37 独立 GET HTTP 200 / 182 ms，20:43:01 新 CLI 单次成功 / 319 ms 并保存 live / miniapp_gateway / 3004。20:45:16.961 的 60 秒 / 2 轮采样首轮 HTTP 401 后 exit 1，未等待或执行第 2 轮，30 秒阶段未执行。此前报告 1 成功 1 失败；具体安全公共值、TLS/400 失败与辅助子串误报的纠正保留 E0018，不能用 dev2 离线检查替代新的真实请求。
+- 原凭证本机未验签声明为 19:44:37 签发、20:44:37 到期、相差 3600 秒；与 20:43 成功和 20:45 的 401 时序吻合，但不是唯一因果证明或固定 TTL。已停止使用失效值，不猜续期端点、不使用共享凭证；每份新凭证另记声明与实际成功/失败边界。
+- 2026-10-03 01:15 镜像只读核对西单最后更新时间 01:13，堂食/预约均 ---，用户报告停业；空展示不当作零等待或源新鲜。随后唯一 sapi 配置与 1 分钟捕获上限核对，主执行者尝试全过程约 121 秒、未点到微信刷新，01:36 独立核验临时开关关闭。用户再手动操作并报告新请求、三项关闭及可能多次刷新；最新 HAR 尚未交付，时长/次数未独立核实，无本轮新凭证解析或新 API 请求。越时和未完成范围完整保留 E0024，不把人为刷新当作默认周期或上游更新频率。
+- 旧 crm/Mac 匿名 401、空捕获、手机候选发现和越时均保留 E0006–E0017；新 sapi 成功不覆盖旧失败。Direct、精确过滤和用户 CA 信任保留，不能将历史 OFF 当作下一次操作前的核验。
 
-本轮固定 profile 和独立六项 gateway 环境变量已实现，116 项检查与新 CLI 单店实际保存通过；本地版本、README、AGENTS 与包元数据已同步为 0.2.0.dev1。西单配置已回填 3004、verification_scope=single_store_read_only，live_data_verified=false 明确连续采集尚未验收，另外两店 ID 仍 null。实际 CLI 新值为 raw_wait=35 / unit unknown、groupQueuesCount=26 / unit unknown，booth/mixed=['2063', '2064', '2065']，reservation/counter=[]；来源时间未知，不能从这些值推断精确等待或源频率。辅助检查脚本曾因短标识与公共数字子串巧合误报，CLI/API 并未失败，回查确认仅保存公共白名单，详情见 E0018。
-
-60 秒采样首轮失败后没有继续请求、自动重试或执行 30 秒阶段。本机仅解析 Bearer JWT-like payload 的 exp，未输出其他 claims 或账号标识，也未验证签名；声明到期为 2026-10-02T12:44:37+00:00（北京时间 20:44:37），20:45:53 检查时已过期，与 20:43 成功和 20:45 的 401 时序吻合，但不是签名验证或唯一因果证明。下一步只在用户已授权的本人正常查询流程内核实鉴权更新与有效期，不使用上游共享令牌、不猜 refresh 端点；正常续期未捕获或实现前，不能宣称全天连续访问。
-
-用户最新新增 R21–R23：每份新查询凭证分别记录到期声明、实际成功/失败与续期；电脑侧已核实 ID 的有节奏批量查询；后期小程序同步堂食/预约展示与更新时间/失败状态。已有 collect 为 1–3 店试点批量，全国目录、全国批量及前端尚未实现。纯本机 auth-status --api-profile 已实现并通过主执行者真实配置的安全本机核验：声明 iat=19:44:37、exp=20:44:37，lifetime=3600、检查时 remaining=0 / expired=true，expiry_source=unverified_claim / signature_verified=false；只解释时间白名单，不联网或续期。当前全套 116 项通过，E0018 保留当时的 96 项结果；完整新工具和 README 文字标题/风格核验见 E0019，发布见 E0020。用户已恢复工作，Montserrat Light 浅/深色 SVG、许可/来源记录及本地 README 已完成，当前公开标题尚未替换；E0022 暂停历史保留，恢复与核验结果见 E0023。标题完成后回到真实接入主线，详细当前能力与明确规划体验分开介绍，没有提前前端或独立 Logo。
-
-2026-10-02 约 20:17–20:20 已将 MITM、磁盘和内存过滤分别设为唯一启用 sapi 精确主机，旧 crm 项、内存 sushiro.com.cn 关键词及旧 URL 通配符保留但禁用；磁盘自动 1 分钟 / 50 MB / 100 请求已核验，自动额外 MITM 和数据包捕获 OFF。启动手机 VPN 稳定绿色后才开启 MITM 与 HTTP 捕获，明确点一次西单页面刷新，返回时三项 ON 后已依次关闭。此前最后实际核验 VPN、MITM、HTTP 捕获与数据包捕获均 OFF，Default 直接连接、单域名规则、服务端证书验证和用户 CA 信任保留，未全部恢复。2026-10-03 用户回复西单已打开但凌晨停业无数字；01:15 主执行者通过现有镜像独立看到最后更新时间 01:13、堂食/预约均为 ---。本轮仅恢复 CUA 文档及只读/导航，没有开启捕获/解密或请求 API，不以历史 OFF 代替当日开关核验，也不把停业展示当零队列或新鲜度验收。E0014–E0016 保留此前 Safari 对照、小程序 crm 空捕获、候选主机发现及元数据越时事实；E0017 记录正常请求和本机 HAR 交付核验。
-
-v0.1.0 初始文档已发布的证据见 E0001–E0005；v0.2.0.dev0 开发和实测见 E0006，开发版代码的 24 个远端文件核对见 E0008。E0011–E0013 与接入手册曾发布至 [ba7b5b41799b4eae112cf1f78571941a3f180a87](https://github.com/Serenin0x/sushiro-queue-predictor/commit/ba7b5b41799b4eae112cf1f78571941a3f180a87)。0.2.0.dev1、新接口/来源隔离/本机有效期工具、README/AGENTS/版本/试点和 E0014–E0019 已原子发布至 [455acf4d5d0cc50d82f6704d40716cb0e02be9e8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/455acf4d5d0cc50d82f6704d40716cb0e02be9e8)，树 4b5e1102d2470cf640c815d6404627a703976cfe。E0020–E0021 文档已后续发布，最近已核验 main 为 [18d83e9676634fb7e85479bf54e9ffa5bf2a2856](https://github.com/Serenin0x/sushiro-queue-predictor/commit/18d83e9676634fb7e85479bf54e9ffa5bf2a2856)，树 e32a5d516dbda650b04b9c22bbb6a288147bd181；完整未截断的 27 个远端 blob 当时与本地逐一一致并已同步，E0022 保留断网前检查点。本轮 E0022–E0023 与标题资产、README/AGENTS 准备另提交；远端发布及新文件哈希核验由主执行者后续 E0024 记录。E0018–E0022 的当时状态保留，不把本地资产完成写成已经发布。
+仍未完成：正常鉴权更新来源、必要头的单项作用、每份新凭证实际生命周期、字段单位/-1/源时间、营业期有变化的三店对照及 60/30 秒连续验证、限流边界、全国目录、真实叫号标签、模型、前端、通知、个人号单、真实取号/取消/重排、服务器与部署。重启后可向同一数据库继续追加并读取历史，**不等于恢复未完成 collect 的任务游标或剩余轮数**。先按 [DATA_ACCESS.md](DATA_ACCESS.md) 完成接入验证，再按 R18 进入前端；1.0 目标不替代实际验收。
 
 ## 3.2 计划版本与进入条件
 
@@ -407,22 +406,22 @@ v0.1.0 初始文档已发布的证据见 E0001–E0005；v0.2.0.dev0 开发和�
 
 ## 3.3 首个实际开发任务
 
-当前实际任务是“页面数字—接口字段—刷新延迟”对照验证。固定 gateway、来源隔离、迁移检查、116 项测试、新 CLI 单店保存与零网络 auth-status 已完成；西单 60 秒 / 2 轮采样首轮因 401 停止，未执行第 2 轮或 30 秒阶段。下一步在已授权的本人正常查询流程核实每份新凭证的签发/到期声明、实际可用生命周期、更新及必要头，再恢复有界采样；本机声明检查不能替代服务端可用性或续期。电脑批量仅在已核实 ID 和有效授权后使用当前 1–3 店试点能力，继续对照单位、-1、源时间及另外两店；全国目录和全国批量仍待实现/验收。gateway stores 尚无实际路径证据，不猜测或发送请求；西单单店成功不能代替完整三店目录、全天连续采集或全国验收。每次页面对照必须明确点击刷新并记录前后时间与展示集合；前端在数据齐备后复用服务端采集，展示堂食/预约及更新时间/失败状态。
+当前任务仍是“页面数字—接口字段—刷新延迟”与核心采集可靠性验证。dev2 已完成本机私有整组配置重读、声明到期保护、安全失败记录与有限窗口质量报告，166 项离线检查通过；这些基础能力不改变此前真实接入仍部分验收的结论。旧凭证已失效，不能重试；本轮最新 HAR 尚未收到，无新凭证或新 API 查询结果。
 
-2026-10-03 用户要求简单完成标题后立即返回开发主线，争取 1.0 或核心稳定状态。按真实验收推进，优先解决本人正常鉴权更新、三店 ID/字段对照、60/30 秒有界采样和故障处理；版本目标不代替已验证的能力，不承诺本轮完成 1.0。用户已打开西单页，01:15 镜像只读核对堂食/预约均 ---、页面时间 01:13，凌晨停业阶段没有当前队列数字，不能验收叫号推进或新鲜度；尚无新捕获、解密或 API 请求。collect 目前无换凭证、report 无分类/变化统计、gateway 无目录，正常鉴权更新与全天稳定性仍真实未知。
+用户要求简单完成标题后立即返回主线、争取 1.0 或核心稳定。标题已随 E0024 发布；下一步继续本人正常查询更新、三店 ID/权限/字段对照、营业期 60/30 秒有界采样和故障处理，以实证决定版本状态，不承诺本轮完成 1.0。夜间停业页面均 ---，主执行者捕获约 121 秒越时且未刷新微信、用户之后可能多次刷新的报告保留 E0024；不能据此验收源更新或连续采样。
 
-用户指定试点：**中关村大融城店、西单店、成都世豪店**。西单大悦城店 ID 3004 已通过正常请求、响应、独立请求与新 CLI 核对，已在 config/pilot-stores.json 以 single_store_read_only 范围记录；live_data_verified=false 表示连续采集未验收。中关村、成都 ID 仍 null，须经目录或正常请求确认，不能用合成测试 ID 替代。
+试点为 **中关村大融城店、西单店、成都世豪店**。西单 3004 的核验范围为 single_store_read_only、live_data_verified=false；另两店 ID null。本人正常详情请求可核对 query/body ID 与店名，不需要等待未知的新目录路径；不猜 ID、续期或目录端点，不把西单成功推为三店授权或全国可用。
 
 建议流程：
 
-1. 选少量大陆门店，确认可读的数据来源、使用范围及查询鉴权管理方式。
-2. 对照堂食/预约展示号、已签到等待桌数和已有的本人号单；取号不是只读验证的必要动作。
-3. 明确每个字段单位、队列划分、日内重置、缓存和来源时间。
-4. 先核实正常鉴权更新，随后在允许的调用范围内比较 60 秒、30 秒采样与小程序/现场变化；401、限流或未知失败后停止，不用到期凭证反复尝试。
-5. 连续观察 7–14 天作为初步可靠性试点，覆盖午晚高峰与周末；若异常事件未出现，明确样本不足。
-6. 输出延迟、失败/限流、字段缺失和实际能力报告，再决定后端与采集器实现。
+1. 本机受控核对新正常请求的范围、profile、完整查询上下文与每份凭证的 iat/exp 声明；auth-status 仍检查环境变量，文件模式使用 snapshot/collect 自身的安全预检。分别记录声明、实际可用边界和更新证据，不推固定 TTL。
+2. 用已核实西单 ID 保存一份固定 gateway 真快照，检查安全公共字段与身份；核实另外两店的 ID/对应查询权限后，才扩到 1–3 店。
+3. 明确点击小程序底部刷新，对照完整号码/后缀、堂食与预约数组、签到桌数、字段缺失、单位、-1、页面与本机时间；来源更新时间未知则保持未知。
+4. 单次成功且调用范围允许后，先 60 秒 / 2 轮，再有条件做 30 秒 / 2 轮；按 DATA_ACCESS 的私有文件整组原子更新规则管理上下文。HTTP 失败或本机预检停采均停止整次任务，不盲目重试；正常更新来源仍需真实核验。
+5. 用只读 report 核对来源分组、实际请求间隔/耗时、失败阶段、字段 presence 与有限展示变化，分开全历史数量与最新有限窗口。空值、相同内容或请求成功都不证明源新鲜，也不生成 ETA/真实过号率。
+6. 覆盖营业有变化场景、到期/坏文件/限流/TLS/网络失败与停止结果，再连续观察 7–14 天形成初步可靠性报告；没有异常事件时写明样本不足。恢复运行只是继续同库历史，尚无任务游标恢复或全天调度。
 
-现场验证或本人授权步骤依赖用户配合；模拟数据、协议设计、离线研究可独立推进。投屏只能帮助理解页面，不能单靠画面推导完整地址、参数、签名或登录态。
+真实现场与正常账号步骤需用户配合；离线协议、故障检查和质量分析可独立推进。前端在 R18 数据齐备后复用服务端共享采集，显示堂食/预约有限集合及更新时间/失败状态；模型、通知与真实业务写操作按各自进入条件另行验收。
 
 ## 3.4 待确认问题与风险登记
 
@@ -809,3 +808,25 @@ Git 提交/发布/部署证据（若有）：
 - **凌晨停业页面核对**：用户回复已打开西单，但凌晨停业无数字。01:15（Asia/Shanghai）主执行者恢复 CUA 文档，通过现有 iPhone 镜像只读/导航，独立看到西单大悦城店页面最后更新时间 01:13、堂食/预约均为 ---；没有当前队列数字，不解释为零等待，不验收叫号推进或源新鲜度。本轮没有开启捕获/解密或请求 API；该页面观察不是鉴权更新或成功快照证据。
 - **接入主线与当前限制**：标题发布完成后，优先本人正常鉴权更新与每份新凭证生命周期、三店 ID/字段对照、60/30 秒有界采样和失败处理；不使用已到期凭证重试、不猜续期/目录端点。integration 协作者只读复核发现 collect 只初始化一次客户端、没有换凭证，report 缺错误分类/变化统计，gateway 仅详情无目录；这些是待完善能力，不作全天保证。此前开关状态不能当作当日核验，静态鉴权到期、字段单位/源时间、连续采集和另外两店仍待实证；没有模型、前端、真实取号/取消/重排或部署。
 - **Git 提交/发布证据与下一步**：当前最近已核验 main 仍为 [18d83e9676634fb7e85479bf54e9ffa5bf2a2856](https://github.com/Serenin0x/sushiro-queue-predictor/commit/18d83e9676634fb7e85479bf54e9ffa5bf2a2856)，树 e32a5d516dbda650b04b9c22bbb6a288147bd181、27 个远端文件已逐一一致。本条与 E0022 检查点及本轮标题/README/AGENTS 拟同提交，最终哈希以 Git 历史定位；主执行者发布后另追加 E0024 记录实际 main、完整树、文件哈希与本地同步，不把本地完成当成已发布。本执行者不提交或远端操作，无 Release、标签或部署。
+
+### E0024 — 2026-10-03 — 标题发布核验、夜间捕获越时与用户手动刷新
+
+- **发布实证**：主执行者将 E0022–E0023 与标题、README/AGENTS 原子发布至 main [0327d154bc48d17893843e4b791161de534c5984](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0327d154bc48d17893843e4b791161de534c5984)，树 8b46985635055bf24ab15748a06998108f13b959。完整递归树未截断，31 个 blob 与本地预期逐一 SHA-1 一致；fetch 后 mixed reset 保留工作文件并同步，状态 main...origin/main、工作区干净。版本仍 0.2.0.dev1，无 Release、标签或部署。
+- **用户准备与停业限制**：用户报告 iPhone 已打开西单但凌晨停业、没有数字；01:15 主执行者通过现有镜像独立看到西单大悦城店，页面最后更新时间 01:13，堂食/预约均 ---。只记录该页面展示与用户报告，不解释成 API 零值、无排队、源新鲜度或叫号推进验收。
+- **当日设备核验**：已按工具要求恢复操作文档，沿用原镜像连接；通过菜单导航和应用搜索打开 Surge。01:20–01:25 当前 Default 页面显示启动尚未开启、捕获流量/MitM/数据包捕获全部 OFF；MitM 主机列表唯一 sapi.sushiro.com.cn 打勾，旧 crm 保留但禁用。查看请求记录设置尚未开启短窗、未读取请求头或 HAR、未向 API 发独立请求；过滤器/自动上限需当日核验后再开始正常刷新。
+- **当日过滤与自动上限**：随后实际核对 MitM 唯一 sapi 主机启用；磁盘与内存唯一 sapi 关键词启用，旧 crm、sushiro.com.cn 及旧 URL 过滤项禁用。磁盘自动上限为 1 分钟 / 50 MB / 100 请求，自动额外 MITM 与数据包捕获 OFF。仅沿用本人正常查询及 sapi 单域名授权，没有扩主机。
+- **主执行者尝试及越时**：01:33:37.748 开始本轮操作计时，在 VPN 稳定启动后开启 MitM 与 HTTP 捕获；切回微信的镜像导航未成功，没有实际点到小程序刷新。返回 Surge 时 HTTP 捕获已自动停止，但 MitM/VPN 仍开启，全部关闭用时约 121 秒，超过向用户说明的最多 1 分钟。主执行者已明确向用户说明越时并道歉；不能写作满足短窗或成功刷新。01:36 稳定页面独立确认蓝色启动按钮、MitM/HTTP 捕获/数据包捕获 OFF；证书信任和精确过滤规则保留。
+- **用户手动捕获与待交付**：此后由用户手动按“开启启动/MitM/捕获 → 小程序底部刷新 → 立即关闭三项、控制在 1 分钟内”执行，用户回复出现新请求且三个开关已关闭，随后补充可能点了多次刷新。这是用户报告，尚未取得最新 HAR 或独立确认次数与实际时长；主执行者已请其导出交付，后续按请求时间逐条核对。人为连续刷新不能作为默认采集周期或上游刷新频率。尚无本轮新凭证解析、独立 API 请求或实时队列推进验收。
+- **并行主线与验证**：architecture_operations 完成显式私有上下文输入、整组更新和声明到期预检；prediction_design 完成来源隔离的质量报告；phone_handover 整理 DATA_ACCESS 当前执行路线。主执行者初步审阅并独立运行全套 166 项离线检查，0.390 秒 OK；独立复核和版本/文档收尾进行中，实际能力、文件与发布记录留待 E0025。没有实现官方自动续期、模型、前端、业务写操作或部署；新 HAR 和营业期真实验证仍待完成。
+
+### E0025 — 2026-10-03 — dev2 私有上下文更新、到期保护与质量报告
+
+- **状态与执行者**：本地开发、独立检查与文档收尾完成，`0.2.0.dev2` 准备发布，仍处接入验证阶段。architecture_operations 完成 credentials/CLI/采集测试，prediction_design 完成 storage/质量测试，integration_research 独立只读复核，主执行者同步版本/README/AGENTS 并独立验证，dev2_documentation 仅修改 docs/PROJECT_HANDOVER.md 与 docs/DATA_ACCESS.md。E0001–E0024 原文保持；E0024 的约 121 秒越时、未点到微信刷新及用户多次刷新报告不改写。
+- **任务来源与范围**：延续用户完成标题后立即回到主线、争取核心稳定/1.0，以及 R21 每份凭证生命周期、R22 电脑少店有节奏试点、R10–R13 来源质量与故障处理要求。继续本人已授权正常查询及固定 sapi 单主机范围；没有新主机、真实取号/取消/重排、服务器或部署操作。本轮新增基础工具能力不代替官方正常更新证据或三店验收。
+- **私有整组输入与重读**：新增 credentials.py；只有 snapshot/collect 支持 --credentials-file，与 --anonymous 互斥。严格 JSON schema 1、匹配 profile、1..2^63-1 的整数 revision、非空合法 authorization；gateway 还须完整包含 app_client/app_code/user_agent/referer/content_type，值可为经过校验的字符串或 null，不能省略后从环境补入。legacy 不接受 gateway 键；拒绝未知/重复键、非有限数、非法 UTF-8/JSON、超 16 KiB 等。文件仅 POSIX 安全读取，所有祖先拒符号链接，直接父目录/文件为当前用户、目录 0700/0500、常规单硬链接文件 0600/0400，并核对读前后身份与完整性。每 GET 和等待中不超过 60 秒重读，revision 在同进程内禁止倒退/同号异内容；新整组构建客户端后才替换，每次 GET 只用一组配置。环境模式保留初始上下文，更新需重启；auth-status/stores 仍环境输入。工具不发现/解析 HAR，不提供官方更新来源或自动续期。
+- **声明到期保护与失败语义**：snapshot/collect 请求前只解释现有 iat/exp 白名单、未验签。invalid_claim 本机停采，声明已到期或剩余不超过 30 秒分别 auth_declared_expired/auth_expiring；等待在声明保护期限唤醒重读，无更新即零请求停止，未知到期不填默认 TTL。文件不安全/损坏或客户端配置失败也停止整次任务。preflight 记录 checked_at、failure_phase=preflight、http_status=null 和安全鉴权时间白名单，零网络、无虚构请求时间/HTTP 响应；真实 GET 与规范化失败分 request/normalization，保持首错停止和无自动重试。
+- **质量报告与兼容性**：report 输出 schema 2、SQLite schema 2 与快照 schema 1 保持，没有新增迁移；旧 v1 只读报告不改文件。按 store+origin+profile 分全历史数量/记录时间与每组最新最多 10000 条质量窗口；SQL 读取时将超 2 MiB JSON 置为无效，坏 JSON/记录/字段形状容错，未知 presence 不披露坏值。统计 request/normalization/preflight/unknown、安全错误码、仅失败记录的 HTTP 分类、实际请求起始间隔与耗时、公共字段 presence 和四类数组集合/顺序变化。成功旧记录无 HTTP status，不虚构成功状态分布；公共比较同 run 相邻有效成功，失败/坏记录/run 切换断链。兼容 first/last_received_at 包含预检 checked_at，新增 first/last_recorded_at 与 record_time_semantics=response_received_or_preflight_checked 明示记录时间；保持 upstream_freshness=unknown，不推 ETA、全局游标、过号率或上游刷新频率。重启同库续写历史未实现未完成任务游标恢复。
+- **文件与版本**：新增 src/sushiwait/credentials.py、tests/test_credentials.py、tests/test_collection_credentials.py、tests/test_report_quality.py；修改 src/sushiwait/cli.py、src/sushiwait/storage.py、src/sushiwait/__init__.py、VERSION、pyproject.toml、README.md、AGENTS.md 和两份交接/接入文档。版本三处一致 `0.2.0.dev2`，CLI --version 已由主执行者核对；当前区同步标题已发布、dev2 未发布和新操作规则，不覆盖旧条目当时状态。
+- **验证与限制**：主执行者独立 **166 项 / 0.390 秒 OK**，分项 client 30、observations 32、storage_cli 29、storage_profiles 9、auth 16、credentials 18、collection_credentials 16、report_quality 16；覆盖逐 GET 整组切换、不混环境、revision/权限/坏文件、到期零网络、等待唤醒、分类/窗口/损坏容错与旧 v1 只读。integration_research 依据源码和测试独立复核，未发现必须修复问题，未联网、未读取真实凭证、未重复测试。本执行者完整拆段读协作/交接/参考文档及相关实现，完成四板块、R01–R23/Q01–Q12、历史原文哈希、相对链接和文档差异检查，不重复运行代码测试。主执行者核对 35 个公开候选文件无 HAR/字体原文件/证书/数据库/压缩包/软链，已交付私有鉴权精确排除无匹配；秘密、私人路径和原始正文未输出到公共文件。
+- **当前真实状态与下一步**：新 HAR 仍未收到，无本轮新凭证解析、新 API 查询或营业期变化验收；原凭证失效，不重试。西单 3004 仅单店只读核验，另外两店 ID null，三店权限、官方正常更新来源、必要头、单位/-1/源时间、连续 60/30 秒验证及全国目录仍待完成。标题已发布，前端、模型、通知、业务写操作和部署继续按进入条件等待；dev2 完成不等于 1.0。下一步安全核对用户交付的正常请求，记录每份声明与实际生命周期，在允许范围完成单份快照及营业期有界试点。
+- **Git 提交/发布/部署证据**：最新已核验 main 仍为 [0327d154bc48d17893843e4b791161de534c5984](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0327d154bc48d17893843e4b791161de534c5984)，树 8b46985635055bf24ab15748a06998108f13b959；E0024 记录 31 个 blob 逐一一致与本地同步。本条及 dev2 代码/文档准备原子提交，最终哈希由 Git 历史定位，发布、远端完整树与本地同步由主执行者实核后另记；本执行者不提交、发布、访问网络/私有文件或操作 UI。无 Release、标签或部署。
