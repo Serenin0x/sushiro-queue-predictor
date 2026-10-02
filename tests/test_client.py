@@ -101,6 +101,139 @@ class ClientTests(unittest.TestCase):
                 self.assertEqual(len(opener.calls), 1)
                 self.assertTrue(response.closed)
 
+    def test_gateway_detail_uses_only_observed_route_and_local_headers(self):
+        opener = FakeOpener(FakeResponse(encoded(fixture_store())))
+        client = SushiroClient(
+            "synthetic-gateway-authorization",
+            api_profile="miniapp_gateway",
+            app_client="synthetic-app-client",
+            app_code="synthetic-app-code",
+            user_agent="Synthetic Agent/1.0 (offline test)",
+            referer="https://synthetic.invalid/private-reference",
+            content_type="application/x-www-form-urlencoded; charset=UTF-8",
+            opener=opener,
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            result = client.fetch_store("123")
+        self.assertTrue(result.ok)
+        request, timeout = opener.calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://sapi.sushiro.com.cn/gateway/wechat/api/2.0/getStoreById?storeId=123",
+        )
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIsNone(request.data)
+        self.assertEqual(timeout, 15)
+        self.assertEqual(request.get_header("Authorization"), "Bearer synthetic-gateway-authorization")
+        self.assertEqual(request.get_header("X-app-client"), "synthetic-app-client")
+        self.assertEqual(request.get_header("X-app-code"), "synthetic-app-code")
+        self.assertEqual(request.get_header("User-agent"), "Synthetic Agent/1.0 (offline test)")
+        self.assertEqual(request.get_header("Referer"), "https://synthetic.invalid/private-reference")
+        self.assertEqual(request.get_header("Content-type"), "application/x-www-form-urlencoded; charset=UTF-8")
+        self.assertEqual(client.api_profile, "miniapp_gateway")
+        with self.assertRaises(AttributeError):
+            client.api_profile = "legacy"
+        self.assertEqual(output.getvalue(), "")
+        for secret in (
+            "synthetic-gateway-authorization", "synthetic-app-client", "synthetic-app-code",
+            "Synthetic Agent/1.0", "private-reference", "charset=UTF-8",
+        ):
+            self.assertNotIn(secret, repr(result))
+            self.assertNotIn(secret, repr(client))
+            self.assertNotIn(secret, request.full_url)
+
+    def test_gateway_directory_is_unsupported_without_any_request(self):
+        opener = FakeOpener()
+        client = SushiroClient(None, api_profile="miniapp_gateway", opener=opener)
+        result = client.fetch_stores()
+        self.assertEqual((result.ok, result.error_code, result.http_status, result.payload), (False, "unsupported_endpoint", None, None))
+        self.assertEqual(opener.calls, [])
+        self.assertEqual(client._fetch("cancelNetTicket", {}).error_code, "invalid_endpoint")
+        self.assertEqual(opener.calls, [])
+
+    def test_gateway_http_failure_has_no_legacy_fallback_or_raw_output(self):
+        opener = FakeOpener(error=HTTPError(
+            "https://sapi.sushiro.com.cn", 401, "synthetic-private-message",
+            {"Authorization": "synthetic-private-header"},
+            io.BytesIO(b"synthetic-private-response-body"),
+        ))
+        client = SushiroClient(None, api_profile="miniapp_gateway", opener=opener)
+        result = client.fetch_store("123")
+        self.assertEqual((result.error_code, result.http_status, result.payload), ("http_error", 401, None))
+        self.assertEqual(len(opener.calls), 1)
+        request = opener.calls[0][0]
+        self.assertEqual(urlsplit(request.full_url).netloc, "sapi.sushiro.com.cn")
+        self.assertIsNone(request.get_header("Authorization"))
+        self.assertIsNone(request.get_header("X-app-client"))
+        self.assertIsNone(request.get_header("X-app-code"))
+        self.assertIsNone(request.get_header("User-agent"))
+        self.assertIsNone(request.get_header("Referer"))
+        self.assertIsNone(request.get_header("Content-type"))
+        self.assertNotIn("synthetic-private", repr(result))
+
+    def test_api_profiles_reject_arbitrary_destinations_and_legacy_app_headers(self):
+        for profile in ("unknown", "https://other.invalid", "../getStoreById", None, []):
+            with self.subTest(profile_type=type(profile).__name__):
+                with self.assertRaisesRegex(ValueError, "^invalid_api_profile$"):
+                    SushiroClient(None, api_profile=profile)
+        for headers in (
+            {"app_client": "synthetic-client"}, {"app_code": "synthetic-code"},
+            {"user_agent": "Synthetic Agent/1.0"},
+            {"referer": "https://synthetic.invalid"},
+            {"content_type": "application/x-www-form-urlencoded"},
+        ):
+            with self.subTest(header=next(iter(headers))):
+                with self.assertRaisesRegex(ValueError, "^unsupported_profile_header$"):
+                    SushiroClient(None, **headers)
+
+    def test_gateway_app_header_validation_rejects_whitespace_and_controls(self):
+        bad_values = ("", "bad\r\nInjected: synthetic", "two tokens", " padded", "tab\tvalue", "秘密", "bad\x00value", "x" * 1025, True)
+        for field in ("app_client", "app_code"):
+            for value in bad_values:
+                with self.subTest(field=field, value_type=type(value).__name__):
+                    with self.assertRaisesRegex(ValueError, "^invalid_" + field + "$"):
+                        SushiroClient(None, api_profile="miniapp_gateway", **{field: value})
+
+    def test_gateway_header_text_is_bounded_ascii_without_control_characters(self):
+        for field, limit in (("user_agent", 2048), ("referer", 2048), ("content_type", 256)):
+            for value in ("", " ", "bad\r\nInjected: synthetic", "bad\tvalue", "秘密", "bad\x7fvalue", "x" * (limit + 1), True):
+                with self.subTest(field=field, value_type=type(value).__name__):
+                    with self.assertRaisesRegex(ValueError, "^invalid_" + field + "$"):
+                        SushiroClient(None, api_profile="miniapp_gateway", **{field: value})
+        with self.assertRaisesRegex(ValueError, "^invalid_referer$"):
+            SushiroClient(None, api_profile="miniapp_gateway", referer="https://synthetic.invalid/two words")
+
+    def test_default_gateway_opener_does_not_invent_user_agent(self):
+        class CapturingHTTPSHandler(HTTPSHandler):
+            def __init__(self):
+                super().__init__()
+                self.request = None
+
+            def https_open(self, request):
+                self.request = request
+                response = addinfourl(io.BytesIO(encoded(fixture_store())), Message(), request.full_url, 200)
+                response.msg = "OK"
+                return response
+
+        handler = CapturingHTTPSHandler()
+        with patch("sushiwait.client.HTTPSHandler", return_value=handler):
+            client = SushiroClient(None, api_profile="miniapp_gateway")
+            self.assertTrue(client.fetch_store("123").ok)
+        self.assertIsNotNone(handler.request)
+        self.assertIsNone(handler.request.get_header("User-agent"))
+        self.assertIsNone(handler.request.get_header("Referer"))
+        self.assertIsNone(handler.request.get_header("Content-type"))
+
+    def test_gateway_redirect_to_legacy_is_blocked_and_not_read(self):
+        response = FakeResponse(b"synthetic-private-body", url="https://crm-cn-prd.sushiro.com.cn/wechat/api/2.0/getStoreById?storeId=123")
+        opener = FakeOpener(response)
+        result = SushiroClient(None, api_profile="miniapp_gateway", opener=opener).fetch_store("123")
+        self.assertEqual(result.error_code, "redirect_blocked")
+        self.assertEqual(response.read_sizes, [])
+        self.assertEqual(len(opener.calls), 1)
+        self.assertTrue(response.closed)
+
     def test_anonymous_diagnostic_omits_authorization(self):
         opener = FakeOpener(error=HTTPError("https://fixed.invalid", 401, "private error", {}, io.BytesIO(b"private body")))
         client = SushiroClient(None, opener=opener)

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 
+API_PROFILES = ("legacy", "miniapp_gateway")
 QUEUE_NAMES = (
     "reservationQueue",
     "counterQueue",
@@ -24,13 +25,14 @@ _TEXT_FIELDS = (
     "reservationStatus",
 )
 _IDENTITY_FIELDS = ("id", "storeId", "name", "address", "area")
+_SIGNED_INT_FIELDS = ("waitTimeCounter", "waitTimeCap")
 _SCALAR_FIELDS = (
-    "id", "storeId", *_TEXT_FIELDS, "groupQueuesCount", "raw_wait",
+    "id", "storeId", *_TEXT_FIELDS, "groupQueuesCount", "raw_wait", *_SIGNED_INT_FIELDS,
 )
 _KNOWN_KEYS = {
     "data", "id", "storeId", *_TEXT_FIELDS, "groupQueuesCount", "groupQueues",
     "wait", *QUEUE_NAMES, "code", "errorCode", "error_code", "errCode",
-    "success", "error", "message", "status",
+    "success", "error", "message", "status", *_SIGNED_INT_FIELDS,
 }
 _INFERENCE_LIMITS = (
     "Displayed numbers are observable labels, not a complete queue or global cursor.",
@@ -46,9 +48,20 @@ def _public_id(value: Any) -> bool:
              and int(value) > 0))
 
 
+def _validate_api_profile(value: Any) -> str:
+    if not isinstance(value, str) or value not in API_PROFILES:
+        raise ValueError("invalid_api_profile")
+    return value
+
+
 def _nonnegative_int(value: Any) -> bool:
     # bool is an int subclass, but is not a reported count.
     return type(value) is int and value >= 0
+
+
+def _signed_int(value: Any) -> bool:
+    # Preserve signed source values, including -1, without decoding sentinels.
+    return type(value) is int
 
 
 def _string(value: Any) -> bool:
@@ -133,7 +146,7 @@ def _detail_data(payload: dict) -> dict:
         _reject_explicit_error(data)
         return data
     # Do not scan arbitrary nested objects to find something resembling a store.
-    detail_keys = {"id", "storeId", *_TEXT_FIELDS, "groupQueuesCount", "groupQueues", "wait"}
+    detail_keys = {"id", "storeId", *_TEXT_FIELDS, "groupQueuesCount", "groupQueues", "wait", *_SIGNED_INT_FIELDS}
     if not any(key in payload for key in detail_keys):
         raise ValueError("detail response has an unrecognized structure")
     return payload
@@ -169,9 +182,10 @@ def _canonical_id(data: dict) -> str:
 
 def normalize_snapshot(
     payload: dict, store_id: str, *, request_started_at: str, received_at: str,
-    elapsed_ms: int, data_origin: str,
+    elapsed_ms: int, data_origin: str, api_profile: str = "legacy",
 ) -> dict:
     """Normalize a successful store response; never retain an entire response."""
+    api_profile = _validate_api_profile(api_profile)
     if not _public_id(store_id):
         raise ValueError("requested store identity is invalid")
     if data_origin not in ("live", "fixture", "synthetic"):
@@ -194,6 +208,9 @@ def normalize_snapshot(
     normalized["groupQueuesCount"]["unit"] = "unknown"
     normalized["raw_wait"] = _field(data, "wait", _nonnegative_int, issues)
     normalized["raw_wait"]["unit"] = "unknown"
+    for key in _SIGNED_INT_FIELDS:
+        normalized[key] = _field(data, key, _signed_int, issues)
+        normalized[key]["unit"] = "unknown"
 
     group = _field(data, "groupQueues", lambda value: isinstance(value, dict), issues)
     group_source = data["groupQueues"] if group["presence"] == "present" else {}
@@ -218,6 +235,7 @@ def normalize_snapshot(
     return {
         "schema_version": 1,
         "store_id": str(int(store_id)),
+        "api_profile": api_profile,
         "timing": {
             "request_started_at": started.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             "received_at": received.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
@@ -234,8 +252,9 @@ def normalize_snapshot(
     }
 
 
-def normalize_directory(payload: dict) -> list[dict]:
+def normalize_directory(payload: dict, *, api_profile: str = "legacy") -> list[dict]:
     """Accept only a bare directory array or the reviewed data-array envelope."""
+    api_profile = _validate_api_profile(api_profile)
     if isinstance(payload, list):
         data = payload
     elif isinstance(payload, dict):
@@ -257,6 +276,7 @@ def normalize_directory(payload: dict) -> list[dict]:
         result.append({
             "schema_version": 1,
             "store_id": store_id,
+            "api_profile": api_profile,
             "normalized": _identity_fields(store, issues),
             "field_inventory": {"data": _safe_keys(store, issues, "field_inventory.data")},
             "issues": issues,
@@ -266,10 +286,12 @@ def normalize_directory(payload: dict) -> list[dict]:
 
 def compute_change(previous: dict | None, current: dict) -> dict:
     """Compare displayed labels and reported fields, without event attribution."""
+    api_profile = _validate_api_profile(current.get("api_profile", "legacy"))
     comparable = previous is not None and (
         previous.get("schema_version") == current.get("schema_version") == 1
         and previous.get("store_id") == current.get("store_id")
         and previous.get("data_origin") == current.get("data_origin")
+        and previous.get("api_profile", "legacy") == api_profile
     )
     issues: list[dict] = []
     elapsed_ms = None
@@ -283,8 +305,14 @@ def compute_change(previous: dict | None, current: dict) -> dict:
                 _issue(issues, "timing", "observation_order_reversed")
         except (ValueError, KeyError, TypeError):
             _issue(issues, "timing", "observation_interval_unknown")
-    fields = current.get("normalized", {})
-    old_fields = previous.get("normalized", {}) if comparable else {}
+    fields = dict(current.get("normalized", {}))
+    old_fields = dict(previous.get("normalized", {})) if comparable else {}
+    # Newly supported fields were unobserved in older stored snapshots. Supply
+    # missing metadata for comparison only, without inventing values or changing
+    # either persisted snapshot. Missing -> missing is not a source value change.
+    for observation in (fields, old_fields):
+        for key in _SIGNED_INT_FIELDS:
+            observation.setdefault(key, {"presence": "missing", "value": None, "unit": "unknown"})
     changes = {}
     if comparable:
         for key in _SCALAR_FIELDS:
@@ -326,6 +354,7 @@ def compute_change(previous: dict | None, current: dict) -> dict:
     return {
         "schema_version": 1,
         "store_id": current.get("store_id"),
+        "api_profile": api_profile,
         "comparison": comparison,
         "observation_interval_ms": elapsed_ms,
         "content_status": content_status,

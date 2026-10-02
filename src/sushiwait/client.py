@@ -1,8 +1,11 @@
-"""Bounded, read-only queries to the fixed mainland store API.
+"""Bounded, read-only queries to fixed mainland store API profiles.
 
 This is a transport and response-validation tool, not a prediction service.
-The protocol comes from reference-code research and has not been verified
-against production. No query credential is bundled or discovered automatically.
+Legacy routing comes from reference-code research. Gateway detail routing was
+observed in a normal mini-program request and independently replayed for store
+3004 with HTTP 200 on 2026-10-02. Credential renewal, individual header necessity,
+source freshness and anonymous access are not established. No credential is
+bundled or discovered automatically.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import socket
 import ssl
 import time
 from typing import Any, Protocol
+from types import MappingProxyType
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import (
@@ -28,14 +32,33 @@ from urllib.request import (
 )
 
 
-_ORIGIN = "https://crm-cn-prd.sushiro.com.cn"
-_BASE_PATH = "/wechat/api/2.0"
 _READ_ONLY_ENDPOINTS = frozenset({"stores", "getStoreById"})
 _MAX_TIMEOUT_SECONDS = 15
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _ID_PATTERN = re.compile(r"[0-9]{1,19}\Z", re.ASCII)
 _SUCCESS_CODES = frozenset({"", "0", "200", "OK", "SUCCESS"})
 _CODE_FIELDS = ("code", "errorCode", "error_code", "errCode")
+
+
+@dataclass(frozen=True)
+class _ApiProfile:
+    origin: str
+    base_path: str
+    endpoints: frozenset[str]
+
+
+_API_PROFILES = MappingProxyType({
+    "legacy": _ApiProfile(
+        "https://crm-cn-prd.sushiro.com.cn",
+        "/wechat/api/2.0",
+        frozenset({"stores", "getStoreById"}),
+    ),
+    "miniapp_gateway": _ApiProfile(
+        "https://sapi.sushiro.com.cn",
+        "/gateway/wechat/api/2.0",
+        frozenset({"getStoreById"}),
+    ),
+})
 
 
 @dataclass(frozen=True)
@@ -137,11 +160,16 @@ def _reject_json_constant(value: str) -> None:
 
 
 class SushiroClient:
-    """Single-attempt store queries with fixed origin, path and GET endpoints.
+    """Single-attempt queries to an explicitly selected fixed API profile.
 
     ``authorization`` must be a locally supplied query token or Bearer value.
     ``None`` omits authorization and does not establish that anonymous data
     access is supported. Callers bound sampling and stop after failed queries.
+    ``legacy`` preserves the researched default; ``miniapp_gateway`` permits
+    only the observed detail query. Gateway app-header, user-agent, referer and
+    content-type values are optional, supplied locally and never transferred
+    to the legacy origin. Their
+    presence in an observed request does not prove the server requires them.
     ``ca_file`` supplies trusted CA certificates while preserving certificate
     and hostname verification. The optional opener is an offline-test seam,
     not a configurable destination.
@@ -155,6 +183,12 @@ class SushiroClient:
         *,
         opener: _Opener | None = None,
         ca_file: str | None = None,
+        api_profile: str = "legacy",
+        app_client: str | None = None,
+        app_code: str | None = None,
+        user_agent: str | None = None,
+        referer: str | None = None,
+        content_type: str | None = None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -172,7 +206,27 @@ class SushiroClient:
             not isinstance(ca_file, str) or not ca_file or "\x00" in ca_file
         ):
             raise ValueError("invalid_ca_file")
+        if not isinstance(api_profile, str) or api_profile not in _API_PROFILES:
+            raise ValueError("invalid_api_profile")
+        if api_profile == "legacy" and any(
+            value is not None
+            for value in (app_client, app_code, user_agent, referer, content_type)
+        ):
+            raise ValueError("unsupported_profile_header")
+        self._api_profile = api_profile
+        self._profile = _API_PROFILES[api_profile]
         self._authorization = self._normalize_authorization(authorization)
+        self._app_client = self._validate_header(app_client, "invalid_app_client")
+        self._app_code = self._validate_header(app_code, "invalid_app_code")
+        self._user_agent = self._validate_header(
+            user_agent, "invalid_user_agent", max_length=2048, allow_spaces=True
+        )
+        self._referer = self._validate_header(
+            referer, "invalid_referer", max_length=2048
+        )
+        self._content_type = self._validate_header(
+            content_type, "invalid_content_type", max_length=256, allow_spaces=True
+        )
         self._timeout_seconds = timeout_seconds
         self._max_response_bytes = max_response_bytes
         self._opener = (
@@ -181,6 +235,33 @@ class SushiroClient:
             else self._default_opener(ca_file)
         )
 
+    @property
+    def api_profile(self) -> str:
+        """Non-secret source identifier used to partition collected history."""
+        return self._api_profile
+
+    @staticmethod
+    def _validate_header(
+        value: str | None,
+        error_code: str,
+        *,
+        max_length: int = 1024,
+        allow_spaces: bool = False,
+    ) -> str | None:
+        if value is None:
+            return None
+        if (
+            not isinstance(value, str)
+            or not 1 <= len(value) <= max_length
+            or not value.strip()
+            or any(
+                ord(char) < (32 if allow_spaces else 33) or ord(char) > 126
+                for char in value
+            )
+        ):
+            raise ValueError(error_code)
+        return value
+
     @staticmethod
     def _default_opener(ca_file: str | None) -> _Opener:
         try:
@@ -188,9 +269,12 @@ class SushiroClient:
         except (OSError, ValueError):
             # A failed trust-store load must not expose paths or exception text.
             raise ValueError("invalid_ca_file") from None
-        return build_opener(
+        opener = build_opener(
             ProxyHandler({}), _RejectRedirects(), HTTPSHandler(context=context)
         )
+        # Do not silently invent a user-agent for a gateway request.
+        opener.addheaders = []
+        return opener
 
     @staticmethod
     def _normalize_authorization(authorization: str | None) -> str | None:
@@ -239,6 +323,8 @@ class SushiroClient:
 
         if endpoint not in _READ_ONLY_ENDPOINTS:
             return result("invalid_endpoint")
+        if endpoint not in self._profile.endpoints:
+            return result("unsupported_endpoint")
         requested_id: int | None = None
         if endpoint == "getStoreById":
             store_id = params.get("storeId")
@@ -250,14 +336,29 @@ class SushiroClient:
             # Keep even internal calls on the researched read-only parameters.
             params = {"latitude": "1", "longitude": "1", "numresults": "10000"}
 
-        url = f"{_ORIGIN}{_BASE_PATH}/{endpoint}?{urlencode(params)}"
+        url = (
+            f"{self._profile.origin}{self._profile.base_path}/{endpoint}"
+            f"?{urlencode(params)}"
+        )
         headers = {
             "Accept": "application/json",
             "Accept-Encoding": "identity",
-            "User-Agent": "SushiWait-readonly",
         }
+        if self._api_profile == "legacy":
+            headers["User-Agent"] = "SushiWait-readonly"
         if self._authorization is not None:
             headers["Authorization"] = self._authorization
+        if self._api_profile == "miniapp_gateway":
+            if self._app_client is not None:
+                headers["X-App-Client"] = self._app_client
+            if self._app_code is not None:
+                headers["X-App-Code"] = self._app_code
+            if self._user_agent is not None:
+                headers["User-Agent"] = self._user_agent
+            if self._referer is not None:
+                headers["Referer"] = self._referer
+            if self._content_type is not None:
+                headers["Content-Type"] = self._content_type
         request = Request(url, headers=headers, method="GET")
         response = None
         try:

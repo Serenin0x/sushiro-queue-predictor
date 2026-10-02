@@ -9,13 +9,14 @@ from sushiwait.observations import (
 )
 
 
-def snapshot(data, *, received="2026-10-02T10:00:00Z", origin="fixture", store_id="12"):
+def snapshot(data, *, received="2026-10-02T10:00:00Z", origin="fixture", store_id="12", profile="legacy"):
     return normalize_snapshot(
         data, store_id,
         request_started_at=received,
         received_at=received,
         elapsed_ms=25,
         data_origin=origin,
+        api_profile=profile,
     )
 
 
@@ -24,6 +25,49 @@ def store(**fields):
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_signed_public_wait_fields_preserve_values_with_unknown_units(self):
+        result = snapshot(store(
+            waitTimeCounter=-1, waitTimeCap=180, wait=-1,
+            phone="PRIVATE_PHONE", netTicket={"number": "PRIVATE_TICKET"},
+        ))
+        fields = result["normalized"]
+        self.assertEqual(fields["waitTimeCounter"], {"presence": "present", "value": -1, "unit": "unknown"})
+        self.assertEqual(fields["waitTimeCap"], {"presence": "present", "value": 180, "unit": "unknown"})
+        self.assertEqual(fields["raw_wait"]["presence"], "invalid")
+        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["upstream_freshness"], "unknown")
+        self.assertIn("waitTimeCounter", result["field_inventory"]["data"])
+        self.assertNotIn("PRIVATE", json.dumps(result))
+
+    def test_signed_wait_fields_distinguish_zero_missing_null_and_invalid_types(self):
+        for key in ("waitTimeCounter", "waitTimeCap"):
+            missing = snapshot(store())["normalized"][key]
+            self.assertEqual(missing, {"presence": "missing", "value": None, "unit": "unknown"})
+            for value, presence in ((0, "present"), (-1, "present"), (None, "null"),
+                                    (True, "invalid"), (False, "invalid"), (1.0, "invalid"),
+                                    ("180", "invalid"), ({"private": "PRIVATE_VALUE"}, "invalid")):
+                with self.subTest(key=key, value=value):
+                    result = snapshot(store(**{key: value}))
+                    field = result["normalized"][key]
+                    self.assertEqual(field["presence"], presence)
+                    self.assertEqual(field["value"], value if presence == "present" else None)
+                    self.assertEqual(field["unit"], "unknown")
+                    self.assertNotIn("PRIVATE_VALUE", json.dumps(result))
+
+    def test_profile_is_fixed_caller_metadata_and_does_not_change_field_semantics(self):
+        data = store(wait=5, groupQueues={"mixedQueue": ["A001"]}, api_profile="PRIVATE_LABEL")
+        legacy = snapshot(data)
+        gateway = snapshot(data, profile="miniapp_gateway")
+        self.assertEqual(legacy["api_profile"], "legacy")
+        self.assertEqual(gateway["api_profile"], "miniapp_gateway")
+        self.assertEqual(legacy["normalized"], gateway["normalized"])
+        self.assertEqual(gateway["normalized"]["raw_wait"]["unit"], "unknown")
+        self.assertEqual(gateway["upstream_freshness"], "unknown")
+        self.assertNotIn("PRIVATE_LABEL", json.dumps(gateway))
+        for profile in (None, "", "PRIVATE_PROFILE", True):
+            with self.subTest(profile=profile), self.assertRaisesRegex(ValueError, "invalid_api_profile"):
+                snapshot(store(), profile=profile)
+
     def test_preserves_complete_string_arrays_and_separate_groups(self):
         queues = {
             "reservationQueue": ["R000", "R001"],
@@ -193,6 +237,13 @@ class SnapshotTests(unittest.TestCase):
 
 
 class DirectoryTests(unittest.TestCase):
+    def test_directory_records_have_validated_profiles(self):
+        self.assertEqual(normalize_directory({"data": [store()]})[0]["api_profile"], "legacy")
+        result = normalize_directory({"data": [store()]}, api_profile="miniapp_gateway")
+        self.assertEqual(result[0]["api_profile"], "miniapp_gateway")
+        with self.assertRaisesRegex(ValueError, "invalid_api_profile"):
+            normalize_directory({"data": []}, api_profile="PRIVATE_PROFILE")
+
     def test_bare_or_data_array_directory_retains_only_public_identity_fields(self):
         data = [store(address=None, phone="PRIVATE_PHONE", netTicket={"token": "PRIVATE_TOKEN"})]
         result = normalize_directory({"data": data})
@@ -212,6 +263,48 @@ class DirectoryTests(unittest.TestCase):
 
 
 class ChangeTests(unittest.TestCase):
+    def test_signed_wait_value_changes_are_observed_and_included_in_hash(self):
+        before = snapshot(store(waitTimeCounter=-1, waitTimeCap=180))
+        after = snapshot(store(waitTimeCounter=0, waitTimeCap=180))
+        self.assertNotEqual(before["content_hash"], after["content_hash"])
+        change = compute_change(before, after)["field_changes"]["waitTimeCounter"]
+        self.assertEqual(change["previous"]["value"], -1)
+        self.assertEqual(change["current"]["value"], 0)
+        self.assertEqual(change["current"]["unit"], "unknown")
+
+    def test_added_signed_fields_compare_old_snapshot_absence_as_missing(self):
+        old = snapshot(store())
+        for key in ("waitTimeCounter", "waitTimeCap"):
+            del old["normalized"][key]
+        unchanged = compute_change(old, snapshot(store()))
+        self.assertEqual(unchanged["content_status"], "unchanged")
+        self.assertEqual(unchanged["field_changes"], {})
+        observed = compute_change(old, snapshot(store(waitTimeCounter=-1)))
+        change = observed["field_changes"]["waitTimeCounter"]
+        self.assertEqual(change["previous"], {"presence": "missing", "value": None, "unit": "unknown"})
+        self.assertEqual(change["current"]["value"], -1)
+        self.assertNotIn("waitTimeCap", observed["field_changes"])
+        self.assertNotIn("waitTimeCounter", old["normalized"])
+
+    def test_same_store_and_origin_across_profiles_is_not_comparable(self):
+        before = snapshot(store(groupQueues={"mixedQueue": ["A001"]}))
+        after = snapshot(store(groupQueues={"mixedQueue": ["A002"]}), profile="miniapp_gateway")
+        result = compute_change(before, after)
+        self.assertEqual(result["api_profile"], "miniapp_gateway")
+        self.assertEqual(result["comparison"], "incomparable")
+        self.assertIsNone(result["observation_interval_ms"])
+        self.assertIsNone(result["queues"]["mixedQueue"]["added"])
+        self.assertIsNone(result["queues"]["mixedQueue"]["removed"])
+        self.assertEqual(result["field_changes"], {})
+
+    def test_old_untagged_snapshot_is_only_compatible_with_legacy(self):
+        before = snapshot(store(groupQueues={"mixedQueue": ["A001"]}))
+        del before["api_profile"]
+        after = snapshot(store(groupQueues={"mixedQueue": ["A002"]}))
+        self.assertEqual(compute_change(before, after)["comparison"], "comparable")
+        after["api_profile"] = "miniapp_gateway"
+        self.assertEqual(compute_change(before, after)["comparison"], "incomparable")
+
     def test_prefixes_resets_and_large_number_gaps_are_only_set_changes(self):
         before = snapshot(store(groupQueues={"mixedQueue": ["A998", "A999", "B001"]}))
         after = snapshot(store(groupQueues={"mixedQueue": ["A001", "B001", "Z90000"]}), received="2026-10-02T10:02:00Z")
