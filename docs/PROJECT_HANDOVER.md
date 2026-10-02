@@ -12,11 +12,11 @@
 4. 在任务开始前判断需要哪些真实数据、用户授权或人工核验；可以独立完成的工作继续推进。
 5. 每次工作都更新本文档的编辑历史；需求、设计或版本状态改变时，同时更新对应板块。
 
-**当前本地与已发布只读工具均为 0.2.0.dev1。** 新 sapi 西单单店已捕获、独立请求并通过实际新 CLI 保存；116 项离线检查通过，代码与 E0014–E0019 已原子发布并完成 27 文件远端/本地核对，见 E0020。60 秒采样首轮因 HTTP 401 停止，静态鉴权声明到期与失败时序吻合，正常续期未验证；30 秒阶段未执行，字段单位、刷新与完整试点仍未验收。没有预测模型、后端服务、小程序前端或部署。接入步骤见 [DATA_ACCESS.md](DATA_ACCESS.md)。
+**当前本地与已发布只读工具均为 0.2.0.dev1。** 新 sapi 西单单店已捕获、独立请求并通过实际新 CLI 保存；116 项离线检查通过。代码与 E0014–E0019 的发布见 E0020，E0020–E0021 文档后续已发布；最近已核验 main 为 18d83e9676634fb7e85479bf54e9ffa5bf2a2856、27 文件一致，见 E0022。用户于 2026-10-03 恢复工作，开放字体 Light 标题与浅/深色 SVG 已本地完成、核验，E0022 检查点及本轮资产尚待发布，见 E0023。标题完成后立即回到正常鉴权更新、三店与 60/30 秒采样主线；此前首轮 HTTP 401 后停止，正常续期、字段单位、刷新与完整试点仍未验收。没有预测模型、后端服务、小程序前端或部署。接入步骤见 [DATA_ACCESS.md](DATA_ACCESS.md)。
 
 ## 1.2 项目来源与目标
 
-项目对外展示名为全大写 **SUSHIWAIT**；GitHub 仓库名保留 **sushiro-queue-predictor**。用户最新提供 Aliment 字体包，要求使用 Light 字重，并明确接受字体轮廓 SVG 标题、必要时高清图片；本机私有 SVG/高清 PNG 预览已完成并展示给用户，公开许可或替代字体选择正等待用户回复。当前公开 README 仍为原生 SUSHIWAIT 文字标题，字体资产未发布。最新标题工作不属于独立 Logo 制作，不改变 R19 后期 Logo 顺序。此前 SushiWait 和默认 sans-serif 方案的历史保留，见 E0019–E0021。README 按最新偏好详细介绍产品价值，文字可以有吸引力，现有工具与明确标为规划的未来体验分别介绍，后续随系统更新继续改进；不得虚构已上线能力、误差或稳定覆盖，后续接手不得自行改名。
+项目对外展示名为全大写 **SUSHIWAIT**；GitHub 仓库名保留 **sushiro-queue-predictor**。用户已选择相似开放许可 Light 字体替代 Aliment，并希望字形与寿司郎风格呼应；采用 Montserrat Light、OFL 1.1，实际字重 300。用户于 2026-10-03 恢复后，已完成浅色/深色纯路径 SVG 和视觉核验，本地 README 使用可访问的自适应标题；当前远端仍为原生文字，本轮资产未发布，见 E0023。原 Aliment 仅保留私有预览，不用于公开发布；E0022 的断网暂停检查点完整保留，暂停已由用户恢复工作解除。字体标题不属于独立 Logo 制作，不改变 R19 后期 Logo 顺序，也不称寿司郎官方同款字体。README 按最新偏好详细介绍产品价值，文字可以有吸引力，现有工具与明确标为规划的未来体验分别介绍，后续随系统更新继续改进；不得虚构已上线能力、误差或稳定覆盖，后续接手不得自行改名。
 
 用户希望建立一个针对中国大陆寿司郎门店的排队预测和辅助排队系统。用户目前能够通过寿司郎微信小程序查看门店的实时排队信息，并希望把这些实时信息连续采集到自己的服务器，再与历史统计、日期类型、季节趋势及外部事件结合，预测叫号时间、安排取号时机、监控过号风险。
 
@@ -104,10 +104,16 @@ sushiro-queue-predictor/
 ├── src/sushiwait/
 │   ├── __init__.py                    # 工具版本
 │   ├── __main__.py                    # python -m sushiwait 入口
-│   ├── client.py                      # 两个固定只读 GET 端点、TLS 与响应校验
+│   ├── client.py                      # 固定 API profile/只读 GET、TLS 与响应校验
 │   ├── observations.py                # 安全字段、存在状态与展示集合差异
-│   ├── storage.py                     # SQLite schema v1、真实/合成数据隔离
-│   └── cli.py                         # stores/snapshot/collect/replay/report
+│   ├── storage.py                     # SQLite schema v2、profile 与真实/合成来源隔离
+│   ├── auth.py                        # 零网络本机鉴权声明时间检查
+│   └── cli.py                         # auth-status/stores/snapshot/collect/replay/report
+├── assets/                            # 本轮本地完成，标题资产待发布
+│   ├── sushiwait-title-light.svg       # 浅色模式纯路径标题
+│   ├── sushiwait-title-dark.svg        # 深色模式同几何标题
+│   ├── Montserrat-OFL.txt             # 字体许可原文
+│   └── NOTICE.md                      # 固定来源、字体哈希与渲染说明
 ├── config/pilot-stores.json            # 三家试点；西单 3004 已核对，另两家 ID 未验收
 ├── examples/fixtures/                 # 两份明确标记的合成样例，不是真实门店
 ├── tests/                             # 本轮 116 项离线测试通过
@@ -158,7 +164,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 | R17 | README 随系统更新，详细且有吸引力地介绍功能与价值 | 分开当前已实现工具、可验证进度和明确标为规划的未来体验；最新要求允许已标规划的产品目标介绍，替代此前只列现有功能的限定，不将规划当已上线、不虚构误差或稳定覆盖；见 2.11 |
 | R18 | 实时数据齐备以后再做前端 | 先完成真实实时数据接入、字段与刷新验证，再开始前端实现；不能先搭模拟前端 |
 | R19 | Logo 与动态图文介绍后期制作 | 本阶段不制作；具体开始时机在后期工作中确定 |
-| R20 | 展示名与仓库名 | README 标题全大写 SUSHIWAIT；最新指定 Aliment Light，优先字体轮廓 SVG、必要时高清图片，公开许可确认后再发布资产；仓库保留 sushiro-queue-predictor，标题工作不等于独立 Logo，不改变 R19 |
+| R20 | 展示名与仓库名 | README 全大写 SUSHIWAIT，采用开放许可 Montserrat Light（字重 300）纯路径 SVG，浅/深色自适应、alt SUSHIWAIT；本地已完成，公开发布待核验。只作风格呼应，不称寿司郎官方同款；仓库保留 sushiro-queue-predictor，标题工作不等于独立 Logo，不改变 R19 |
 | R21 | 每次查询凭证的到期与实际生命周期可查 | 分开门店 ID 和会过期的查询凭证；每份新凭证记录声明签发/到期、实际成功/失败边界及正常续期，未验签声明不当服务端保证，不以一次样本推固定 TTL |
 | R22 | 电脑快捷批量测试门店 | 已核实 ID、有效本人查询授权和允许频率后有节奏批量，不要求逐店手机抓包；当前 collect 仅 1–3 店试点，全国目录与全国批量仍待实现/验收 |
 | R23 | 后期本项目小程序同步显示门店当前叫号 | 同步堂食与预约有限展示集合、更新时间/失败状态，复用服务端共享采集，减少两个小程序来回切换；过期或失败不能当作无人排队，仍须 R18 数据齐备后才实现前端 |
@@ -342,8 +348,8 @@ target_call_at = desired_arrival_at + call_offset_minutes
 - **版本说明**：区分设计基线、实际发布、开发计划；不能把 `v0.1.0` 设计基线描述成可用产品版本。
 - **更新说明**：概括实际发生的更新，并链接本文档的完整版本与编辑记录。
 - **完整交接入口**：提供 `docs/PROJECT_HANDOVER.md` 的可点击相对链接，详细要求和历史不在 README 重复堆积。
-- **当前公开文字标题与最新字体要求**：当前 # SUSHIWAIT 使用 GitHub 默认 Markdown sans-serif。此前已核对 Primer markdown body 使用 $body-font、普通 h1 继承，GitHub 过滤内联 font/style；字体由 GitHub 与阅读设备渲染。[Primer Markdown 样式](https://github.com/primer/css/blob/main/src/markdown/markdown-body.scss#L9)、[Primer 字体变量](https://github.com/primer/css/blob/main/src/support/variables/typography.scss#L35)、[GitHub Markup 处理说明](https://github.com/github/markup#github-markup)
-- **用户最新指定 Aliment Light 标题**：用户提供字体包，并明确要求优先 SVG 图片、必要时高清图片，取代仅使用默认文字字体的方案。只做 SUSHIWAIT 字体标题，本机 CoreText/CGPath 轮廓 SVG 与高清 PNG 预览已完成、视觉核对并展示，SVG 可实现，PNG 作为备用，不作为独立 Logo。已向用户核对适用于公开 README 的许可、开放许可相似 Light 或仅本地预览选择，等待实际答复。原包说明 PERSONAL USE ONLY，作者公开媒体条款与零收益许可范围须核对；字体轮廓化或改成 PNG 不改变使用许可条件。当前字体资产尚未公开，证据与待确认见 E0021。[作者 PUA 条款](https://www.mansgreback.com/pua)、[作者 Non-Profit License 范围](https://www.mansgreback.com/licenses/non-profit-license)
+- **文字标题与自定义字体呈现**：此前已核对 GitHub 默认 Markdown 使用 Primer $body-font、普通 h1 继承，GitHub 过滤内联 font/style；此文字方案作为历史保留。最新本地 README 在 h1 中使用 picture / SVG；字体轮廓已转换为路径，读者无需安装字体，正文继续由 GitHub 渲染。远端替换仍待本轮发布核验。[Primer Markdown 样式](https://github.com/primer/css/blob/main/src/markdown/markdown-body.scss#L9)、[Primer 字体变量](https://github.com/primer/css/blob/main/src/support/variables/typography.scss#L35)、[GitHub Markup 处理说明](https://github.com/github/markup#github-markup)
+- **已本地完成的开放许可 Light 标题**：用户已选择相似开放字体，不再等待 Aliment 许可。采用作者固定提交的 Montserrat Light / OFL 1.1，本机核验字重 300，已生成并视觉检查浅/深色纯路径 SVG；本地 README 用 prefers-color-scheme: dark 选深色，浅色默认回退，alt SUSHIWAIT，显示 480×85。来源、哈希、渲染步骤及许可原文分别见 [assets/NOTICE.md](../assets/NOTICE.md) 和 [assets/Montserrat-OFL.txt](../assets/Montserrat-OFL.txt)；本轮拟同提交，不能把本地完成当作已公开。只做全大写字体标题，与寿司郎风格呼应，不称官方同款；原 Aliment 只保留私有预览，E0021–E0022 历史保留，恢复结果见 E0023。
 
 **前端必须等真实实时数据齐备后再做。**先验证门店实时字段可取得、字段语义、缺失与缓存情况、源数据延迟和目标采样节奏，再进入小程序或其他前端实现。实时数据“齐备”的具体字段清单和证据应在接入报告中明确；模拟数据可用于离线验证，但不能据此提前开始前端，也不能代替真实接入验收。
 
@@ -355,12 +361,12 @@ Logo 与动态图文介绍留待后期制作，当前不创建占位视觉或宣
 
 ## 3.1 当前状态与已完成范围
 
-**当前本地与已发布工具：`v0.2.0.dev1`。** 固定新主机适配、来源隔离、116 项离线检查、实际新 CLI 单店保存与本机 auth-status 已完成；代码与 E0014–E0019 已发布，完整远端/本地核对见 E0020。静态鉴权有效期已成为连续采集的实际阻碍，60 秒采样首轮 401 后停止，30 秒阶段未执行。v0.2.0 的字段单位、刷新、正常续期与完整试点验收仍未完成。不存在可用预测产品、Release、版本标签或生产部署。
+**当前本地与已发布工具：`v0.2.0.dev1`。** 固定新主机适配、来源隔离、116 项离线检查、实际新 CLI 单店保存与本机 auth-status 已完成；代码与 E0014–E0019 的发布见 E0020，E0020–E0021 文档已后续发布，最近已核验 main 为 18d83e9676634fb7e85479bf54e9ffa5bf2a2856、27 文件一致。2026-10-03 恢复后的 Light 标题、本地 README/AGENTS 与 E0022–E0023 准备同提交，当前尚未发布。静态鉴权有效期已成为连续采集的实际阻碍，60 秒采样首轮 401 后停止，30 秒阶段未执行。v0.2.0 的字段单位、刷新、正常续期与完整试点验收仍未完成。不存在可用预测产品、Release、版本标签或生产部署。
 
 已完成的工具基线与真实验证：
 
 - 固定 legacy / miniapp_gateway profile，legacy 允许 crm stores/getStoreById，gateway 仅允许已观察的 sapi getStoreById；gateway stores 返回 unsupported_endpoint 且不请求，不跨主机转发旧凭证或失败回退。完整 TLS、禁止重定向与环境代理，15 秒 I/O 超时、2 MiB 上限、不自动重试或内置凭证。
-- stores 目录名称筛选、snapshot 单份观察、collect 1–3 店有界采样、synthetic replay 和 report；查询失败停止采样。
+- stores 目录名称筛选、snapshot 单份观察、collect 1–3 店有界采样、synthetic replay 和 report；查询失败停止采样。collect 只初始化一次客户端，没有轮间凭证更新；report 当前为数量/时间范围报告，尚无错误分类统计或变化统计。gateway 仅详情，目录仍不支持。
 - auth-status 按 profile 只检查本机授权环境变量，零网络、不建客户端/CA/opener/数据库，只选取和解释 iat/exp 并输出安全时间元数据；不输出或保存其他 claims/token。iat/exp 独立核对，声明未验签、未知不填默认 TTL，CLI exit 0 / ok 仅表示检查成功，不等于授权有效。
 - 完整四组字符串展示数组、字段存在状态、未知单位与未知来源更新时间；raw_wait 独立保留。waitTimeCounter / waitTimeCap 严格按非 bool 的有符号整数保存 presence/value/unit=unknown，保留 -1 等原值；缺失、null、invalid 分别记录，旧快照缺键按 missing 比较且不改旧 JSON。公共哈希和标量变化覆盖这两字段，只比较可观察变化，不计算真实过号率或 ETA。
 - 本地 SQLite schema v2，store+data_origin+api_profile 隔离，UTC 毫秒与 ID 规范化；v1 写开事务补 legacy、冲突回滚，只读 v1 不迁移。快照格式 schema_version 仍为 1，report 输出格式为 2 并单列实际 database_schema_version，不能混为同一版本。
@@ -375,11 +381,11 @@ Logo 与动态图文介绍留待后期制作，当前不创建占位视觉或宣
 
 60 秒采样首轮失败后没有继续请求、自动重试或执行 30 秒阶段。本机仅解析 Bearer JWT-like payload 的 exp，未输出其他 claims 或账号标识，也未验证签名；声明到期为 2026-10-02T12:44:37+00:00（北京时间 20:44:37），20:45:53 检查时已过期，与 20:43 成功和 20:45 的 401 时序吻合，但不是签名验证或唯一因果证明。下一步只在用户已授权的本人正常查询流程内核实鉴权更新与有效期，不使用上游共享令牌、不猜 refresh 端点；正常续期未捕获或实现前，不能宣称全天连续访问。
 
-用户最新新增 R21–R23：每份新查询凭证分别记录到期声明、实际成功/失败与续期；电脑侧已核实 ID 的有节奏批量查询；后期小程序同步堂食/预约展示与更新时间/失败状态。已有 collect 为 1–3 店试点批量，全国目录、全国批量及前端尚未实现。纯本机 auth-status --api-profile 已实现并通过主执行者真实配置的安全本机核验：声明 iat=19:44:37、exp=20:44:37，lifetime=3600、检查时 remaining=0 / expired=true，expiry_source=unverified_claim / signature_verified=false；只解释时间白名单，不联网或续期。当前全套 116 项通过，E0018 保留当时的 96 项结果；完整新工具和 README 文字标题/风格核验见 E0019，发布见 E0020。公开 README 仍为 SUSHIWAIT 原生标题，最新 Aliment Light 轮廓 SVG/高清 PNG 已完成本机预览与展示，公开许可或替代选择等待用户答复，字体资产未发布，见 E0021；详细当前能力与明确规划体验分开介绍，没有提前前端或独立 Logo。
+用户最新新增 R21–R23：每份新查询凭证分别记录到期声明、实际成功/失败与续期；电脑侧已核实 ID 的有节奏批量查询；后期小程序同步堂食/预约展示与更新时间/失败状态。已有 collect 为 1–3 店试点批量，全国目录、全国批量及前端尚未实现。纯本机 auth-status --api-profile 已实现并通过主执行者真实配置的安全本机核验：声明 iat=19:44:37、exp=20:44:37，lifetime=3600、检查时 remaining=0 / expired=true，expiry_source=unverified_claim / signature_verified=false；只解释时间白名单，不联网或续期。当前全套 116 项通过，E0018 保留当时的 96 项结果；完整新工具和 README 文字标题/风格核验见 E0019，发布见 E0020。用户已恢复工作，Montserrat Light 浅/深色 SVG、许可/来源记录及本地 README 已完成，当前公开标题尚未替换；E0022 暂停历史保留，恢复与核验结果见 E0023。标题完成后回到真实接入主线，详细当前能力与明确规划体验分开介绍，没有提前前端或独立 Logo。
 
-本轮约 20:17–20:20 已将 MITM、磁盘和内存过滤分别设为唯一启用 sapi 精确主机，旧 crm 项、内存 sushiro.com.cn 关键词及旧 URL 通配符保留但禁用；磁盘自动 1 分钟 / 50 MB / 100 请求已核验，自动额外 MITM 和数据包捕获 OFF。启动手机 VPN 稳定绿色后才开启 MITM 与 HTTP 捕获，明确点一次西单页面刷新，返回时三项 ON 后已依次关闭。当前 VPN、MITM、HTTP 捕获与数据包捕获均 OFF，Default 直接连接、单域名规则、服务端证书验证和用户 CA 信任保留，未全部恢复。E0014–E0016 保留此前 Safari 对照、小程序 crm 空捕获、候选主机发现及第二次元数据全过程 89 秒超过原≤1分钟方案的事实；E0017 记录新范围配置、正常请求和本机 HAR 交付核验。
+2026-10-02 约 20:17–20:20 已将 MITM、磁盘和内存过滤分别设为唯一启用 sapi 精确主机，旧 crm 项、内存 sushiro.com.cn 关键词及旧 URL 通配符保留但禁用；磁盘自动 1 分钟 / 50 MB / 100 请求已核验，自动额外 MITM 和数据包捕获 OFF。启动手机 VPN 稳定绿色后才开启 MITM 与 HTTP 捕获，明确点一次西单页面刷新，返回时三项 ON 后已依次关闭。此前最后实际核验 VPN、MITM、HTTP 捕获与数据包捕获均 OFF，Default 直接连接、单域名规则、服务端证书验证和用户 CA 信任保留，未全部恢复。2026-10-03 用户回复西单已打开但凌晨停业无数字；01:15 主执行者通过现有镜像独立看到最后更新时间 01:13、堂食/预约均为 ---。本轮仅恢复 CUA 文档及只读/导航，没有开启捕获/解密或请求 API，不以历史 OFF 代替当日开关核验，也不把停业展示当零队列或新鲜度验收。E0014–E0016 保留此前 Safari 对照、小程序 crm 空捕获、候选主机发现及元数据越时事实；E0017 记录正常请求和本机 HAR 交付核验。
 
-v0.1.0 初始文档已发布的证据见 E0001–E0005；v0.2.0.dev0 开发和实测见 E0006，开发版代码的 24 个远端文件核对见 E0008。E0011–E0013 与接入手册曾原子发布至 main 提交 [ba7b5b41799b4eae112cf1f78571941a3f180a87](https://github.com/Serenin0x/sushiro-queue-predictor/commit/ba7b5b41799b4eae112cf1f78571941a3f180a87)，24 个远端 blob 当时逐一一致。0.2.0.dev1、新接口/来源隔离/本机有效期工具、README/AGENTS/版本/试点和 E0014–E0019 已原子发布至 main 提交 [455acf4d5d0cc50d82f6704d40716cb0e02be9e8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/455acf4d5d0cc50d82f6704d40716cb0e02be9e8)，树 4b5e1102d2470cf640c815d6404627a703976cfe；未截断完整递归树的 27 个 blob 与本地逐一 SHA-1 一致。主执行者已 fetch 后以 mixed reset 保留工作文件并同步，回填前工作区干净；E0020 记录证据，E0020–E0021 本轮文档待另提交。E0018–E0019 当时未发布的历史保留，由后续事实补充，不把字体预览或候选资产写成已公开。
+v0.1.0 初始文档已发布的证据见 E0001–E0005；v0.2.0.dev0 开发和实测见 E0006，开发版代码的 24 个远端文件核对见 E0008。E0011–E0013 与接入手册曾发布至 [ba7b5b41799b4eae112cf1f78571941a3f180a87](https://github.com/Serenin0x/sushiro-queue-predictor/commit/ba7b5b41799b4eae112cf1f78571941a3f180a87)。0.2.0.dev1、新接口/来源隔离/本机有效期工具、README/AGENTS/版本/试点和 E0014–E0019 已原子发布至 [455acf4d5d0cc50d82f6704d40716cb0e02be9e8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/455acf4d5d0cc50d82f6704d40716cb0e02be9e8)，树 4b5e1102d2470cf640c815d6404627a703976cfe。E0020–E0021 文档已后续发布，最近已核验 main 为 [18d83e9676634fb7e85479bf54e9ffa5bf2a2856](https://github.com/Serenin0x/sushiro-queue-predictor/commit/18d83e9676634fb7e85479bf54e9ffa5bf2a2856)，树 e32a5d516dbda650b04b9c22bbb6a288147bd181；完整未截断的 27 个远端 blob 当时与本地逐一一致并已同步，E0022 保留断网前检查点。本轮 E0022–E0023 与标题资产、README/AGENTS 准备另提交；远端发布及新文件哈希核验由主执行者后续 E0024 记录。E0018–E0022 的当时状态保留，不把本地资产完成写成已经发布。
 
 ## 3.2 计划版本与进入条件
 
@@ -402,6 +408,8 @@ v0.1.0 初始文档已发布的证据见 E0001–E0005；v0.2.0.dev0 开发和�
 ## 3.3 首个实际开发任务
 
 当前实际任务是“页面数字—接口字段—刷新延迟”对照验证。固定 gateway、来源隔离、迁移检查、116 项测试、新 CLI 单店保存与零网络 auth-status 已完成；西单 60 秒 / 2 轮采样首轮因 401 停止，未执行第 2 轮或 30 秒阶段。下一步在已授权的本人正常查询流程核实每份新凭证的签发/到期声明、实际可用生命周期、更新及必要头，再恢复有界采样；本机声明检查不能替代服务端可用性或续期。电脑批量仅在已核实 ID 和有效授权后使用当前 1–3 店试点能力，继续对照单位、-1、源时间及另外两店；全国目录和全国批量仍待实现/验收。gateway stores 尚无实际路径证据，不猜测或发送请求；西单单店成功不能代替完整三店目录、全天连续采集或全国验收。每次页面对照必须明确点击刷新并记录前后时间与展示集合；前端在数据齐备后复用服务端采集，展示堂食/预约及更新时间/失败状态。
+
+2026-10-03 用户要求简单完成标题后立即返回开发主线，争取 1.0 或核心稳定状态。按真实验收推进，优先解决本人正常鉴权更新、三店 ID/字段对照、60/30 秒有界采样和故障处理；版本目标不代替已验证的能力，不承诺本轮完成 1.0。用户已打开西单页，01:15 镜像只读核对堂食/预约均 ---、页面时间 01:13，凌晨停业阶段没有当前队列数字，不能验收叫号推进或新鲜度；尚无新捕获、解密或 API 请求。collect 目前无换凭证、report 无分类/变化统计、gateway 无目录，正常鉴权更新与全天稳定性仍真实未知。
 
 用户指定试点：**中关村大融城店、西单店、成都世豪店**。西单大悦城店 ID 3004 已通过正常请求、响应、独立请求与新 CLI 核对，已在 config/pilot-stores.json 以 single_store_read_only 范围记录；live_data_verified=false 表示连续采集未验收。中关村、成都 ID 仍 null，须经目录或正常请求确认，不能用合成测试 ID 替代。
 
@@ -455,6 +463,9 @@ v0.1.0 初始文档已发布的证据见 E0001–E0005；v0.2.0.dev0 开发和�
 | 2026-10-02 | README 展示标题更新为全大写 SUSHIWAIT，并要求 sans-serif | 仓库名保持原名，文字标题呈现与 GitHub 默认字体由主执行者/协作者核对；本轮不制作 Logo/SVG，不能承诺 Markdown 强制跨设备字体 |
 | 2026-10-02 | README 功能描述更详细、具有广告吸引力，后续系统更新随时改进 | 最新 R17 允许清楚标为规划的产品目标与未来体验介绍，替代此前仅列现有功能的限定；当前工具和未来产品分开，不虚构已上线能力、误差或稳定覆盖，R18/R19 的前端与视觉顺序保持 |
 | 2026-10-02 | 提供 Aliment 字体包，要求标题使用 Light，随后明确“要不换一个svg图片，如果实在不行就比较高清图片” | 新要求允许 SUSHIWAIT 字体轮廓 SVG 标题/高清图片，取代此前仅原生字体方案，不等于独立 Logo。包内 Personal Use 说明和作者公开媒体条件需核对；先本机私有预览，再确认已有公开 README 许可或选择开放许可替代，当前字体资产未发布 |
+| 2026-10-02 | 明确选择“换成相似的开放许可 Light 字体”，并要求可换成和寿司郎 Logo 类似的字体 | 已授权选择开放字体，无须再等 Aliment 许可；候选 Montserrat Light，保留全大写和 SVG 优先，只作风格呼应，不称官方同款 |
+| 2026-10-02 | 因即将断网，要求本次对话到此结束，稍后再见 | 停止联网和后续制作；仅将已完成进度及恢复步骤保存到本地交接文档，尚未发布的改动留待恢复后处理 |
+| 2026-10-03 | 恢复工作，要求简单完成标题后立即回到开发主线，争取 1.0 或核心稳定 | 已确认开放 Light 字体选择继续有效，完成标题与许可/来源记录后优先鉴权正常更新、三店、60/30 秒采样及故障处理；以真实验收为准，不承诺本轮完成 1.0，不自动扩大设备或业务操作授权 |
 
 # 四、项目编辑更改历史
 
@@ -776,3 +787,25 @@ Git 提交/发布/部署证据（若有）：
 - **许可与实际提问**：SVG、轮廓化或 PNG 都不改变字体使用许可条件。主执行者在完成可审阅预览后，已通过异步提问请用户确认已有适用于公开 README 的许可、改用相似开放许可 Light，或仅本地预览；当前尚未收到所需许可信息/选择。限制来自包内说明和作者公开媒体条款，不以默认勾选、超时、公开开源或用户提供文件代替用户答复。
 - **变更与验证**：phone_handover 只修改 docs/PROJECT_HANDOVER.md 与 docs/DATA_ACCESS.md，回填 E0020 发布事实、R20 最新偏好、当前公开标题/字体资产状态和本条。E0001–E0019 原文保留；代码、README、版本未由本执行者修改，116 项代码检查沿用已发布结果。四板块、R23/Q12、递增条目、版本/链接/隐私与 git diff --check 收尾检查通过；原始字体、许可证私有凭据、个人路径不写入公开文档。
 - **限制与下一步/发布证据**：等用户实际答复后再按适用许可或开放字体选择决定标题资产，另追加 E0022 记录 README/文件和公开核验；当前预览不等于已取得许可或已发布。最近已核验正式代码提交为 455acf4d5d0cc50d82f6704d40716cb0e02be9e8，本条与 E0020 的事实文档回填准备另提交，哈希以 Git 历史定位；本执行者不提交或发布，没有新增 Release、标签、独立 Logo、前端或部署。
+
+
+### E0022 — 2026-10-02 — 开放字体选择、下载完成与断网暂停检查点
+
+- **用户决策与状态**：用户已明确选择相似开放许可 Light 字体，并追加字形可接近寿司郎 Logo；不再等待 Aliment 许可确认。随后用户表示即将断网、本次对话到此结束，主执行者停止联网与字体制作，仅保存本地交接检查点。README 尚未替换，字体资产尚未公开。
+- **研究与候选**：integration_research 实际查看香港官方首页标识：主要为红色圆环及自定义片假名，另有较粗的 Latin 品牌文字；不能把某个 Latin Light 字体称为官方同款。主源为 [香港官方首页](https://sushirohk.com.hk/tc/)及[日本官方英文地区入口](https://www.akindo-sushiro.co.jp/en/)。选择 Montserrat Light 作为几何无衬线风格候选，公开许可来自作者仓库 OFL 1.1。
+- **已完成与未完成**：主执行者从作者固定提交 555facfb2a18c72c3c0380f0d9c0f060453a9058 下载静态 [Montserrat-Light.ttf](https://raw.githubusercontent.com/JulietaUla/Montserrat/555facfb2a18c72c3c0380f0d9c0f060453a9058/fonts/ttf/Montserrat-Light.ttf)及[OFL.txt](https://raw.githubusercontent.com/JulietaUla/Montserrat/555facfb2a18c72c3c0380f0d9c0f060453a9058/OFL.txt)至本机临时目录，两下载均退出 0。字体和许可证未加入仓库；尚未本地核验 OS/2 字重、生成 Montserrat 轮廓 SVG 或进行视觉检查。原 Aliment 私有预览和本机 CoreText/CGPath 渲染方式可复用，不能把原预览当成新字体效果。
+- **当前发布基线**：此前 E0020–E0021 文档已发布并完成 27 个远端文件哈希核对及本地同步。最后已核验 main 为 [18d83e9676634fb7e85479bf54e9ffa5bf2a2856](https://github.com/Serenin0x/sushiro-queue-predictor/commit/18d83e9676634fb7e85479bf54e9ffa5bf2a2856)，树 e32a5d516dbda650b04b9c22bbb6a288147bd181；本次暂停前再次本地确认 HEAD 与工作区干净。本条及当前需求状态更新只保存本地，未创建新公开提交、Release、标签或部署。
+- **恢复步骤**：用户恢复后，先核验 Montserrat Light 的字重与许可来源，沿用本机字体轮廓生成方式创建全大写标题；核对视觉效果，再生成浅色/深色纯路径 SVG，提供可访问名称及字体来源/OFL 记录，替换 README 并检查相对资源路径与 SVG 无外部字体/脚本，按现有流程发布并核对远端文件。临时文件若已清理，可从上述固定链接重新取得，不重新请求已确认的字体选择。完成标题后，接入主线仍为本人正常查询授权更新、已核实门店 ID 的有节奏试点与字段语义/源刷新验证；不要用已到期凭证重试，也不要提前做前端或真实取号、取消、重排。
+- **变更与验证**：仅修改 docs/PROJECT_HANDOVER.md 的当前摘要、R20、最新字体选择与授权记录，并追加本条；E0001–E0021 历史原文保留。保持四个顶层板块、R01–R23、Q01–Q12。代码、README 和版本未变，沿用 116 项已通过的代码检查，不重复运行测试；本地结构检查及 git diff --check 通过。原始 HAR、字体文件和授权头未加入仓库。
+
+### E0023 — 2026-10-03 — 恢复工作、开放 Light 标题完成与接入主线安排
+
+- **状态与执行者**：用户已恢复工作，E0022 的断网暂停解除；本轮 Montserrat Light 标题、浅/深色 SVG、本地 README/AGENTS 与来源/许可记录完成，局部核验通过，准备发布但尚未发布。Codex 主执行者完成资产/README/AGENTS，phone_handover 只修改 docs/PROJECT_HANDOVER.md；E0001–E0022 历史原文保留。
+- **用户要求与范围**：延续用户已确认的相似开放许可 Light、全大写 SUSHIWAIT 与 SVG 优先，字形只作寿司郎风格呼应，不称官方同款。用户最新要求简单做完标题后立即回到主线，争取 1.0 或核心稳定；以真实接入与故障处理验收为准，不承诺本轮完成 1.0。R20 更新为实际字体方案，不改变 R18 前端顺序或 R19 后期独立 Logo 计划。
+- **固定来源与字重核验**：字体来自作者 [JulietaUla/Montserrat 固定提交 555facfb2a18c72c3c0380f0d9c0f060453a9058](https://github.com/JulietaUla/Montserrat/tree/555facfb2a18c72c3c0380f0d9c0f060453a9058)。原 Montserrat-Light.ttf 为 444356 B，SHA-256=853de0dd715d6681f7038cf6cd53c1695b614657cbc57c8f542fe08d5b84e006；本机 OS/2 usWeightClass=300、CoreText PostScript 名 Montserrat-Light，实际为 Light。OFL 1.1 原文 4400 B 保存于 assets/Montserrat-OFL.txt，固定提交/来源/哈希与渲染步骤记录于 assets/NOTICE.md。原始 TTF/OTF 不加入项目，Aliment 私有预览不用于本轮公开标题。
+- **实际渲染与视觉结果**：主执行者用 CoreText / CGPath 生成同几何浅/深色标题，PNG 预览均为 2414×428 且已视觉检查；两份 SVG 各 3352 B、viewBox="0 0 603.500 107.000"，路径与 transform 一致，颜色分别 #111827 / #f4f4f5。SVG 仅路径，无 text/script/image/style/href 或外部字体，字体不嵌入、不依赖读者安装；高清 PNG 仅用于本机检查，发布资产采用 SVG。
+- **README 与文件变更**：新增 assets/sushiwait-title-light.svg、assets/sushiwait-title-dark.svg、assets/Montserrat-OFL.txt、assets/NOTICE.md；本地 README 用 h1/picture 按 prefers-color-scheme: dark 选深色版，浅色回退，alt=SUSHIWAIT，显示 480×85，并加入 2026-10-03 文档更新。AGENTS 同步字体标题状态；本文档更新当前摘要、R20、2.11、版本/发布状态、仓库树的 auth/schema v2/资产漏项及主线安排。README/AGENTS/资产由主执行者负责，本执行者没有改其他文件。
+- **验证与历史保持**：主执行者已核对局部链接、SVG 安全白名单、同几何、无 TTF/OTF/HAR、版本 0.2.0.dev1 与 git diff --check；本执行者完整读取交接/参考文档，长输出截断后拆段读全，并做文档结构、链接、隐私和差异检查。E0001–E0022 原文哈希保持，四个一级板块、R01–R23/Q01–Q12 完整，仅 R20 按最新方案更新。代码未变，沿用此前 116 项通过结果，不重复代码测试或新增接入验收结论。
+- **凌晨停业页面核对**：用户回复已打开西单，但凌晨停业无数字。01:15（Asia/Shanghai）主执行者恢复 CUA 文档，通过现有 iPhone 镜像只读/导航，独立看到西单大悦城店页面最后更新时间 01:13、堂食/预约均为 ---；没有当前队列数字，不解释为零等待，不验收叫号推进或源新鲜度。本轮没有开启捕获/解密或请求 API；该页面观察不是鉴权更新或成功快照证据。
+- **接入主线与当前限制**：标题发布完成后，优先本人正常鉴权更新与每份新凭证生命周期、三店 ID/字段对照、60/30 秒有界采样和失败处理；不使用已到期凭证重试、不猜续期/目录端点。integration 协作者只读复核发现 collect 只初始化一次客户端、没有换凭证，report 缺错误分类/变化统计，gateway 仅详情无目录；这些是待完善能力，不作全天保证。此前开关状态不能当作当日核验，静态鉴权到期、字段单位/源时间、连续采集和另外两店仍待实证；没有模型、前端、真实取号/取消/重排或部署。
+- **Git 提交/发布证据与下一步**：当前最近已核验 main 仍为 [18d83e9676634fb7e85479bf54e9ffa5bf2a2856](https://github.com/Serenin0x/sushiro-queue-predictor/commit/18d83e9676634fb7e85479bf54e9ffa5bf2a2856)，树 e32a5d516dbda650b04b9c22bbb6a288147bd181、27 个远端文件已逐一一致。本条与 E0022 检查点及本轮标题/README/AGENTS 拟同提交，最终哈希以 Git 历史定位；主执行者发布后另追加 E0024 记录实际 main、完整树、文件哈希与本地同步，不把本地完成当成已发布。本执行者不提交或远端操作，无 Release、标签或部署。

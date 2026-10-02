@@ -1,6 +1,6 @@
 # 接手与协作规则
 
-任何人或 AI 开始工作前，先完整阅读 `docs/PROJECT_HANDOVER.md` 和 `docs/REFERENCE_REVIEW.md`。README 使用全大写展示名 `SUSHIWAIT`，仓库名保持 `sushiro-queue-predictor`。按用户最新要求详细、吸引人地介绍产品价值与功能，明确当前能力和未来目标；简写技术、版本与更新，并链接完整交接文档。GitHub 原生标题使用系统无衬线字体，无需制作 Logo。每次能力或版本变化都同步改进 README 文案与实际状态。
+任何人或 AI 开始工作前，先完整阅读 `docs/PROJECT_HANDOVER.md` 和 `docs/REFERENCE_REVIEW.md`。README 使用全大写展示名 `SUSHIWAIT`，仓库名保持 `sushiro-queue-predictor`。按用户最新要求详细、吸引人地介绍产品价值与功能，明确当前能力和未来目标；简写技术、版本与更新，并链接完整交接文档。README 标题使用开放许可 Montserrat Light 的全大写轮廓 SVG，浅色/深色资产与字体来源见 assets/NOTICE.md；这是文字标题，不是独立 Logo。变更标题时同步资产、来源和交接记录。每次能力或版本变化都同步改进 README 文案与实际状态。
 
 ## 必须维护的事实来源
 

@@ -1,4 +1,9 @@
-# SUSHIWAIT
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/sushiwait-title-dark.svg">
+    <img src="assets/sushiwait-title-light.svg" alt="SUSHIWAIT" width="480" height="85">
+  </picture>
+</h1>
 
 **少一点盯号，多一点自由安排。**
 
@@ -47,6 +52,7 @@
 
 ## 更新说明
 
+- **2026-10-03 · 文档更新**：标题改用开放许可的 Montserrat Light 轮廓 SVG，适配浅色与深色模式；工具版本仍为 v0.2.0.dev1。
 - **2026-10-02 · v0.2.0.dev1**：发现并适配官方小程序实际查询地址，核对西单店 ID 与展示队列；新增来源隔离和本机凭证状态检查；观察到凭证声明到期后的 401，将正常授权续期列为下一步重点；补充同步叫号页面目标并改进产品介绍。
 - **2026-10-02 · v0.2.0.dev0**：实现只读验证工具、离线回放和本地存储；完成匿名接口连通测试，带有效查询鉴权的真实采集待验证。
 - **2026-10-02 · v0.1.0**：建立项目；整理完整需求、技术研究、阶段路线和持续交接规则。
