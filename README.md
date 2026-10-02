@@ -18,6 +18,6 @@
 
 ## 更新说明
 
-- **2026-10-02 · v0.1.0：**建立项目；整理完整需求、技术研究、阶段路线和持续交接规则。
+- **2026-10-02 · v0.1.0**：建立项目；整理完整需求、技术研究、阶段路线和持续交接规则。
 
 完整项目背景、设计要求、版本迭代与每次编辑记录见 [docs/PROJECT_HANDOVER.md](docs/PROJECT_HANDOVER.md)；参考项目分析见 [docs/REFERENCE_REVIEW.md](docs/REFERENCE_REVIEW.md)。
