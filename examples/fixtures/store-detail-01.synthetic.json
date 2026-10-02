@@ -1,0 +1,22 @@
+{
+  "data_origin": "synthetic",
+  "store_id": "900001",
+  "observed_at": "2026-10-02T09:00:00Z",
+  "payload": {
+    "id": 900001,
+    "name": "合成演示门店（不是实际门店）",
+    "address": "合成示例地址",
+    "area": "合成区域",
+    "storeStatus": "OPEN",
+    "netTicketStatus": "AVAILABLE",
+    "reservationStatus": "AVAILABLE",
+    "wait": 42,
+    "groupQueuesCount": 12,
+    "groupQueues": {
+      "reservationQueue": ["R010", "R011", "R012"],
+      "counterQueue": [],
+      "boothQueue": ["B001"],
+      "mixedQueue": ["A020", "A021", "A022"]
+    }
+  }
+}

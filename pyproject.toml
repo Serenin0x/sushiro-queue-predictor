@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sushiwait"
+version = "0.2.0.dev0"
+description = "Read-only mainland Sushiro data validation tools"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = []
+
+[project.scripts]
+sushiwait = "sushiwait.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

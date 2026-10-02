@@ -2,7 +2,7 @@
 
 研究日期：2026-10-02，Asia/Shanghai。本记录基于公开源码与作者文档的只读核对；没有安装或运行参考项目，没有调用寿司郎生产接口，也没有验证公开查询凭证是否有效。以下“源码存在”不代表接口目前可用，更不代表获得第三方服务承诺。
 
-完整需求、版本状态和编辑记录以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 为准。本项目当前只有原创文档和仓库协作文件，没有复制参考项目实现。
+完整需求、版本状态和编辑记录以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 为准。本项目的只读工具为原创实现，没有复制参考项目代码；下述研究与本项目实际接入验证分别记录。
 
 ## 结论
 
@@ -58,7 +58,7 @@
 
 [`internal/api/types.go`](https://github.com/lmxx1234567/sushiro-cli/blob/982bebfb92fb57f017f9f27878cfd467f1da0410/internal/api/types.go) 的 Store 类型保留 id、name、address、area、storeStatus、reservationStatus、wait 等字段，未保留 groupQueues、groupQueuesCount、netTicketStatus 或完整最新放号/队尾信息。Go 的类型化 JSON 解析会丢弃未定义字段，所以现有 CLI 的 JSON 输出不能直接成为我们完整的叫号快照源。
 
-作者 README 说明 **wait 是等待桌数，不是等待分钟数**。字段是否与用户看到的“已签到等待桌数”完全一致，以及返回缺失时如何解释，仍需真实响应和界面对照；原类型用整数也不能区分缺失与真实零值。
+作者 README 将 **wait 定义为等待桌数**，而 overdose 的应用代码将其映射为 WaitMinutes。两者未提供官方单位协议，因此本项目保存 raw_wait 并标记 unit=unknown；不能据此确定分钟、桌数或已签到桌数。响应与页面仍需对照；原类型用整数也不能区分缺失与真实零值。
 
 ### 可借鉴的工程思路
 
@@ -80,13 +80,13 @@
 
 ## 3. 其他大陆线索
 
-此前已阅读 [Ryujoxys/sushiro-overdose](https://github.com/Ryujoxys/sushiro-overdose) 的 [`internal/app/queue_live.go`](https://github.com/Ryujoxys/sushiro-overdose/blob/master/internal/app/queue_live.go)、[`collector/README.md`](https://github.com/Ryujoxys/sushiro-overdose/blob/master/collector/README.md) 等材料；尚未锁定完整提交，因此实现前需重新固定版本核验。
+此前已阅读 [Ryujoxys/sushiro-overdose](https://github.com/Ryujoxys/sushiro-overdose) 的应用与采集器材料；2026-10-02 开发只读工具前进一步锁定提交 [`e273df046789773616c7851c0bea14d4546f47e5`](https://github.com/Ryujoxys/sushiro-overdose/commit/e273df046789773616c7851c0bea14d4546f47e5)。具体字段见 [`internal/app/queue_live.go`](https://github.com/Ryujoxys/sushiro-overdose/blob/e273df046789773616c7851c0bea14d4546f47e5/internal/app/queue_live.go#L37)，封装兼容线索见 [`collector/collector/sushiro_client.py`](https://github.com/Ryujoxys/sushiro-overdose/blob/e273df046789773616c7851c0bea14d4546f47e5/collector/collector/sushiro_client.py#L74)。
 
 - 单店详情读取 groupQueues 中 booth、mixed、counter、reservation 分队列数组，以及 groupQueuesCount 等线索。数组不是完整可处理队列的证明。
 - 列表与详情能力不同，列表快照不能取代叫号数组；现有采集器文档的默认 15 分钟采样不能满足我们的近时段监控。
 - 现有实现用展示最大号码做进度推断，本项目必须先核实该推断成立条件。
 - 查询缓存、旧数据回退和有限字段都需要显式处理。
-- 公开源码中的共享鉴权值不在本项目保存、传播或使用。本项目尚未验证该后端的当前访问能力。
+- 公开源码中的共享鉴权值不在本项目保存、传播或使用。本项目已对目录作真实无凭证 GET 测试，得到 HTTP 401；授权后的数据能力仍未验证，详见 DATA_ACCESS.md。
 
 ## 4. 接入验证清单与人工配合
 
@@ -107,4 +107,4 @@
 - [腾讯关于 openid 的说明](https://cloud.tencent.com/document/product/1301/73438)：应用身份与 appid 相关，用户登录我们的应用不等于取得寿司郎应用业务身份。
 - [腾讯小程序订阅消息说明](https://cloud.tencent.com/document/product/1301/103770)：订阅授权与实际发送能力需要单独核验，不能默认可无限推送。
 
-这些资料用于划分设计条件；上线、接口许可、运营规则和消息额度须在相关阶段核实。没有接入、模型或部署的端到端测试结果。
+这些资料用于划分设计条件；上线、接口许可、运营规则和消息额度须在相关阶段核实。已有工具离线测试与目录匿名连通测试，没有授权后接入、模型或部署的端到端验收结果。

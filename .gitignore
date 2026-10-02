@@ -6,6 +6,7 @@ credentials/
 private/
 captures/
 data/raw/
+data/local/
 data/personal/
 logs/
 *.log
@@ -20,6 +21,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+*.egg-info/
 venv/
 node_modules/
 dist/
