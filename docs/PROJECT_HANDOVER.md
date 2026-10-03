@@ -12,7 +12,7 @@
 4. 在任务开始前判断需要哪些真实数据、用户授权或人工核验；可以独立完成的工作继续推进。
 5. 每次工作都更新本文档的编辑历史；需求、设计或版本状态改变时，同时更新对应板块。
 
-**当前本地工具为 `0.2.0.dev4`，准备公开；已公开工具为 `0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)；保留已经选定并公开的浅/深 Logo。** dev3 实现和 212 项离线检查见 E0028，dev2 功能发布见 E0026，视觉发布见 E0047。2026-10-03 电脑目录返回 147 条，三店 60 秒/30 秒各两轮短窗已完成；旧凭证到期后，本人正常启动 HAR 观察到 `/api/1.3/initialize` 返回新凭证，其与后续查询授权本机精确匹配。显式导入 revision 2 后，20:41:55–56 三店再次各取得一份成功快照，主库共 18 成功、0 失败、每店 6 份。当前凭证未验签声明为 20:32:49–21:32:49，本机保护边界为 21:32:19；不能把历史成功当作接手时仍有效。初始化所需登录码、签名和设备参数的正常生成路径尚未验证，未实现独立自动更新或全天采集。字段单位、源新鲜度、长期连续和全国覆盖仍待验收。历史失败与视觉试验记录完整保留；没有预测服务、用户小程序或服务器部署。本轮dev4新增私有文件的零网络auth-status与共享到期保护，226项/0.466秒检查通过；21:19真实revision2状态检查没有环境凭证、客户端/CA/网络/数据库调用，私有文件及主库未改。更新参数证据见 [AUTH_REFRESH.md](AUTH_REFRESH.md)，运行事实见 [DATA_ACCESS.md](DATA_ACCESS.md) 与E0048/E0050。
+**当前已公开工具为 `0.2.0.dev4`，功能发布提交为 [1bb4e65ce74be25835d4501c4a965cb57299c7e7](https://github.com/Serenin0x/sushiro-queue-predictor/commit/1bb4e65ce74be25835d4501c4a965cb57299c7e7)；保留已经选定并公开的浅/深 Logo。** dev3 实现和 212 项离线检查见 E0028，dev2 功能发布见 E0026，视觉发布见 E0047。2026-10-03 电脑目录返回 147 条，三店 60 秒/30 秒各两轮短窗已完成；旧凭证到期后，本人正常启动 HAR 观察到 `/api/1.3/initialize` 返回新凭证，其与后续查询授权本机精确匹配。显式导入 revision 2 后，20:41:55–56 三店再次各取得一份成功快照，主库共 18 成功、0 失败、每店 6 份。当前凭证未验签声明为 20:32:49–21:32:49，本机保护边界为 21:32:19；不能把历史成功当作接手时仍有效。初始化所需登录码、签名和设备参数的正常生成路径尚未验证，未实现独立自动更新或全天采集。字段单位、源新鲜度、长期连续和全国覆盖仍待验收。历史失败与视觉试验记录完整保留；没有预测服务、用户小程序或服务器部署。本轮dev4新增私有文件的零网络auth-status与共享到期保护，226项/0.466秒检查通过；21:19真实revision2状态检查没有环境凭证、客户端/CA/网络/数据库调用，私有文件及主库未改。更新参数证据见 [AUTH_REFRESH.md](AUTH_REFRESH.md)，运行事实见 [DATA_ACCESS.md](DATA_ACCESS.md) 与E0048/E0050。
 
 ## 1.2 项目来源与目标
 
@@ -370,7 +370,7 @@ target_call_at = desired_arrival_at + call_offset_minutes
 
 ## 3.1 当前状态与已完成范围
 
-**当前本地工具：`v0.2.0.dev4`，226项离线检查通过、准备公开；已公开工具为`v0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)。** 该提交以 fbad39ddcd5b69d9eb0d86e03cdde6b549500a82（工具 dev2 加上 E0047 视觉/发布核验）为父，只改变15个工具、测试、配置和事实文档；42个远端文件与本机内容逐一相同，见 E0049。dev2 功能提交 8fe3b2d2bb5bee8d3326aae0455f8a79a4142f1a、树 b86fdc92ff270ec42af62eb9b2cb88f825a706c6 的 35 文件核对及同步见 E0026。dev3 固定 gateway 目录、离线捕获检查/原子导入、stores 私有文件与声明保护已实现；版本三处由主执行者同步为 dev3，212 项 / 0.431 秒离线检查通过，完整实证与修正见 E0028。dev3 已推送 main；没有 Release、版本标签或生产部署；营业时段三店单次查询和 60/30 秒短窗采样已完成，长期连续接入仍未验收。
+**当前已公开工具：`v0.2.0.dev4`，226项离线检查通过，功能发布提交为 [1bb4e65ce74be25835d4501c4a965cb57299c7e7](https://github.com/Serenin0x/sushiro-queue-predictor/commit/1bb4e65ce74be25835d4501c4a965cb57299c7e7)。** dev4以4acd451907227127fc0a0d4804cbf4640842eb66为父，10文件功能增量、44个远端文件与本机逐一相同，见E0051；dev3的15文件功能增量/42文件核验保持E0049。dev2 功能提交 8fe3b2d2bb5bee8d3326aae0455f8a79a4142f1a、树 b86fdc92ff270ec42af62eb9b2cb88f825a706c6 的 35 文件核对及同步见 E0026。dev3 固定 gateway 目录、离线捕获检查/原子导入、stores 私有文件与声明保护已实现；版本三处由主执行者同步为 dev3，212 项 / 0.431 秒离线检查通过，完整实证与修正见 E0028。dev3 已推送 main；没有 Release、版本标签或生产部署；营业时段三店单次查询和 60/30 秒短窗采样已完成，长期连续接入仍未验收。
 
 **独立视觉状态（E0044、E0046、E0047）**：用户已选定 adaptive-ink/ 中最后一款 Unbounded Regular 400 的浅色版并授权 GitHub 发布，正式文件为 assets/sushiwait-logo-light.svg。保留 3,471 像素红色刷痕、配色、外缘渐隐、字形与柔和黑白渐变；增加明确白底，GitHub README 已使用该选定资产，并按主题自动选择浅/深版本。Unbounded OFL 原文和来源同步；用户追加要求深色模式自动显示同字体深色版，正式文件 assets/sushiwait-logo-dark.svg 同步发布；其他字体与尺寸试验保留本地 LOGO_STUDIES.md，不作为此次公开资产。此视觉工作不修改数据代码、工具版本或接入验收结论，已随 main 43a2e5f0d01f9886c8599ff687d1865bc45d2f88 发布并核对实际 GitHub 显示，见 E0047。
 
@@ -386,7 +386,9 @@ target_call_at = desired_arrival_at + call_offset_minutes
 - report 输出 schema 2，单列实际 database_schema_version；全历史数量和记录时间范围与每组最新最多 10000 条的质量窗口分开。窗口按样本 ID 选取，SQL 在读取阶段将超过 2 MiB 的 payload 排除为无效，坏 JSON/未知字段形状容错。统计 request/normalization/preflight/unknown 失败、安全错误码、仅失败记录的 HTTP 分类、实际请求起始间隔与耗时、公共字段 presence 和四类数组变化。公共比较仅限同 run 的相邻有效成功，失败/坏记录/run 切换断链；实际请求间隔可包含请求/规范化失败，不含 preflight。first/last_received_at 为兼容记录时间别名，可能包含本机 checked_at，新增 first/last_recorded_at 和 record_time_semantics 明示此语义。来源新鲜度仍 unknown，统计不证明上游缓存或刷新频率。
 - 新增 capture-check --har，仅离线检查显式本机 HAR；只有固定 gateway 单店 GET 的候选能公开安全身份/时间/头存在性，其他主机/路径只计忽略。capture-import 必须指定同一 HAR 的原始 0 基 entry-index、output 和 revision，只从该条 HTTP 200 且 query/body 身份一致的单店正常 GET 生成完整私有上下文；不从目录导入，不自动选条目、不联网或续期、不写数据库。输入上限 8 MiB/100 条/响应正文 2 MiB，严格 JSON/UTF-8/base64；拒绝祖先符号链接、非当前用户/非单硬链接常规文件。正常导出源不强制 0600/0700，但仍须本机私有保管。输出父目录当前用户 0700、新文件 0600，已有目标更新必须 revision 递增，六项请求上下文来自同一条，缺失头显式 null，不补环境。
 - 原子生成在写入前及提交前按当前本机时间检查声明，到期、无效或剩余不超过 30 秒拒绝；未知到期不推默认 TTL。临时文件独占创建、fsync/有界读回、目标/目录复核后 rename；提交前任何失败保留旧文件，提交后目录 fsync 失败明确 committed=true / durability_confirmed=false，不谎报未写、不回滚或自动重试。目录锁约束协作写者，不能保证不守锁的同用户进程没有 POSIX 最终检查到 rename 的竞争窗口。
-- 主执行者独立全套 **212 项 / 0.431 秒 OK**：client 31、observations 32、storage_cli 31、storage_profiles 9、auth 16、credentials 18、collection_credentials 16、report_quality 16、capture 35、capture_cli 8。独立复核发现 capture-import 初检/提交沿用冻结 now 的问题，已改为每阶段真实取时；实际 CLI 慢写回归将剩余 31 秒推进至临时文件 fsync 后 30 秒，提交被拒、旧文件保留、零网络/数据库。此修正与最终全套结果见 E0028；E0025 的 166 项历史检查保持。
+- dev3的历史全套检查为 **212 项 / 0.431 秒 OK**：client 31、observations 32、storage_cli 31、storage_profiles 9、auth 16、credentials 18、collection_credentials 16、report_quality 16、capture 35、capture_cli 8。独立复核发现 capture-import 初检/提交沿用冻结 now 的问题，已改为每阶段真实取时；实际 CLI 慢写回归将剩余 31 秒推进至临时文件 fsync 后 30 秒，提交被拒、旧文件保留、零网络/数据库。此修正与最终全套结果见 E0028；E0025 的 166 项历史检查保持。
+
+- dev4增加auth-status私有文件模式、与采集共享的声明保护，新增14项/0.061秒及全套226项/0.466秒OK；覆盖文件安全/来源隔离、状态脱敏、30秒边界、未知/乱序、读取后当前时钟和原子替换后重读。21:19真实revision2零网络核验及本轮公开研究见E0050，发布见E0051。
 
 真实证据及未决事项：
 
@@ -1089,3 +1091,10 @@ Git 提交/发布/部署证据（若有）：
 - **真实私有文件检查**：21:19:14.415（Asia/Shanghai）正式auth-status读取现有revision2，声明20:32:49–21:32:49、remaining814秒、guard=no_declared_stop、未验签、exit0。对client_for/客户端/CA/opener/socket/数据库设置失败守卫，合计0调用，SUSHIWAIT环境凭证读取0，私有文件逐字和主库哈希不变；本机检查不是服务器接受验证。主库仍18成功0失败，不生成新采集记录。
 - **公开与交接检查**：44个计划公开文件与四份明确私有HAR中的14个已知敏感值比较无命中，未发现JWT形状或个人绝对路径，未带入HAR/数据库/证书/字体原包/符号链接。38个相对文档和图片链接在计划公开树内可解析；四顶层板块、R01–R24/Q01–Q12、E0001–E0049原历史和版本一致，git diff --check通过。私有文件保持revision2与0700/0600；扫描不保证识别所有未知秘密。
 - **下一步与发布**：当前参数正常来源与签名合约不足以实现独立自动续期，保持人工显式更新边界；不宣布“必须开微信”或“服务器永远不能续期”。优先核对受支持的更新方式、登录码应用身份及正常生成、设备/签名协议，再做连续跨到期实证；其他字段/采集故障和电脑有界门店验证可独立推进。本次不要求重复手机刷新；dev4准备仅公开代码、测试和证据文档，未选视觉草稿、HAR与凭证保持私有/本地。发布结果随后实际核验记录，没有Release、标签、部署或v1.0验收。
+
+
+### E0051 — 2026-10-03 — dev4公开发布及44文件逐项核对
+
+- **执行者与实际发布**：Codex主执行者延续既有GitHub开发发布授权，发布前远端main重新核对为4acd451907227127fc0a0d4804cbf4640842eb66，只暂存E0050的10个已检查文件。提交 [1bb4e65ce74be25835d4501c4a965cb57299c7e7](https://github.com/Serenin0x/sushiro-queue-predictor/commit/1bb4e65ce74be25835d4501c4a965cb57299c7e7)，tree38d18b6e818637813b537e4c1042ce2c70a52bc0；正常非强制push完成，GitHub main重读与提交一致。递归tree未截断，44个blob的路径/mode/SHA与本机HEAD逐一匹配；功能增量10文件，其余32保持原blob，包括已选浅/深Logo和许可。
+- **验证与范围**：实际--version/dev4及新增参数help、14项/0.061秒与全套226项/0.466秒结果见E0050；本次发布没有再改代码或重复跑全套。44文件隐私扫描与38个相对链接通过，四板块/R01–R24/Q01–Q12与E0001–E0050保持；未选assets/logo-studies及docs/LOGO_STUDIES.md仍只留本地，私有数据未暂存。无寿司郎新API、业务写操作、Release、标签、前端或部署。
+- **发布后文档同步**：README、AGENTS、DATA_ACCESS及本文当前状态更新为已公开dev4，保留dev3和所有失败/研究历史；本条与状态只作后续文档审计增量，实际提交身份以Git记录查得。自动续期仍缺受支持的正常参数来源/签名合约，未知到期/本机检查成功不等于可无限查询；主库仍18成功0失败，没有新的采集或手机捕获。下一步按AUTH_REFRESH的进入条件推进正常更新，而非反复让用户刷新门店。
