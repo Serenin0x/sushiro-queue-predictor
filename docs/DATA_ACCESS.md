@@ -1,6 +1,6 @@
 # 实时数据接入验证手册
 
-当前本地工具为 `0.2.0.dev3`，准备发布；已公开基线仍为 `0.2.0.dev2`，最新 main [fbad39ddcd5b69d9eb0d86e03cdde6b549500a82](https://github.com/Serenin0x/sushiro-queue-predictor/commit/fbad39ddcd5b69d9eb0d86e03cdde6b549500a82)（工具dev2与已选浅/深Logo）。dev2 的 35 文件发布核对见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0026；dev3 新增显式离线 capture-check/capture-import、捕获证实的固定 gateway 目录和 stores 私有文件/到期保护，主执行者 **212 项 / 0.431 秒**离线检查通过，独立复核的时钟问题已修，见 E0028。本轮只做本地准备，不发布并行未选定的品牌资产；没有 Release、服务器、小程序前端或预测服务，仍是接入验证阶段。
+当前已公开工具为 `0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)，42个远端文件与本机逐一核对，见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0049；保留已选浅/深Logo。dev2 的 35 文件发布核对见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0026；dev3 新增显式离线 capture-check/capture-import、捕获证实的固定 gateway 目录和 stores 私有文件/到期保护，主执行者 **212 项 / 0.431 秒**离线检查通过，独立复核的时钟问题已修，见 E0028。本轮工具与事实文档已推送main，不发布未选定的品牌草稿；没有 Release、服务器、小程序前端或预测服务，仍是接入验证阶段。
 
 当前营业时段实证：电脑目录返回147条，三店60/30秒各两轮短窗完成。旧凭证到期后，本人正常启动HAR观察到 /api/1.3/initialize 返回新查询凭证，与后续Bearers本机精确匹配；固定单店候选显式导入revision2后，20:41三店电脑各新增一份成功详情，主库共18成功0失败，每店6份。未验签声明为20:32:49–21:32:49、本机保护21:32:19；接手时重新检查，不能沿用历史importable或成功状态。初始化登录码/签名/设备参数的正常生成与独立自动续期仍待验证，尚不能全天无人值守。历史到期拒绝/零请求保留；新结果不推全国完整覆盖或源新鲜度。
 
