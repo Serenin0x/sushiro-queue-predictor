@@ -1,6 +1,6 @@
 # SUSHIWAIT Logo
 
-2026-10-03，用户确认采用三款候选中的最后一款 **Unbounded Regular 400 浅色版**，并明确要求将白色 Logo 推送到 GitHub。正式矢量文件为 [sushiwait-logo-light.svg](../assets/sushiwait-logo-light.svg)，用户随后追加要求 GitHub 深色模式显示同一字体的深色版本；配套 [sushiwait-logo-dark.svg](../assets/sushiwait-logo-dark.svg) 同步发布，README 用 picture 按主题自动切换。
+2026-10-03，用户确认采用三款候选中的最后一款 **Unbounded Regular 400 浅色版**，并明确要求将白色 Logo 推送到 GitHub。正式矢量文件为 [sushiwait-logo-light.svg](../assets/sushiwait-logo-light.svg)，用户随后追加要求 GitHub 深色模式显示同一字体的深色版本；配套 [sushiwait-logo-dark.svg](../assets/sushiwait-logo-dark.svg) 同步发布，README 用 picture 按主题自动切换。两版已随 main [43a2e5f](https://github.com/Serenin0x/sushiro-queue-predictor/commit/43a2e5f0d01f9886c8599ff687d1865bc45d2f88) 发布，浅色 SVG 已在 GitHub 实际显示并核对。
 
 ![SUSHIWAIT 红色像素刷痕 Logo](../assets/sushiwait-logo-light.svg)
 

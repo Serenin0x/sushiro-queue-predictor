@@ -16,7 +16,7 @@
 
 ## 1.2 项目来源与目标
 
-项目对外展示名为全大写 **SUSHIWAIT**；GitHub 仓库名保留 **sushiro-queue-predictor**。用户已选择相似开放许可 Light 字体替代 Aliment，并希望字形与寿司郎风格呼应；采用 Montserrat Light、OFL 1.1，实际字重 300。用户于 2026-10-03 恢复后，已完成浅色/深色纯路径 SVG 和视觉核验，README 使用可访问的自适应标题；标题、来源和 OFL 记录已随 main 0327d154bc48d17893843e4b791161de534c5984 发布并核对，见 E0023–E0024。原 Aliment 仅保留私有预览，不用于公开发布；E0022 的断网暂停检查点完整保留，暂停已由用户恢复工作解除。该次字体标题与独立 Logo 分开记录，也不称寿司郎官方同款字体。用户于 2026-10-03 新设独立品牌与 GitHub 视觉任务，最新授权更新 R19；用户最新确认三字体中的最后一款 Unbounded Regular 400 白底版，并明确授权推送 GitHub；当前正式 README 已准备改用此像素刷痕矢量 Logo，旧 Montserrat 标题保留历史，发布结果追加本轮编辑记录。具体设计见 [BRAND_DESIGN.md](BRAND_DESIGN.md)。README 按最新偏好详细介绍产品价值，文字可以有吸引力，现有工具与明确标为规划的未来体验分别介绍，后续随系统更新继续改进；不得虚构已上线能力、误差或稳定覆盖，后续接手不得自行改名。
+项目对外展示名为全大写 **SUSHIWAIT**；GitHub 仓库名保留 **sushiro-queue-predictor**。用户已选择相似开放许可 Light 字体替代 Aliment，并希望字形与寿司郎风格呼应；采用 Montserrat Light、OFL 1.1，实际字重 300。用户于 2026-10-03 恢复后，已完成浅色/深色纯路径 SVG 和视觉核验，README 使用可访问的自适应标题；标题、来源和 OFL 记录已随 main 0327d154bc48d17893843e4b791161de534c5984 发布并核对，见 E0023–E0024。原 Aliment 仅保留私有预览，不用于公开发布；E0022 的断网暂停检查点完整保留，暂停已由用户恢复工作解除。该次字体标题与独立 Logo 分开记录，也不称寿司郎官方同款字体。用户于 2026-10-03 新设独立品牌与 GitHub 视觉任务，最新授权更新 R19；用户最新确认三字体中的最后一款 Unbounded Regular 400 白底版，并明确授权推送 GitHub；GitHub README 已改用此像素刷痕矢量 Logo，旧 Montserrat 标题保留历史，发布与实际显示结果见本轮最新编辑记录。具体设计见 [BRAND_DESIGN.md](BRAND_DESIGN.md)。README 按最新偏好详细介绍产品价值，文字可以有吸引力，现有工具与明确标为规划的未来体验分别介绍，后续随系统更新继续改进；不得虚构已上线能力、误差或稳定覆盖，后续接手不得自行改名。
 
 用户希望建立一个针对中国大陆寿司郎门店的排队预测和辅助排队系统。用户目前能够通过寿司郎微信小程序查看门店的实时排队信息，并希望把这些实时信息连续采集到自己的服务器，再与历史统计、日期类型、季节趋势及外部事件结合，预测叫号时间、安排取号时机、监控过号风险。
 
@@ -356,12 +356,12 @@ target_call_at = desired_arrival_at + call_offset_minutes
 - **版本说明**：区分设计基线、实际发布、开发计划；不能把 `v0.1.0` 设计基线描述成可用产品版本。
 - **更新说明**：概括实际发生的更新，并链接本文档的完整版本与编辑记录。
 - **完整交接入口**：提供 `docs/PROJECT_HANDOVER.md` 的可点击相对链接，详细要求和历史不在 README 重复堆积。
-- **Logo 与自定义字体呈现**：当前 README 顶部准备改用用户选定的 Unbounded 白底 SVG，词标为轮廓路径，显示 840×308、alt SUSHIWAIT；picture / prefers-color-scheme 自动切换浅/深 SVG。浅色有白底、柔和黑白字内渐变；深色为浅色词标与透明背景，正文继续由 GitHub 渲染。原 picture / Montserrat 标题及 E0024 发布证据保留历史。
+- **Logo 与自定义字体呈现**：当前 GitHub README 顶部使用用户选定的 Unbounded 浅/深色 SVG，词标为轮廓路径，显示 840×308、alt SUSHIWAIT；picture / prefers-color-scheme 自动切换浅/深 SVG。浅色有白底、柔和黑白字内渐变；深色为浅色词标与透明背景，正文继续由 GitHub 渲染。原 picture / Montserrat 标题及 E0024 发布证据保留历史。
 - **字体来源与历史标题**：当前 Logo 的 Unbounded Regular 400 来自用户原包，完整 OFL 1.1 与来源见 [assets/NOTICE.md](../assets/NOTICE.md) 和 [assets/Unbounded-OFL.txt](../assets/Unbounded-OFL.txt)。旧 Montserrat Light 300 标题及 [Montserrat-OFL.txt](../assets/Montserrat-OFL.txt) 保留历史，E0021–E0024 原文不改；原 Aliment 仍只保留私有预览。
 
 **前端必须等真实实时数据齐备后再做。**先验证门店实时字段可取得、字段语义、缺失与缓存情况、源数据延迟和目标采样节奏，再进入小程序或其他前端实现。实时数据“齐备”的具体字段清单和证据应在接入报告中明确；模拟数据可用于离线验证，但不能据此提前开始前端，也不能代替真实接入验收。
 
-用户于 2026-10-03 将品牌与 GitHub 视觉设为独立任务，最新授权取代此前后期安排；原任务继续实时采集与预测。经三字体与渐变反馈，用户已确认最后一款 Unbounded 白色背景 Logo 并授权推送 GitHub，正式资产为 assets/sushiwait-logo-light.svg。具体设计与来源见 [BRAND_DESIGN.md](BRAND_DESIGN.md) 和 [资产说明](../assets/NOTICE.md)。此次发布只涉及视觉及对应文档，工具代码基线仍为 dev2，原任务本地 dev3 待另行发布；README 保持公开代码能力的说明。
+用户于 2026-10-03 将品牌与 GitHub 视觉设为独立任务，最新授权取代此前后期安排；原任务继续实时采集与预测。经三字体与渐变反馈，用户已确认最后一款 Unbounded 白色背景 Logo 并授权推送 GitHub，正式资产为 assets/sushiwait-logo-light.svg。具体设计与来源见 [BRAND_DESIGN.md](BRAND_DESIGN.md) 和 [资产说明](../assets/NOTICE.md)。本次已发布更新只涉及视觉及对应文档，工具代码基线仍为 dev2，原任务本地 dev3 待另行发布；README 保持公开代码能力的说明。
 
 公开文档使用仓库相对路径；避免暴露个人电脑目录、真实用户资料或业务凭证。README 及本文档每次更新均应符合这项要求。
 
@@ -371,7 +371,7 @@ target_call_at = desired_arrival_at + call_offset_minutes
 
 **当前本地工具：`v0.2.0.dev3`，离线检查完成、准备发布；已公开基线仍为 `v0.2.0.dev2`。** 最新已公开基线为 [2042e890337171d37cd42c154e5f43234083291e](https://github.com/Serenin0x/sushiro-queue-predictor/commit/2042e890337171d37cd42c154e5f43234083291e)；dev2 功能提交 8fe3b2d2bb5bee8d3326aae0455f8a79a4142f1a、树 b86fdc92ff270ec42af62eb9b2cb88f825a706c6 的 35 文件核对及同步见 E0026。dev3 固定 gateway 目录、离线捕获检查/原子导入、stores 私有文件与声明保护已实现；版本三处由主执行者同步为 dev3，212 项 / 0.431 秒离线检查通过，完整实证与修正见 E0028。尚未发布 dev3，没有 Release、版本标签或生产部署；营业时段三店单次查询和 60/30 秒短窗采样已完成，长期连续接入仍未验收。
 
-**独立视觉状态（E0044）**：用户已选定 adaptive-ink/ 中最后一款 Unbounded Regular 400 的浅色版并授权 GitHub 发布，正式文件为 assets/sushiwait-logo-light.svg。保留 3,471 像素红色刷痕、配色、外缘渐隐、字形与柔和黑白渐变；增加明确白底，README 准备使用该选定资产。Unbounded OFL 原文和来源同步；用户追加要求深色模式自动显示同字体深色版，正式文件 assets/sushiwait-logo-dark.svg 同步发布；其他字体与尺寸试验保留本地 LOGO_STUDIES.md，不作为此次公开资产。此视觉工作不修改数据代码、工具版本或接入验收结论，发布结果待本轮远端核验后追加。
+**独立视觉状态（E0044、E0046、E0047）**：用户已选定 adaptive-ink/ 中最后一款 Unbounded Regular 400 的浅色版并授权 GitHub 发布，正式文件为 assets/sushiwait-logo-light.svg。保留 3,471 像素红色刷痕、配色、外缘渐隐、字形与柔和黑白渐变；增加明确白底，GitHub README 已使用该选定资产，并按主题自动选择浅/深版本。Unbounded OFL 原文和来源同步；用户追加要求深色模式自动显示同字体深色版，正式文件 assets/sushiwait-logo-dark.svg 同步发布；其他字体与尺寸试验保留本地 LOGO_STUDIES.md，不作为此次公开资产。此视觉工作不修改数据代码、工具版本或接入验收结论，已随 main 43a2e5f0d01f9886c8599ff687d1865bc45d2f88 发布并核对实际 GitHub 显示，见 E0047。
 
 已完成的工具基线：
 
@@ -1046,3 +1046,11 @@ Git 提交/发布/部署证据（若有）：
 - **执行者/用户原文**：独立视觉主执行者；发布准备期间用户追加“如果 GitHub 切换到深色模式的话，就显示那个深色版本的吧，还是这个字体的”。因此此次发布扩为同一 Unbounded 字体的浅/深两版，原选定浅色效果保持。
 - **实际操作与结构核验**：增加 assets/sushiwait-logo-dark.svg，沿用 adaptive-ink/ 已审阅深色版，只更新元数据；与原稿字形/3,471 像素及与浅色版刷痕组逐项一致，无描边、位图、脚本或外部字体。README h1 内改为 picture，prefers-color-scheme: dark 对应深色 SVG，浅色默认回退，显示尺寸与 alt 保持。同步 BRAND_DESIGN、NOTICE、AGENTS 与当前交接状态；许可沿用同一 Unbounded OFL。
 - **链接/范围/下一步**：初次七文件发布准备的21个相对 Markdown 链接已全部核对可在公开基线与允许新增文件中解析，git diff --check通过；新增深色后发布范围为八文件，继续核验完整相对链接与远端显示。原有编辑历史逐字保留，主线代码/配置/版本保持；本次不是工具 dev3 发布，没有数据测试或真实查询。尚未实际移动 GitHub main，实际推送与主题展示核验随后记录。
+
+
+### E0047 — 2026-10-03 — Unbounded 浅/深 Logo 已公开发布并核验
+
+- **执行者/已完成授权范围**：独立视觉主执行者；落实用户选定最后字体白色 Logo 的 GitHub 推送，并按追加要求同步同字体深色版及自动切换。正式字体为 Unbounded Regular 400，两版均为可缩放 SVG。
+- **远端实际证据**：从公开 main 2042e890337171d37cd42c154e5f43234083291e / tree 6409108ab27386a20c922a2936c50c4f8084f167 构造八文件视觉增量；每个 GitHub blob SHA 与本机 Git 内容 SHA 一致。新 tree 为 e034e760cd17f37d8aa2f42db0c601f80e47b338，逐路径比较恰好只改变 README.md、AGENTS.md、assets/NOTICE.md、assets/Unbounded-OFL.txt、assets/sushiwait-logo-light.svg、assets/sushiwait-logo-dark.svg、docs/BRAND_DESIGN.md、本文，另31个既有公开文件保持同一 blob。提交 [43a2e5f0d01f9886c8599ff687d1865bc45d2f88](https://github.com/Serenin0x/sushiro-queue-predictor/commit/43a2e5f0d01f9886c8599ff687d1865bc45d2f88) 以原 main 为父，非强制更新成功，重新读取远端 refs/heads/main 与该提交逐一核对。工具 VERSION/代码/配置/DATA_ACCESS.md 保持公开 dev2 内容，没有发布本地 dev3、Release、标签或服务器部署。
+- **实际显示与文档检查**：已用浏览器核验本地正式浅/深 SVG。GitHub 仓库 README 实际正常显示选定浅色像素刷痕 Logo；DOM 中图片 complete=true、naturalWidth=1200、naturalHeight=440、currentSrc 对应已发布浅色 SVG，picture source 的 prefers-color-scheme: dark 对应同仓库深色 SVG。没有更改用户 GitHub 外观设置，远端深色模式切换未单独实测；深色正式 SVG 已本地渲染并与原候选核对。八文件共23个相对 Markdown 链接可在发布树内解析，git diff --check通过；既有编辑原文与四顶层板块保留。没有为视觉变更重复数据测试或真实查询。
+- **本地并行保护与交接**：获取已发布提交后只推进本地 HEAD/索引，未覆盖工作文件；88个公开工作候选前后 SHA-256 全部一致、索引无暂存项。原任务在此期间更新的 DATA_ACCESS.md 与 E0045 记录完整保留；本地 dev3、其他字体/比例试验仍留工作区。本文与 BRAND_DESIGN.md 当前状态更新为已发布；本条及状态修订另作发布核验文档增量，后续视觉工作为 README 横幅与动态图文。
