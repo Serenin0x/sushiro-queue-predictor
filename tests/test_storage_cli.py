@@ -199,14 +199,49 @@ class StorageCliTests(unittest.TestCase):
                             content_type=None, ca_file="test-ca.pem")
                     read.assert_called_once_with("SUSHIWAIT_CA_FILE")
 
-    def test_gateway_directory_is_unsupported_without_network(self):
-        with patch("sushiwait.client.SushiroClient._default_opener") as opener_factory:
-            opener_factory.return_value.open.side_effect = AssertionError("must stay offline")
-            code, rows = self.run_cli(["stores", "--api-profile", "miniapp_gateway", "--anonymous"])
-            opener_factory.return_value.open.assert_not_called()
+    def test_gateway_directory_filters_public_rows_without_database(self):
+        result = QueryResult(True, {"data": [
+            {"id": 123, "name": "合成西单店", "address": "合成地址", "private": "secret-marker"},
+            {"id": 456, "name": "合成其他店", "private": "secret-marker"},
+        ]}, None, 200, "2026-10-03T01:00:00Z", "2026-10-03T01:00:01Z", 1000)
+        with patch("sushiwait.cli.os.environ.get", return_value=None), \
+             patch("sushiwait.cli.SushiroClient") as factory, \
+             patch("sushiwait.cli.SnapshotStore", side_effect=AssertionError("no database")):
+            factory.return_value.fetch_stores.return_value = result
+            code, rows = self.run_cli(["stores", "--api-profile", "miniapp_gateway",
+                                       "--anonymous", "--match", "西单"])
+            factory.return_value.fetch_stores.assert_called_once_with()
+            factory.return_value.fetch_store.assert_not_called()
+        self.assertEqual(code, 0)
+        self.assertTrue(rows[0]["ok"])
+        self.assertEqual(rows[0]["api_profile"], "miniapp_gateway")
+        self.assertEqual(rows[0]["upstream_freshness"], "unknown")
+        self.assertEqual([row["store_id"] for row in rows[0]["stores"]], ["123"])
+        self.assertNotIn("secret-marker", json.dumps(rows))
+        self.assertFalse(self.db_path.exists())
+
+    def test_directory_expired_environment_stops_before_client_and_database(self):
+        encoded = lambda value: base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+        authorization = ".".join((encoded(b'{"alg":"HS256"}'),
+            encoded(b'{"exp":123,"sub":"directory-secret-marker"}'), encoded(b"signature")))
+        configured = {"SUSHIWAIT_GATEWAY_AUTHORIZATION": authorization,
+                      "SUSHIWAIT_CA_FILE": "missing-ca.pem"}
+        with patch("sushiwait.cli.os.environ.get", side_effect=configured.get), \
+             patch("sushiwait.cli.SushiroClient", side_effect=AssertionError("no client")), \
+             patch("sushiwait.cli.SnapshotStore", side_effect=AssertionError("no database")):
+            code, rows = self.run_cli(["stores", "--api-profile", "miniapp_gateway"])
         self.assertEqual(code, 1)
-        self.assertEqual(rows[0]["error_code"], "unsupported_endpoint")
+        self.assertEqual(rows[0]["error_code"], "auth_declared_expired")
+        self.assertEqual(rows[0]["failure_phase"], "preflight")
         self.assertIsNone(rows[0]["http_status"])
+        self.assertNotIn("directory-secret-marker", json.dumps(rows))
+
+    def test_directory_rejects_anonymous_with_credentials_file_before_io(self):
+        with patch("sushiwait.cli._QuerySession", side_effect=AssertionError("no credentials")), \
+             patch("sushiwait.cli.SnapshotStore", side_effect=AssertionError("no database")), \
+             contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            self.run_cli(["stores", "--anonymous", "--credentials-file", "private.json"])
+        self.assertEqual(error.exception.code, 2)
 
     def test_gateway_collect_stops_on_authentication_failure(self):
         result = QueryResult(False, None, "http_error", 401,

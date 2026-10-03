@@ -3,7 +3,8 @@
 This is a transport and response-validation tool, not a prediction service.
 Legacy routing comes from reference-code research. Gateway detail routing was
 observed in a normal mini-program request and independently replayed for store
-3004 with HTTP 200 on 2026-10-02. Credential renewal, individual header necessity,
+3004 with HTTP 200 on 2026-10-02. Gateway directory routing and the same fixed
+directory parameters were observed with HTTP 200 on 2026-10-03. Credential renewal, individual header necessity,
 source freshness and anonymous access are not established. No credential is
 bundled or discovered automatically.
 """
@@ -56,7 +57,7 @@ _API_PROFILES = MappingProxyType({
     "miniapp_gateway": _ApiProfile(
         "https://sapi.sushiro.com.cn",
         "/gateway/wechat/api/2.0",
-        frozenset({"getStoreById"}),
+        frozenset({"stores", "getStoreById"}),
     ),
 })
 

@@ -1,8 +1,10 @@
 # 实时数据接入验证手册
 
-当前本地与已发布工具均为 `0.2.0.dev2`。已核验功能提交 [8fe3b2d2bb5bee8d3326aae0455f8a79a4142f1a](https://github.com/Serenin0x/sushiro-queue-predictor/commit/8fe3b2d2bb5bee8d3326aae0455f8a79a4142f1a)，树 b86fdc92ff270ec42af62eb9b2cb88f825a706c6，35 个远端 blob 与本地逐一一致并同步，发布实证见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0026；开放 Light 标题的先前发布见 E0024。dev2 完成显式私有上下文文件、逐 GET 整组更新、声明到期保护与来源隔离质量报告，主执行者 166 项 / 0.390 秒离线检查及独立源码复核通过，见 E0025。真实证据仍为此前西单单店成功及 60 秒采样首轮 HTTP 401 后停止；30 秒阶段未执行，官方正常更新来源、字段单位、源刷新、三店权限与连续接入仍待验收。最新 HAR 尚未收到，本轮没有新 API 查询，仍不是 1.0。
+当前本地工具为 `0.2.0.dev3`，准备发布；已公开基线仍为 `0.2.0.dev2`，最新 main [fbad39ddcd5b69d9eb0d86e03cdde6b549500a82](https://github.com/Serenin0x/sushiro-queue-predictor/commit/fbad39ddcd5b69d9eb0d86e03cdde6b549500a82)（工具dev2与已选浅/深Logo）。dev2 的 35 文件发布核对见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0026；dev3 新增显式离线 capture-check/capture-import、捕获证实的固定 gateway 目录和 stores 私有文件/到期保护，主执行者 **212 项 / 0.431 秒**离线检查通过，独立复核的时钟问题已修，见 E0028。本轮只做本地准备，不发布并行未选定的品牌资产；没有 Release、服务器、小程序前端或预测服务，仍是接入验证阶段。
 
-当前主线是 **本人正常查询上下文 → 固定 sapi 单店快照 → 60 秒、30 秒有界试点 → 故障与正常更新验收**。执行时明确选择 `--api-profile miniapp_gateway`；旧 crm、Mac 及手机空捕获是历史诊断，不是重新接入的必经步骤。西单 3004 已核验，另两店可由本人正常详情 GET 的 query/body ID 与店名核对，无需等待未知的新目录端点。两轮成功仅证明该短窗可查询，不代表全天稳定或 1.0 已验收。2026-10-03 夜间用户手动刷新后报告新请求和三个开关已关闭，又补充可能多次刷新；最新 HAR 尚未交付，无本轮新凭证解析或新 API 查询结果。主执行者此前约 121 秒越时且未点到微信刷新的事实完整保留 E0024。
+当前营业时段实证：电脑目录返回147条，三店60/30秒各两轮短窗完成。旧凭证到期后，本人正常启动HAR观察到 /api/1.3/initialize 返回新查询凭证，与后续Bearers本机精确匹配；固定单店候选显式导入revision2后，20:41三店电脑各新增一份成功详情，主库共18成功0失败，每店6份。未验签声明为20:32:49–21:32:49、本机保护21:32:19；接手时重新检查，不能沿用历史importable或成功状态。初始化登录码/签名/设备参数的正常生成与独立自动续期仍待验证，尚不能全天无人值守。历史到期拒绝/零请求保留；新结果不推全国完整覆盖或源新鲜度。
+
+当前路线为 **本人新鲜正常 HAR → 离线检查 → 显式单店上下文导入 → 固定 gateway 单份快照/目录 → 营业期 60/30 秒有界试点**。所有真实查询明确 `--api-profile miniapp_gateway`，没有自动主机回退；正常查询凭证来源已观察到，独立正常参数生成未知，不自动续期。捕获 HTTP 200 与本机生成配置均不证明服务器现在接受，短窗成功也不代表全天稳定或 1.0。
 
 ## 已取得的证据
 
@@ -30,20 +32,123 @@
 
 初次测试只输出 HTTP 状态、错误类别和允许的公共字段，没有保存原始错误正文、请求头或凭证。没有尝试参考源码中附带的查询令牌。
 
-首批门店：中关村大融城店、西单店、成都世豪店。西单大悦城店 ID 3004 已在 [config/pilot-stores.json](../config/pilot-stores.json) 回填，api_profile=miniapp_gateway、verification_scope=single_store_read_only；live_data_verified=false 表示连续采集未验收。另两店 ID null，完整目录未验收，不能拿合成 ID 当作真实 ID。
+### 2026-10-03 新 HAR 与目录证据
+
+以下是 E0028 的夜间文件历史核对，当时没有电脑独立 GET，其他四条未进一步访问。之后营业时段的新文件、电脑查询和正常更新研究另记下节；原始 HAR 仍不进仓库/模型。
+
+| 证据 | 已核对结果与限制 |
+| --- | --- |
+| 原始 index 0 西单详情 | 01:37:16+08:00，正常 GET `https://sapi.sushiro.com.cn/gateway/wechat/api/2.0/getStoreById?storeId=3004`，HTTP200，query/body ID与西单大悦城店一致；storeStatus=CLOSED、netTicketStatus=OFFLINE_CLOSED。停业值不当作零等待或源新鲜度 |
+| 原始 index 2 目录 | 01:37:09+08:00，正常 GET 同固定基址 `/stores?latitude=1&longitude=1&numresults=10000`，HTTP200、直接数组147项，主执行者受限 normalize_directory 成功147项；不是 capture-check/import 的目录导入结果 |
+| 新样本声明 | iat=01:13:05、exp=02:13:05（Asia/Shanghai）、相差3600秒，未验签；02:13:56首次接手已晚51秒，不泛化固定TTL或官方续期方式 |
+| 实际 capture-check | exit0、entries_total=6、ignored_entries=5、唯一候选 index0西单3004/HTTP200/六头存在，matched=true、importable=false、capture_auth_expired；目录与其他路径均在该工具中忽略 |
+| 实际 capture-import | 显式 index0/revision1/新目标，exit1、capture_auth_expired、network_performed=false；核对目标不存在，未写配置、发API或打开数据库 |
+
+三家试点已在 [config/pilot-stores.json](../config/pilot-stores.json) 回填，下列名称/地址为本次目录身份对应：
+
+| 用户试点 | 目录ID与公开身份 | 当前核验范围 |
+| --- | --- | --- |
+| 中关村大融城店 | 3014 / 中关村大融城店；北京中关村大街15号大融城西区A地块地下1层 | 当前 single_store_read_only；新增 60/30 秒短窗，长期与源刷新待验 |
+| 西单店 | 3004 / 西单大悦城店 | 当前 single_store_read_only；新增 60/30 秒短窗，长期与源刷新待验 |
+| 成都世豪店 | 2009 / 世豪广场店；成都剑南大道中段998号4层C414+C415 | 当前 single_store_read_only；新增 60/30 秒短窗，长期与源刷新待验 |
+
+三店 `api_profile=miniapp_gateway`、`live_data_verified=false`。147项只说明本次目录响应可解析，不能当全国完整覆盖或147店详情权限；目录身份、单店只读和连续实时验收分别记录，不拿合成ID访问真实门店。
+
+### 2026-10-03 营业时段电脑独立查询
+
+完整过程与限制见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0036；以下是当前公开安全摘要。
+
+用户交付的本轮文件有 1 条正常 GET，捕获于 19:17:43（Asia/Shanghai），西单 3004 / HTTP200 / 六项上下文头存在。显式 import index0、revision1 成功，committed=true、durability_confirmed=true；未验签声明 iat=19:17:02、exp=20:17:02。新旧 authorization 本机比较不同，其他五个上下文相同；这不证明官方更新端点、固定期限或无人值守更新。
+
+正常主采集共 **15 份成功详情快照，0 失败**，另有一次目录 HTTP200 / 147 条 / 405ms。先分别核对三店，再 60 秒各两轮、30 秒各两轮；以下间隔来自同 run 相邻请求的起始时间，而不是响应到达差或上游更新时间：
+
+| 门店 | 成功详情数 | 60 秒短窗实际起始间隔 | 30 秒短窗实际起始间隔 |
+| --- | ---: | ---: | ---: |
+| 西单 3004 | 5 | 59.992秒 | 29.987秒 |
+| 中关村 3014 | 5 | 59.851秒 | 29.990秒 |
+| 世豪 2009 | 5 | 59.782秒 | 30.006秒 |
+
+主采集请求耗时 167–420ms。60 秒阶段为 19:22:21–19:23:22，30 秒阶段为 19:24:56–19:25:27。西单/世豪的展示集合出现变化，中关村在这两个相邻短窗的展示集合相同；字段和集合变化不能推实际处理桌数、真实过号率或源缓存周期。
+
+用户在两阶段之间确认已退出寿司郎小程序、三个临时开关关闭，后续三店 GET 仍成功；19:23 独立镜像核对 Surge 顶部为“启动”，HTTP捕获/MitM/数据包捕获均OFF。电脑查询使用固定HTTPS请求，未通过手机界面或刷新取得每次数据。用户自行完成本轮捕获，实际开启时长未独立计量；本执行者没有开启捕获。
+
+另做一次明确的只读对照：19:30:41.879 仅去掉 authorization，其余五头保持正常上下文，西单返回 HTTP401 / 400ms。无重试、无写数据库；这条不混入15份主采集质量报告。结果表明当前完整上下文仍需授权，不能以匿名查询替代正常更新，也不据此推其他头均必需。
+
+所有 source_updated_at 仍 null、upstream_freshness=unknown，等待相关字段及-1单位未验收。三店配置新增 sampling_validation=short_window、每周期2轮，live_data_verified 继续false表示长期/源刷新边界。没有服务器、自动续期、模型、前端或业务写操作。
+
+正常更新研究仅本机受限查看已交付旧 HAR 同域方法/安全路径/HTTP状态；观察到 GET /api/1.3/miniapp/login/status，返回白名单 data/status/data.status 的类型，未输出值/私人账号字段，未请求该端点或加入客户端。用户已获得完整启动的同域1分钟捕获指导：先结束微信进程，再打开三项、正常重开小程序/西单并刷新，立即关闭，导出整个本轮会话而非一条详情；遇登录/卡住先关闭捕获，再由本人完成正常流程。20:01完整启动文件已交付并检查（下节），仍未取得新authorization，不能把路径名当已实现续期。
+
+### 2026-10-03 完整启动文件仍沿用有效凭证
+
+完整过程见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0041。
+
+用户报告西单刷新一次、会话约272KB，导出的HAR实际298480字节、7条，安全私有副本为0700目录内0600文件。全为sapi同域GET/HTTP200：西单固定详情index0/1分别20:01:23/20:01:22，目录及privateRoom/shopInfoList为20:01:13，login/status/home/citys为20:01:09（Asia/Shanghai）。具体操作次数和开启时长仍按用户报告区分；两条相邻详情不推周期采样或源刷新频率。
+
+实际capture-check成功，entries_total=7/ignored_entries=5，两条详情六头存在、身份匹配、matched/importable均true；检查时仍在声明保护期限外。7条authorization与当前私有配置在本机逐一比较相同，声明仍为19:17:02–20:17:02；两条单店整组仅user_agent不同，不披露值。已查看的五个常见响应凭证头均未出现；login/status仍只记录data/status/data.status已知键类型，没有查看账号值或请求该路由。
+
+西单两条捕获公共值相同：OPEN，groupQueuesCount=118/raw_wait=210（单位未知），booth/mixed为1742/1753/1755，reservation为7401/7411/7420、counter为空。只做离线捕获对照，不保存为新的live快照；主采集数据库仍为15成功0失败。没有导入新revision、增加API请求或取得自动更新证据。初次辅助脚本输出方法/函数签名使用错误已更正，正式CLI及本机比较完成，未改生产实现。
+
+该次20:01捕获之后，已按一次到期后正常启动的有界计划取得新文件，并确认正常新凭证来源，见下节与E0048。当前不再要求重复相同条件刷新；人工捕获是协议验证步骤，未来采集仍由电脑/服务器固定查询承担。
+
+### 2026-10-03 旧 revision 1 真实私有上下文的到期保护
+
+20:29:20.853（Asia/Shanghai），当时revision1文件的正式stores路径实际返回exit1/auth_declared_expired/failure_phase=preflight/http_status=null，声明剩余0且未验签。对客户端构造、网络入口、数据库入口设置失败守卫，三者均0调用；无效CA也未被使用，主采集数据库未改。这是本机零请求保护，不是服务端401或精确失效验证，见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0045。
+
+E0045当时20:26镜像连接暂停，随后本人交付到期后正常启动文件；新有效上下文已导入revision2并经电脑验证，见下节。旧revision1与20:01的历史importable状态不能继续使用；下一次更新须revision3或更高并重新检查当前保护时间。
+
+### 2026-10-03 正常初始化的新凭证与第二次电脑验证
+
+完整记录见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0048。本次本人明确交付的9条HAR只在本机有限处理，所有请求均为唯一授权sapi主机；私有副本303018字节、父目录0700/文件0600。没有将HAR或秘密传给模型，也没有重放任何初始化POST。
+
+| 时间（Asia/Shanghai） | 正常小程序请求与观察 |
+| --- | --- |
+| 20:32:48 | GET /api/1.3/citys，旧查询授权，HTTP401 |
+| 20:32:49 | POST /api/1.3/initialize，无authorization请求头，HTTP200；data.auth_token与后续七条请求中的新Bearer精确匹配 |
+| 20:32:49–51 | citys/home/login/status、gateway initialize、stores、shopInfoList，共六条HTTP200，使用新查询授权 |
+| 20:32:59 | 固定getStoreById?storeId=3004，HTTP200、店名/ID匹配、六项查询上下文完整 |
+
+只记录初始化契约的白名单键、类型和存在性：
+
+| POST /api/1.3/initialize 请求字段 | 本次可确认 | 仍待验证 |
+| --- | --- | --- |
+| long_token、js_code | 字符串且非空 | 正常来源、权限/有效期、是否必需及是否存在其他支持的更新流程 |
+| ts | 整数，与捕获秒级时间相符 | 允许时差与校验规则 |
+| nonce | 字符串 | 正常生成与复用规则 |
+| sign | 字符串，64位十六进制 | 算法、输入和正式生成方式；形状不能证明SHA/HMAC算法 |
+| device_id、app_version | 字符串 | 正常来源、必需性及校验规则 |
+
+响应仅核对status/message/data与命名auth_token的类型、对应关系，不读取个人值。另一个 POST /gateway/wechat/api/2.0/initialize 请求含非空jsCode，与前一个js_code不同；响应顶层auth_token、expiry、expires_in=86400。该响应凭证与门店查询Bearers不同，**不能写成查询授权24小时或用于替换当前凭证**，实际用途待核验。
+
+微信官方[Tencent API类型文档](https://github.com/wechat-miniprogram/api-typings/blob/master/types/wx/lib.wx.api.d.ts)中LoginSuccessCallbackResult说明wx.login返回code有效5分钟。本次两个命名字段来自wx.login仍是待验证推断；不能用保存旧码的方式承诺长期更新。本轮未验证一次性使用规则，也未证明仅long_token即可独立更新，未省略参数试探、猜签名或复制官方小程序秘密。
+
+正式capture-check当时exit0、9条/忽略8条、唯一index0候选身份匹配/importable=true；显式capture-import index0/revision2当时exit0、written/committed/durability_confirmed均true。两者都零网络，导入只证明本机文件提交。新查询凭证的未验签声明20:32:49–21:32:49、声明3600秒，本机保护21:32:19；不泛化固定TTL。
+
+其后新启动collect执行三店各一轮并实际成功：
+
+| 店铺 | 请求起始→收到（20:41） | 耗时 | booth / mixed展示 | reservation展示 | count / raw_wait（单位未知） |
+| --- | --- | --- | --- | --- | --- |
+| 西单3004 | 55.034→55.377 | 342ms | 1935 / 1936 / 1937 | 空 | 77 / 105 |
+| 中关村3014 | 55.386→55.756 | 370ms | 2069 / 2084 / 2086 | 7450 | 15 / 25 |
+| 世豪2009 | 55.762→56.126 | 364ms | 601 / 602 / 603 | 7431 | 10 / 10 |
+
+三店均OPEN/ONLINE/ON，counter展示空、waitTimeCounter=-1、waitTimeCap=180，source_updated_at=null。collect exit0，报告复核主库18成功0失败、每店6份，profile=miniapp_gateway/data_origin=live；手机捕获的401没有混入主库。这是新进程使用更新配置的成功，不是实际运行中热切换或持续跨到期无人值守验收。
+
+下一步优先核对登录码正常取得方式、签名协议、设备参数、long_token作用和正式接入可行性。该次人工捕获目的已完成，暂不需要再刷新；独立自动更新、持续采集、限流和源新鲜度仍未验收。下一次导入须revision3或更高，在当下重新检查声明保护。
 
 ## 门店 ID、查询凭证与逐次生命周期
 
-门店 ID 是标识，不是登录凭证；本次西单 3004 没有到期证据。会过期的是查询鉴权。每份新凭证都要记录声明签发/到期、实际查询成功/失败的时间边界及正常续期结果，不因一次样本宣称固定 TTL。本轮本机仅解析 iat/exp，声明签发为 2026-10-02 19:44:37、到期为 20:44:37（Asia/Shanghai），相差 3600 秒；20:21:25 捕获时剩余 1392 秒（23 分 12 秒）。未验证签名，不把声明当作服务端保证，也不将 20:45 的 401 唯一归因于该声明。
+门店 ID 是标识，不是登录凭证；本次西单 3004 没有到期证据。会过期的是查询鉴权。每份新凭证都要记录声明签发/到期、实际查询成功/失败的时间边界及正常续期结果，不因一次样本宣称固定 TTL。2026-10-02 的既有样本本机仅解析 iat/exp，声明签发为 2026-10-02 19:44:37、到期为 20:44:37（Asia/Shanghai），相差 3600 秒；20:21:25 捕获时剩余 1392 秒（23 分 12 秒）。未验证签名，不把声明当作服务端保证，也不将 20:45 的 401 唯一归因于该声明。
 
-纯本机零网络 auth-status 已实现，并通过此前 dev1 真实配置的安全本机核验；当前 dev2 全套 166 项离线检查通过。按 --api-profile 只读对应授权环境变量（legacy 使用 SUSHIWAIT_QUERY_AUTHORIZATION，miniapp_gateway 使用 SUSHIWAIT_GATEWAY_AUTHORIZATION），不读取其他上下文头/CA，不构造网络客户端/opener/数据库，不联网或落盘。只选取和解释 iat/exp，不输出或保存其他 claims/token。已验证运行方法：
+2026-10-03 新样本声明为 01:13:05 签发、02:13:05 到期，首次接手 02:13:56 已晚51秒；捕获当时 HTTP200 不等于接手时可用。本轮没有用失效值试探服务端，也没有新运行配置。第三份声明为19:17:02–20:17:02、第四份为20:32:49–21:32:49，均曾显式导入并通过电脑查询；第四份正常来源已观察到初始化响应。四份声明相差3600秒仍不能推固定一小时、精确服务器边界或独立自动更新。
+
+纯本机零网络 auth-status 已实现，并通过此前 dev1 真实配置的安全本机核验；当前 dev3 全套 212 项离线检查通过。按 --api-profile 只读对应授权环境变量（legacy 使用 SUSHIWAIT_QUERY_AUTHORIZATION，miniapp_gateway 使用 SUSHIWAIT_GATEWAY_AUTHORIZATION），不读取其他上下文头/CA，不构造网络客户端/opener/数据库，不联网或落盘。只选取和解释 iat/exp，不输出或保存其他 claims/token。已验证运行方法：
 
 ```sh
 PYTHONPATH=src python3 -m sushiwait auth-status --api-profile miniapp_gateway
 PYTHONPATH=src python3 -m sushiwait auth-status --api-profile legacy
 ```
 
-输出仅包含 ok、api_profile、configured、token_kind、declared_issued_at、declared_expires_at、declared_lifetime_seconds、remaining_seconds、expired、expiry_source、signature_verified。UTC 声明时间与实际请求时间分别理解；当前本机结果声明签发 2026-10-02T11:44:37Z、到期 2026-10-02T12:44:37Z、lifetime 3600、remaining 0 / expired true、expiry_source=unverified_claim / signature_verified=false，授权值和裸 token 不在输出。
+输出仅包含 ok、api_profile、configured、token_kind、declared_issued_at、declared_expires_at、declared_lifetime_seconds、remaining_seconds、expired、expiry_source、signature_verified。UTC 声明时间与实际请求时间分别理解；此前 dev1 本机实测声明签发 2026-10-02T11:44:37Z、到期 2026-10-02T12:44:37Z、lifetime 3600、remaining 0 / expired true、expiry_source=unverified_claim / signature_verified=false，授权值和裸 token 不在输出。
 
 iat/exp 独立解释：缺 iat 仍可显示 exp/剩余，缺 exp 只显示签发，未知不推默认 TTL；日期乱序时可显示声明，但计算值为 null、expiry_source=invalid_claim。缺失、opaque 或无效输入的未知字段仍为 null，不当 0 或已失效。输入限 8 KiB ASCII，严格校验重复键、非有限数与 base64/padding，剩余时长向下取整且不小于零。CLI exit 0 / ok 只表示本机检查完成，缺失/opaque/无效/已过期也可 exit 0，不能据退出状态认定授权有效。
 
@@ -73,12 +178,12 @@ PYTHONPATH=src python3 -m sushiwait report --db data/local/demo.sqlite3
 
 | Profile | 固定目的地址 | 当前允许只读端点 |
 | --- | --- | --- |
-| miniapp_gateway | `https://sapi.sushiro.com.cn/gateway/wechat/api/2.0` | 仅已观察的 getStoreById；stores 返回 unsupported_endpoint，零网络请求 |
+| miniapp_gateway | `https://sapi.sushiro.com.cn/gateway/wechat/api/2.0` | getStoreById；dev3新增已捕获的 stores 固定 GET，参数仅 latitude=1、longitude=1、numresults=10000 |
 | legacy | `https://crm-cn-prd.sushiro.com.cn/wechat/api/2.0` | stores、getStoreById；旧目录匿名测试为 401，作为历史诊断能力保留 |
 
-新 gateway 的目录路径没有证据，不能将旧 stores 路径加到新基址。核实试点 ID 可直接使用用户正常详情请求：确认 query 的 storeId、响应 id 与店名对应，再保存该店的核验范围；不猜数字 ID 或用合成 ID 访问真实服务。目录仍是独立待发现能力，不阻塞已核实 ID 的单店或 1–3 店试点。
+2026-10-03 本人正常请求捕获已证实 gateway stores 的路径与上述固定参数，dev3只添加这条已观察路线，不开放任意参数或URL。三店ID由目录身份核对；详情仍需 query/storeId、响应 id 与店名一致，另两店权限不能由目录存在推断。全国完整覆盖仍待核验，不猜数字ID或用合成ID访问真实服务。
 
-正常查询授权来自允许的接入方式或用户正常使用流程，本机注入，不能把值放入聊天、命令参数、README、Issue、提交或模型。gateway 与 legacy 配置独立，不将旧凭证转发到新主机；客户端不自动读取 HAR、微信文件或开源共享 token。新请求本次成功组合保留正常上下文头，各项服务端必需性尚未逐项验证：
+正常查询授权来自允许的接入方式或用户正常使用流程，本机注入，不能把值放入聊天、命令参数、README、Issue、提交或模型。gateway 与 legacy 配置独立，不将旧凭证转发到新主机；网络客户端不自动读取 HAR、微信文件或开源共享 token；新 capture 命令只离线处理用户明确指定的本机文件。新请求本次成功组合保留正常上下文头，各项服务端必需性尚未逐项验证：
 
 | 环境变量 | 使用范围与含义 |
 | --- | --- |
@@ -93,11 +198,11 @@ PYTHONPATH=src python3 -m sushiwait report --db data/local/demo.sqlite3
 
 如本地 Python 报 `tls_verification_failed`，可通过 `SUSHIWAIT_CA_FILE` 指定可信 CA 文件；例如本次 macOS 验证使用已有系统文件 `/etc/ssl/cert.pem`。先确认本机文件有效，不将该路径当作跨平台保证。没有 `verify=False` 或证书验证失败后的不安全回退。
 
-### 显式私有查询上下文文件（dev2）
+### 显式私有查询上下文文件（dev3）
 
-`--credentials-file` **仅由 snapshot 和 collect 支持**，与 --anonymous 互斥。不传文件时仍用上表相互隔离的环境变量；该模式缓存本次进程初始查询上下文，修改环境需重启。auth-status 与 stores 仍只读环境变量、不接受文件参数；auth-status 的结果不会自动对应到另一个文件。文件模式不从环境补授权或五项上下文头，只有可信 CA 的 `SUSHIWAIT_CA_FILE` 继续由本机环境配置。
+`--credentials-file` 由 **stores、snapshot 和 collect** 支持，与 --anonymous 互斥。不传文件时仍用上表相互隔离的环境变量；该模式缓存本次进程初始查询上下文，修改环境需重启。auth-status 仍只读授权环境变量、不接受文件参数，其结果不会自动对应到另一个文件。文件模式不从环境补授权或五项上下文头，只有可信 CA 的 `SUSHIWAIT_CA_FILE` 继续由本机环境配置。
 
-文件由用户本人已授权的正常查询流程在本机受控生成。工具只读取显式指定文件，不寻找登录态、不导入 HAR、不猜 refresh 端点。不要将原始 HAR 当作这个 JSON 文件，不把任何头值粘贴到聊天、命令参数或仓库。以下只描述字段契约，不提供令牌示例：
+文件由用户本人已授权的正常查询流程在本机受控生成。采集命令只读取显式上下文文件，不寻找登录态或猜 refresh；capture-import 可按下节规则显式离线生成该文件。不要将原始 HAR 当作这个 JSON 文件，不把任何头值粘贴到聊天、命令参数或仓库。以下只描述字段契约，不提供令牌示例：
 
 | JSON 键 | 严格契约 |
 | --- | --- |
@@ -130,11 +235,49 @@ chmod 600 "$PRIVATE_QUERY_DIR/gateway.next.json"
 mv -f "$PRIVATE_QUERY_DIR/gateway.next.json" "$SUSHIWAIT_CONTEXT_FILE"
 ```
 
-两文件在同目录、同文件系统时该 rename 为原子替换；目录 0500 或文件 0400 可用于只读输入，但准备更新需要合法的目录写权限。工具不负责取得新上下文或写这个文件。revision 检查仅在当前进程：禁止倒退，同 revision 内容不同为冲突，同 revision 内容相同可继续；重启后不保留上一进程的最大 revision。revision 递增只说明本机配置变化，不证明官方完成续期。
+两文件在同目录、同文件系统时该 rename 为原子替换；目录 0500 或文件 0400 可用于只读输入，但准备更新需要合法的目录写权限。网络采集命令不负责取得新上下文或写这个文件；dev3的显式 capture-import 可以从仍通过声明保护的指定单店GET生成它。revision 检查仅在当前进程：禁止倒退，同 revision 内容不同为冲突，同 revision 内容相同可继续；重启后不保留上一进程的最大 revision。revision 递增只说明本机配置变化，不证明官方完成续期。
 
 每个 GET 前重新读取整组文件，包括同轮的不同门店；上下文有变化时先完整构建新的客户端再替换，每个 GET 只用一组。等待中最多每 60 秒重读，并按声明到期前的保护期限提前唤醒。由此可以接收本机正常更新，但官方更新来源与自动续期仍未知。
 
-snapshot/collect 请求前检查声明 iat/exp，未验证 JWT 签名；声明无效返回 auth_claims_invalid，已到期为 auth_declared_expired，剩余不超过 30 秒为 auth_expiring。**这些都是零网络的本机停采**，不是上游 401。等待到了保护期限仍无有效更新就停止，文件读取或配置错误也停止整次采样。opaque、缺失 exp 等未知到期不填默认 TTL，也不表示服务器会接受；真实 GET 失败仍首错停止、没有自动重试。已有在途 GET 不会因为文件替换而混入新头，下一次 GET 再检查。
+stores/snapshot/collect 请求前检查声明 iat/exp，未验证 JWT 签名；声明无效返回 auth_claims_invalid，已到期为 auth_declared_expired，剩余不超过 30 秒为 auth_expiring。**这些都是零网络的本机停采**，不是上游 401。等待到了保护期限仍无有效更新就停止，文件读取或配置错误也停止整次采样。opaque、缺失 exp 等未知到期不填默认 TTL，也不表示服务器会接受；真实 GET 失败仍首错停止、没有自动重试。已有在途 GET 不会因为文件替换而混入新头，下一次 GET 再检查。
+
+### 从本人正常 HAR 离线检查与导入（dev3）
+
+只处理用户明确指定、允许范围内的本机导出文件。capture-check 和 capture-import **零网络、不开数据库、不启动捕获/登录/续期**；原始文件含秘密，保留本机私有位置，不上传聊天、在线HAR站或仓库。用户已知 fresh HAR 流程继续限 sapi 单域名、最多1分钟正常刷新后及时关闭启动/MitM/捕获三项；捕获由用户操作；主执行者随后只读查看镜像及打开Surge面板核对关闭状态，没有开启捕获。
+
+输入仅支持安全POSIX文件读取：HAR ≤8 MiB（8388608字节）、≤100条，响应正文≤2 MiB（2097152字节）；拒绝祖先/文件符号链接，文件必须当前用户的常规单硬链接文件，并核对读前后及父路径身份。正常导出源可能0644或位于非私有父目录，工具不强制源0600/0700、不改其权限；本轮受控副本自身为0700目录/0600文件，后续仍应私有保管。严格UTF-8/JSON，拒绝重复键、非有限数字；响应支持普通UTF-8或严格规范base64，不接受任意编码。
+
+候选仅匹配 `https://sapi.sushiro.com.cn/gateway/wechat/api/2.0/getStoreById?storeId=...`：正常GET、无请求正文、仅规范数字storeId查询、queryString与URL一致（如存在），带时区捕获时间、HTTP200及响应Store身份对应。目录、其他主机/路径仅计ignored，不解析或导入其上下文，也不显示其地址/内容；目录147项的证据来自主执行者另行受限白名单核验。
+
+用户在本机设置 `SUSHIWAIT_CAPTURE_FILE` 为已授权HAR的实际路径后，可检查：
+
+```sh
+PYTHONPATH=src python3 -m sushiwait capture-check --har "$SUSHIWAIT_CAPTURE_FILE"
+```
+
+输出 schema_version=1 / data_origin=capture、entries_total、ignored_entries与candidates；每个候选仅有原始0基entry_index、UTC毫秒captured_at、HTTP状态、匹配后的store_id/store_name、六个header的存在布尔值、authorization_status安全时间白名单、matched/importable/error_code。matched表示请求/时间/200响应身份匹配，缺头或过期仍可能matched=true；importable还须上下文合法且当前声明保护通过。network_performed=false / network_verified=false / server_acceptance=unverified 明示历史捕获不是新的请求或当前服务端验收。**exit0只表示检查完成，不保证存在可导入候选**；输入拒绝为固定安全错误/exit1，不显示原始异常、私有路径或头值。
+
+对一份**新鲜**样本，先从候选明确选原始index，并在本机设 `SUSHIWAIT_CAPTURE_ENTRY_INDEX`、`SUSHIWAIT_CONTEXT_REVISION` 与上节私有输出路径；revision为1..2^63-1，新文件可从1开始，更新既有目标必须大于其revision。以下只在候选允许且调用范围核实后执行，不是本轮已执行成功记录；本轮index0已过期不可导入：
+
+```sh
+PYTHONPATH=src python3 -m sushiwait capture-import --har "$SUSHIWAIT_CAPTURE_FILE" --entry-index "$SUSHIWAIT_CAPTURE_ENTRY_INDEX" --output "$SUSHIWAIT_CONTEXT_FILE" --revision "$SUSHIWAIT_CONTEXT_REVISION"
+```
+
+该命令重新读取HAR，**不自动选择、不从目录导入、不同条目之间不拼头**。六项上下文来自同一单店GET，缺失头明确null、不读环境；以完整schema1九键私有文件写入，≤16KiB。输出父目录必须当前用户、权限0700；既有目标须为同用户单硬链接常规私有文件0600/0400，新文件0600。不要给输出使用符号链接或多人可写目录。
+
+生成初检和最终提交前均重新读取当前本机时间：invalid_claim、声明已到期、剩余不超过30秒分别capture_auth_invalid_claim/capture_auth_expired/capture_auth_expiring，均拒绝提交；缺失exp或opaque到期保持未知，不推默认TTL，也不证明服务器接受。写入期间跨入保护期限也拒绝，不沿用初检冻结时间。独立复核发现过冻结时钟问题，已由实际CLI慢写回归覆盖31秒推进到30秒的拒绝边界。
+
+私有生成使用同父目录独占0600临时文件、文件fsync/有界读回、目标/父路径复核、协作目录锁与原子rename。**rename提交前失败保留旧目标**；成功输出written=true、committed=true、durability_confirmed布尔值、revision、身份/捕获时间与安全声明时间。若提交后目录fsync失败，仍明确committed=true、durability_confirmed=false、exit0：新文件已提交，仅持久化确认不足，不能当“未写入”盲目重试或回滚。POSIX无CAS，不守协作锁的同用户写者仍有最终复核至rename的竞争窗口；避免同时使用其他进程改同一目标。
+
+常见拒绝包括capture_auth_expired、capture_invalid_request/response/context、capture_entry_not_found、capture_destination_unsafe/changed、capture_revision_conflict或capture_write_failed，输出仅固定类别、api_profile与network_performed=false / exit1；缺必需CLI参数exit2。生成配置成功不代表官方续期或server_acceptance已验证，下一步仍需在允许范围执行单次真实只读查询。
+
+### 固定 gateway 目录与单店运行
+
+目录现已有营业时段电脑独立GET实证：HTTP200、147条。以下是目录筛选方法；stores也执行请求前到期保护，预检只输出failure_phase=preflight、checked_at、http_status=null和安全时间，不开数据库：
+
+```sh
+PYTHONPATH=src python3 -m sushiwait stores --api-profile miniapp_gateway --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --match 中关村 --match 西单 --match 世豪
+```
 
 新 profile 和此前实际 dev1 CLI 单店保存已核验。符合契约的私有文件与可信 CA 就绪后，西单已验证 ID 的单次命令为：
 
@@ -143,14 +286,14 @@ PYTHONPATH=src python3 -m sushiwait snapshot --api-profile miniapp_gateway --cre
 PYTHONPATH=src python3 -m sushiwait report --db data/local/gateway-pilot.sqlite3
 ```
 
-2026-10-02 实际尝试 60 秒 / 2 轮采样，首轮在 20:45:16.961 得到 HTTP 401 后立即停止，没有第 2 轮或周期等待；30 秒阶段未执行，60/30 秒采样均未验收。report 成功读取同店同 profile 的 1 成功与 1 失败。到期静态凭证不再重试；从本人正常查询流程取得新的本机上下文，检查声明时间与单次实际可用性后，才进入下列有界验证。先执行 60 秒；仅在其成功、无异常且调用范围允许时再执行 30 秒。两条都是后续执行示例，不是已完成记录：
+2026-10-02 实际尝试 60 秒 / 2 轮采样，首轮在 20:45:16.961 得到 HTTP 401 后立即停止，没有第 2 轮或周期等待；30 秒阶段未执行，60/30 秒采样均未验收。report 成功读取同店同 profile 的 1 成功与 1 失败。到期静态凭证不再重试；从本人正常查询流程取得新的本机上下文，检查声明时间与单次实际可用性后，才进入下列有界验证。先执行 60 秒；仅在其成功、无异常且调用范围允许时再执行 30 秒。该2026-10-02失败保持历史；2026-10-03已按同样固定路由对三店完成60/30秒各两轮，实证见上节。以下仍为可复用的单店操作示例：
 
 ```sh
 PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --store-id 3004 --interval 60 --samples 2 --db data/local/gateway-pilot.sqlite3
 PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --store-id 3004 --interval 30 --samples 2 --db data/local/gateway-pilot.sqlite3
 ```
 
-上述文件命令只有在本机已经准备好完整私有文件后才能执行；省略 --credentials-file 可继续使用对应 profile 的环境模式，但更新环境需重启。dev2 的重读/到期保护已离线验证，没有新的真实采样验收；文件更新来源与实际有效边界须另行记录，不靠连续重启或失效值重试代替正常更新验证。Ctrl-C 返回 interrupted / exit 130；修正本机问题或取得正常更新后可用同一 --db 继续追加历史，每次运行有新 run_id、轮数重新开始，**不能恢复上次未完成任务的采样游标/剩余轮数**。
+上述文件命令只有在本机已经准备好完整私有文件后才能执行；省略 --credentials-file 可继续使用对应 profile 的环境模式，但更新环境需重启。dev3继承的重读/到期保护已离线验证，2026-10-03 新鲜上下文下的三店60/30秒短窗实测已完成；运行中换成另一份新上下文、正常更新来源与完整实际有效边界仍须另行记录，不靠连续重启或失效值重试代替正常更新验证。Ctrl-C 返回 interrupted / exit 130；修正本机问题或取得正常更新后可用同一 --db 继续追加历史，每次运行有新 run_id、轮数重新开始，**不能恢复上次未完成任务的采样游标/剩余轮数**。
 
 ### 旧 legacy 诊断与命令（历史保留）
 
@@ -174,14 +317,14 @@ PYTHONPATH=src python3 -m sushiwait report --db data/local/pilot.sqlite3
 
 `VERIFIED_ID` 是占位符，必须替换成对应 profile 已核实的真实数字 ID。两 profile 的 collect 均限 1–3 店、30–3600 秒周期、每店 1–120 轮；按每轮开始时间安排，若查询耗时超过周期则实际周期变长。请求失败即停止整次采样，不自动重试鉴权、限流或未知结果。30 秒可以配置，但当前没有验证上游允许或实际 30 秒更新。
 
-工具只允许两个固定 profile 的已知只读 GET，gateway 仅详情、目录禁止；无登录、个人号单、取号、预约、取消或重排接口。不跟随重定向或读取环境代理，15 秒 I/O 超时、2 MiB 响应上限、失败不自动重试。没有守护进程、多实例锁、通知或全天调度，本机不要同时运行多个采集进程。
+工具只允许两个固定 profile 的已知只读 GET，dev3 gateway支持已观察的详情和固定参数目录；无登录、个人号单、取号、预约、取消或重排接口。不跟随重定向或读取环境代理，15 秒 I/O 超时、2 MiB 响应上限、失败不自动重试。没有守护进程、多实例锁、通知或全天调度，本机不要同时运行多个采集进程。
 
 ## 电脑试点批量与后期同步展示
 
-用户要求在电脑快捷批量测试门店，取得有效本人查询授权并核实目标 ID 后有节奏执行，不需要逐店手机抓包。当前 collect 可重复传 --store-id，但最多 1–3 店、每店 1–120 轮，首个失败停止；这是试点批量，全国目录和全国批量仍待实现/验收。同一 profile 的多店权限也须核实，不能从西单一次成功推断所有门店均可访问。以下两个 ID 都是占位符，必须先换成对应 profile 已核实的真实 ID；当前另外两家试点仍为 null，本轮没有执行这个多店示例：
+用户要求在电脑快捷批量测试门店，取得有效本人查询授权并核实目标 ID 后有节奏执行，不需要逐店手机抓包。当前 collect 可重复传 --store-id，但最多 1–3 店、每店 1–120 轮，首个失败停止；这是试点批量，目录已有147项捕获证据，全国完整覆盖和全国批量仍待实现/验收。同一 profile 的多店权限也须核实，不能从西单一次成功推断所有门店均可访问。三家ID现已分别通过详情查询及60/30秒短窗验证；以下为可复用的多店操作示例，继续检查有效上下文与允许频率。单次和短窗成功不能泛化全天或其他门店权限：
 
 ```sh
-PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --store-id VERIFIED_ID_A --store-id VERIFIED_ID_B --interval 60 --samples 1 --db data/local/gateway-pilot.sqlite3
+PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --store-id 3014 --store-id 3004 --store-id 2009 --interval 60 --samples 1 --db data/local/gateway-pilot.sqlite3
 ```
 
 后期本项目小程序需要同步显示/刷新所选门店当前堂食与预约叫号，复用服务端共享采集，让用户减少在两个小程序之间来回切换。仍按有限展示集合保存与显示，分清请求接收时间和未知的源更新时间，明确刷新失败/过期状态，不把旧数据或失败当作无人排队。此项属于 R23，须等 R18 的真实字段、刷新与连续接入齐备后才实现前端；当前没有服务端持续调度或小程序展示功能。
@@ -190,19 +333,19 @@ PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --cred
 
 命令输出 JSON；数据库仅保存规范化公共观察与安全失败分类，文件在 `data/local/`，默认 `sushiwait.sqlite3`。该目录被 Git 排除。posix 环境新目录 0700、数据库 0600；拒绝符号链接数据库，未知数据库版本不覆盖。
 
-- 规范化快照 `schema_version=1` 保持；它与数据库和 report 的版本独立。SQLite `PRAGMA user_version=2`，样本保存 run_id、store_id、data_origin、api_profile、received_at、ok 与规范化 JSON；当前 dev2 全套 166 项离线检查通过；此前实际 dev1 CLI 使用 schema 2 数据库成功保存。本轮没有新增数据库迁移。
+- 规范化快照 `schema_version=1` 保持；它与数据库和 report 的版本独立。SQLite `PRAGMA user_version=2`，样本保存 run_id、store_id、data_origin、api_profile、received_at、ok 与规范化 JSON；当前 dev3 全套 212 项离线检查通过；此前实际 dev1 CLI 使用 schema 2 数据库成功保存。本轮没有新增数据库迁移。
 - 观察、目录项与变化输出顶层 api_profile，仅允许 legacy / miniapp_gateway，不保存任意来源 URL；端点固定映射由客户端负责。compute_change 只有同店、同真实/合成来源、同 API profile 才比较，报告也按三者分组。
 - 写打开旧 v1 数据库在显式事务中为旧成功/失败行补 legacy 列与 JSON 标签，保留行 ID、run_id 与内容；冲突 profile 或坏 JSON 拒绝并回滚。只读打开 v1 不迁移，使用虚拟 legacy 视图；report 的 schema_version=2 表示输出格式，database_schema_version 单独反映磁盘库版本。
 - normalized 字段分别记录 present / missing / null / invalid。缺失不会变成 0，缺失队列不会变成空数组。
 - 保留四类 groupQueues 的完整字符串数组、顺序与重复情况，不将展示最大号码当作全局游标。
 - `raw_wait` 与 `groupQueuesCount` 单位均为 unknown；未经小程序/现场对照，不解释为分钟、人数或已签到桌数。waitTimeCounter / waitTimeCap 另按有符号整数保存 presence/value/unit=unknown，拒绝 bool，保留 -1 等原值；不猜测 -1 的禁用含义或正值的分钟单位。
-- waitTimeCounter / waitTimeCap 的缺失、null、invalid 分别记录，公共哈希与标量变化覆盖两字段；旧快照缺新键按 missing/None 比较，不当 0、不修改历史 JSON。有符号等待字段与本机 auth-status 的既有回归保持；当前 dev2 全套 166 项通过，快照 schema_version 仍为 1。
+- waitTimeCounter / waitTimeCap 的缺失、null、invalid 分别记录，公共哈希与标量变化覆盖两字段；旧快照缺新键按 missing/None 比较，不当 0、不修改历史 JSON。有符号等待字段与本机 auth-status 的既有回归保持；当前 dev3 全套 212 项通过，快照 schema_version 仍为 1。
 - `request_started_at`、`received_at`、`elapsed_ms` 是本地请求时间；`source_updated_at=null`，`upstream_freshness=unknown`。
 - content_hash 只作用于规范化公共字段；相同 hash 仅表示所保存字段相同，不能证明缓存或源新鲜度。
 - 未知字段记录安全键名清单；未知对象、个人字段值和原始响应不落库。如果以后发现有用字段，再核实语义、权限并加入白名单。
 - 失败不生成成功快照；GET 返回错误为 failure_phase=request，收到正常响应但规范化失败为 normalization。本机文件/声明/配置保护为 preflight，只保存 checked_at、http_status=null 和安全鉴权时间元数据，不虚构请求开始/响应接收/耗时；三者都使 collect 首错停止。数据库沿用 received_at 列保存事件时间，preflight 行在此列保存 checked_at。
 
-### 只读质量报告（dev2）
+### 只读质量报告（dev2继承，dev3格式保持）
 
 运行 report 不联网，也不取得或更新凭证；只读旧 v1 不迁移文件。报告格式 `schema_version=2`、实际库版本 `database_schema_version` 保持独立。数据库 schema/列结构不支持、非法 profile 或物理损坏仍可拒绝整库；坏 JSON 容错不是任意数据库恢复承诺。
 
@@ -227,14 +370,14 @@ elapsed_ms 与 start_interval_ms 汇总为 count/min/max/mean，mean 四舍五�
 
 ## 当前执行路线与实际验收
 
-1. **核实本人正常查询上下文。** 使用用户已有授权的正常访问流程，目的地址限 `sapi.sushiro.com.cn` 已观察的详情 GET，保持完整 TLS。查询上下文仅在本机受控位置/进程内使用；文件模式准备完整私有 JSON 并由 snapshot/collect 做请求前声明检查，环境模式可先用 auth-status 记录对应环境中的声明。auth-status 不读 --credentials-file，两者输入不可混为同一份。声明未验签、不证明服务端接受或续期，exit 0 不能作为可用凭证判定；正常更新来源尚未知，不能猜 refresh、发旧主机凭证或使用共享 token。
-2. **核实门店 ID。** 西单 3004 已核实；中关村、成都从本人正常进入该店产生的详情请求中核对 query/body ID 与店名，记录单店范围后回填配置。有效授权和 ID 核实后，可在电脑对这 1–3 店有节奏查询，不必逐店重复手机抓包。新 gateway 目录未知，不是当前单店验证的前置条件；相同 ID 在不同 profile 间不自动互认。
-3. **先保存一份真实快照。** 用上文 miniapp_gateway snapshot/report 命令验证当前上下文、目标店身份、安全公共字段及失败记录。对照小程序时明确点底部刷新并记录前后展示集合与页面时间；截图只解释页面，不能取得授权或请求签名。源更新时间与单位未知就保留未知，区分堂食/预约各组展示，完整号码及后缀不转成全局游标或过号数。
-4. **先 60 秒，再有条件做 30 秒。** 单次当前查询成功后执行 60 秒 / 2 轮；确认无鉴权、TLS、限流或其他异常，且调用范围允许，才执行 30 秒 / 2 轮。保存本地请求起止、耗时、公共变化及安全失败；使用文件模式时依规则整组原子更新，并核对 revision 与实际正常更新证据。本机到期/坏文件停采和真实请求失败分开记录，均停止整次任务；不重试、不把缓存或旧值当新数据。两轮的成功范围只限该短窗；30 秒请求间隔不是上游允许频率或更新周期的证据。
-5. **在营业和有变化的场景做对照。** 2026-10-03 01:15 镜像核对西单页最后更新时间 01:13，堂食/预约均 `---`，用户报告凌晨停业。停业空值可用于记录页面状态，不能证明无人排队、叫号推进、单位或数据新鲜度；当时没有新 API 请求。后续主执行者捕获约 121 秒越时且未点到微信刷新，01:36 独立核验临时开关关闭；用户随后手动操作并报告新请求、三项关闭及可能多次刷新，最新 HAR 仍待交付，不能验收实际时长/次数或源频率。完整事实保留 E0024。页面时间与本地接收时间分别记录，不能把页面时间虚构为 API 源更新时间。
-6. **逐项验收核心稳定性。** 对每份新凭证记录实际成功/失败边界及本人正常更新证据；覆盖三店、营业期变化、缺失字段、到期/限流/TLS/网络失败与停机结果，再扩大采样。dev2 已离线验证整组文件重读、声明保护和质量报告；用 report 区分全历史与有限窗口、preflight 与请求/规范化失败、实际间隔和公共变化。gateway 仍没有目录，官方正常更新来源、全天调度和连续真实采样未验收；环境更新需重启、重启同库只是续写历史，未恢复任务游标。两份快照或两轮 collect 不能替代持续可靠性验收。记录未完成项后再决定后续工具与版本，不以用户的 1.0 目标宣称已稳定。
+1. **正常上下文更新来源。** 19:17新上下文已导入并通过实际查询，但正常自动更新仍未知；下一份应捕获完整启动流程，限已授权sapi和1分钟，完毕关闭三个开关。只研究正常路径，不猜登录/refresh端点；声明不推固定TTL。
+2. **显式整组更新与边界。** 新正常单店GET通过当前声明保护后，capture-import明确原始index/output/递增revision；不能目录导入、自动选条目或拼头。当前本机文件revision1，下一份更新必须更大；committed/durability_confirmed分别解读，文件模式由stores/snapshot/collect预检。
+3. **保持三店的实际能力范围。** 3014/3004/2009均完成详情身份和短窗采样，single_store_read_only+sampling_validation=short_window；live_data_verified均false表示长期/源刷新未验收。目录147条不证明全部门店详情权限或全国完整覆盖。
+4. **补齐页面和真实结果对照。** 有效凭证期间电脑查询已独立于小程序；接下来逐项核实完整堂食/预约号码、签到桌数、等待字段单位/-1、missing/null/invalid、来源时间。实际60/30秒请求节奏已验证，不等同源更新延迟或限流允许上限。
+5. **保留失败与证据口径。** 15份主采集成功/0失败，另一次省略授权头对照401不混入数据库；到期/坏文件本机停采与request/normalization失败分开。均首错停止、不重试，report区分全历史/有限窗口，不推ETA、真实过号率或缓存周期。
+6. **扩大持续验收再部署。** 覆盖正常更新、完整到期边界、限流/TLS/网络/文件故障和停机结果，形成长期可靠性证据。当前没有官方自动续期、全天调度、任务游标恢复或服务器部署；同库重启仅续写历史，两轮与147目录项不替代可靠性或1.0验收。
 
-实际操作的凭证与原始网络记录留在本机受控位置，公开仓库只记录无秘密的结构、证据与结论。这次用户授权使用自己的账号协助接入；它不包含真实取号、取消或重排。
+实际操作的凭证与原始网络记录留本机受控位置，公开仓库只记录无秘密的结构、证据与结论。本人账号授权不包含真实取号、取消或重排。
 
 ## 2026-10-02 手机调试历史与保留设置
 

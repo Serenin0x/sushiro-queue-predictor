@@ -17,7 +17,7 @@ from urllib.request import HTTPSHandler, ProxyHandler, build_opener
 from urllib.response import addinfourl
 
 from sushiwait.client import SushiroClient, _RejectRedirects
-from sushiwait.observations import normalize_snapshot
+from sushiwait.observations import normalize_directory, normalize_snapshot
 
 
 class FakeResponse:
@@ -143,14 +143,66 @@ class ClientTests(unittest.TestCase):
             self.assertNotIn(secret, repr(client))
             self.assertNotIn(secret, request.full_url)
 
-    def test_gateway_directory_is_unsupported_without_any_request(self):
-        opener = FakeOpener()
-        client = SushiroClient(None, api_profile="miniapp_gateway", opener=opener)
-        result = client.fetch_stores()
-        self.assertEqual((result.ok, result.error_code, result.http_status, result.payload), (False, "unsupported_endpoint", None, None))
-        self.assertEqual(opener.calls, [])
+    def test_gateway_directory_uses_observed_route_headers_and_public_profile(self):
+        stores = [fixture_store(address="合成公开地址", area="合成区域", phone="synthetic-private-phone")]
+        response = FakeResponse(encoded(stores))
+        opener = FakeOpener(response)
+        client = SushiroClient(
+            "synthetic-gateway-authorization", api_profile="miniapp_gateway",
+            app_client="synthetic-app-client", app_code="synthetic-app-code",
+            user_agent="Synthetic Agent/1.0 (offline test)",
+            referer="https://synthetic.invalid/private-reference",
+            content_type="application/x-www-form-urlencoded; charset=UTF-8", opener=opener,
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            result = client.fetch_stores()
+        self.assertTrue(result.ok)
+        self.assertEqual((result.error_code, result.http_status), (None, 200))
+        self.assertEqual(result.payload, {"data": stores})
+        self.assertEqual(len(opener.calls), 1)
+        request, timeout = opener.calls[0]
+        self.assertEqual(request.full_url,
+            "https://sapi.sushiro.com.cn/gateway/wechat/api/2.0/stores?latitude=1&longitude=1&numresults=10000")
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIsNone(request.data)
+        self.assertEqual(timeout, 15)
+        self.assertEqual(parse_qs(urlsplit(request.full_url).query),
+                         {"latitude": ["1"], "longitude": ["1"], "numresults": ["10000"]})
+        expected_headers = {
+            "Authorization": "Bearer synthetic-gateway-authorization",
+            "X-app-client": "synthetic-app-client", "X-app-code": "synthetic-app-code",
+            "User-agent": "Synthetic Agent/1.0 (offline test)",
+            "Referer": "https://synthetic.invalid/private-reference",
+            "Content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+        }
+        for name, value in expected_headers.items():
+            self.assertEqual(request.get_header(name), value)
+            self.assertNotIn(value, request.full_url)
+        self.assertEqual(client.api_profile, "miniapp_gateway")
+        public = normalize_directory(result.payload, api_profile=client.api_profile)
+        self.assertEqual(public[0]["api_profile"], "miniapp_gateway")
+        self.assertEqual(public[0]["normalized"]["address"]["value"], "合成公开地址")
+        self.assertEqual(public[0]["normalized"]["area"]["value"], "合成区域")
+        self.assertNotIn("synthetic-private-phone", json.dumps(public))
+        self.assertEqual(output.getvalue(), "")
+        self.assertTrue(response.closed)
         self.assertEqual(client._fetch("cancelNetTicket", {}).error_code, "invalid_endpoint")
-        self.assertEqual(opener.calls, [])
+        self.assertEqual(len(opener.calls), 1)
+
+    def test_gateway_directory_http_failure_does_not_fall_back_or_expose_body(self):
+        opener = FakeOpener(error=HTTPError(
+            "https://sapi.sushiro.com.cn", 401, "synthetic-private-message",
+            {"Authorization": "synthetic-private-header"}, io.BytesIO(b"synthetic-private-body"),
+        ))
+        client = SushiroClient("synthetic-gateway-authorization", api_profile="miniapp_gateway", opener=opener)
+        result = client.fetch_stores()
+        self.assertEqual((result.ok, result.error_code, result.http_status, result.payload),
+                         (False, "http_error", 401, None))
+        self.assertEqual(len(opener.calls), 1)
+        self.assertEqual(opener.calls[0][0].full_url,
+            "https://sapi.sushiro.com.cn/gateway/wechat/api/2.0/stores?latitude=1&longitude=1&numresults=10000")
+        self.assertNotIn("synthetic-private", repr(result))
 
     def test_gateway_http_failure_has_no_legacy_fallback_or_raw_output(self):
         opener = FakeOpener(error=HTTPError(

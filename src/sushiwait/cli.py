@@ -13,6 +13,7 @@ from typing import Any
 
 from . import __version__
 from .auth import describe_authorization
+from .capture import CaptureError, inspect_capture, write_credentials_from_capture
 from .client import QueryResult, SushiroClient
 from .credentials import CredentialError, CredentialSource, QueryCredentials
 from .observations import compute_change, normalize_directory, normalize_snapshot
@@ -191,11 +192,26 @@ def build_parser() -> argparse.ArgumentParser:
         "auth-status", help="纯本机查看凭证声明到期时间（不联网、不验证签名）"
     )
     auth_status.add_argument("--api-profile", choices=API_PROFILES, default="legacy")
+    capture_check = commands.add_parser(
+        "capture-check", help="离线核对本人指定的正常查询 HAR，仅输出安全元数据"
+    )
+    capture_check.add_argument("--har", required=True, help="明确指定本机已授权捕获文件")
+    capture_import = commands.add_parser(
+        "capture-import", help="从指定正常请求生成本机私有上下文（不联网、不续期）"
+    )
+    capture_import.add_argument("--har", required=True)
+    capture_import.add_argument("--entry-index", required=True, type=int,
+                                help="capture-check 中的原始 HAR 条目下标，从 0 开始")
+    capture_import.add_argument("--output", required=True, help="私有查询上下文的目标文件")
+    capture_import.add_argument("--revision", required=True, type=int,
+                                help="完整上下文修订号，更新既有文件时必须递增")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
     stores.add_argument("--match", action="append", default=[])
-    stores.add_argument("--anonymous", action="store_true", help="不用任何本地查询凭证进行诊断")
+    stores_auth = stores.add_mutually_exclusive_group()
+    stores_auth.add_argument("--anonymous", action="store_true", help="不用任何本地查询凭证进行诊断")
+    stores_auth.add_argument("--credentials-file", help="对应接口的完整私有查询上下文")
     snapshot = commands.add_parser("snapshot", help="采集单店一份规范化快照")
     snapshot.add_argument("--api-profile", choices=API_PROFILES, default="legacy")
     snapshot.add_argument("--store-id", required=True)
@@ -247,6 +263,22 @@ def main(argv: list[str] | None = None) -> int:
                   "detail": "验证阶段限 1–3 店、30–3600 秒周期、1–120 轮"})
             return 2
     try:
+        if args.command in ("capture-check", "capture-import"):
+            try:
+                inspection = inspect_capture(args.har, now=_utc_clock())
+                if args.command == "capture-check":
+                    emit(inspection.public_report())
+                else:
+                    metadata = write_credentials_from_capture(
+                        inspection, entry_index=args.entry_index,
+                        destination=args.output, revision=args.revision
+                    )
+                    emit(metadata)
+                return 0
+            except CaptureError as error:
+                emit({"ok": False, "api_profile": "miniapp_gateway",
+                      "error_code": error.error_code, "network_performed": False})
+                return 1
         if args.command == "auth-status":
             variable = (
                 "SUSHIWAIT_QUERY_AUTHORIZATION"
@@ -257,7 +289,19 @@ def main(argv: list[str] | None = None) -> int:
             emit({"ok": True, "api_profile": args.api_profile, **status})
             return 0
         if args.command == "stores":
-            result = client_for(args).fetch_stores()
+            try:
+                session = _QuerySession(args)
+                client = session.client()
+            except _PreflightStop as stop:
+                output = {"ok": False, "api_profile": args.api_profile,
+                          "error_code": stop.error_code, "failure_phase": "preflight",
+                          "checked_at": _utc_clock().isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                          "http_status": None}
+                if stop.auth_status is not None:
+                    output["auth_status"] = stop.auth_status
+                emit(output)
+                return 1
+            result = client.fetch_stores()
             if not result.ok:
                 emit({"ok": False, "error_code": result.error_code,
                       "http_status": result.http_status, "api_profile": args.api_profile})
