@@ -15,7 +15,7 @@ from . import __version__
 from .auth import describe_authorization
 from .capture import CaptureError, inspect_capture, write_credentials_from_capture
 from .client import QueryResult, SushiroClient
-from .credentials import CredentialError, CredentialSource, QueryCredentials
+from .credentials import CredentialError, CredentialSource, QueryCredentials, read_credentials_file
 from .observations import compute_change, normalize_directory, normalize_snapshot
 from .storage import SnapshotStore
 
@@ -69,6 +69,45 @@ class _PreflightStop(ValueError):
         self.auth_status = auth_status
 
 
+def _authorization_stop_code(status: dict) -> str | None:
+    """Share the declared-time guard between inspection and query execution."""
+    if status["expiry_source"] == "invalid_claim":
+        return "auth_claims_invalid"
+    if status["expiry_source"] == "unverified_claim":
+        if status["expired"] is True:
+            return "auth_declared_expired"
+        remaining = status["remaining_seconds"]
+        if remaining is not None and remaining <= EXPIRY_MARGIN_SECONDS:
+            return "auth_expiring"
+    return None
+
+
+def _inspect_private_authorization(args: argparse.Namespace) -> int:
+    """Read one explicit private bundle; never touch environment or transport."""
+    metadata = {"api_profile": args.api_profile, "credential_source": "private_file",
+                "network_performed": False, "server_acceptance": "unverified"}
+    try:
+        context = read_credentials_file(args.credentials_file, api_profile=args.api_profile)
+    except CredentialError as error:
+        emit({"ok": False, **metadata, "error_code": error.error_code})
+        return 1
+    # Sample the clock after file validation, rather than before potentially slow IO.
+    checked_at = _utc_clock()
+    status = describe_authorization(context.authorization, now=checked_at)
+    stop_code = _authorization_stop_code(status)
+    guard_state = "unknown"
+    if stop_code is not None:
+        guard_state = "stop"
+    elif status["expiry_source"] == "unverified_claim" and status["remaining_seconds"] is not None:
+        guard_state = "no_declared_stop"
+    emit({"ok": True, **metadata, "credential_revision": context.revision,
+          "checked_at": checked_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+          **status, "authorization_guard": {"state": guard_state,
+              "stop_reason": stop_code, "margin_seconds": EXPIRY_MARGIN_SECONDS}})
+    # Inspection succeeded even when declarations require queries to stop.
+    return 0
+
+
 class _QuerySession:
     """An immutable context per GET, with bounded local rechecks while waiting."""
 
@@ -89,14 +128,9 @@ class _QuerySession:
             raise _PreflightStop(error.error_code) from None
         status = describe_authorization(credentials.authorization, now=_utc_clock())
         self.auth_status = status
-        if status["expiry_source"] == "invalid_claim":
-            raise _PreflightStop("auth_claims_invalid", status)
-        if status["expiry_source"] == "unverified_claim":
-            if status["expired"] is True:
-                raise _PreflightStop("auth_declared_expired", status)
-            remaining = status["remaining_seconds"]
-            if remaining is not None and remaining <= EXPIRY_MARGIN_SECONDS:
-                raise _PreflightStop("auth_expiring", status)
+        stop_code = _authorization_stop_code(status)
+        if stop_code is not None:
+            raise _PreflightStop(stop_code, status)
         self._credentials = credentials
 
     def client(self) -> SushiroClient:
@@ -192,6 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
         "auth-status", help="纯本机查看凭证声明到期时间（不联网、不验证签名）"
     )
     auth_status.add_argument("--api-profile", choices=API_PROFILES, default="legacy")
+    auth_status.add_argument("--credentials-file", help="检查显式私有整组；不读取环境、不联网")
     capture_check = commands.add_parser(
         "capture-check", help="离线核对本人指定的正常查询 HAR，仅输出安全元数据"
     )
@@ -280,6 +315,8 @@ def main(argv: list[str] | None = None) -> int:
                       "error_code": error.error_code, "network_performed": False})
                 return 1
         if args.command == "auth-status":
+            if args.credentials_file is not None:
+                return _inspect_private_authorization(args)
             variable = (
                 "SUSHIWAIT_QUERY_AUTHORIZATION"
                 if args.api_profile == "legacy"

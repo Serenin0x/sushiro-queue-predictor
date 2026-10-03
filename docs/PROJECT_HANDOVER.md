@@ -12,7 +12,7 @@
 4. 在任务开始前判断需要哪些真实数据、用户授权或人工核验；可以独立完成的工作继续推进。
 5. 每次工作都更新本文档的编辑历史；需求、设计或版本状态改变时，同时更新对应板块。
 
-**当前已公开只读工具为 `0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)；保留已经选定并公开的浅/深 Logo。** dev3 实现和 212 项离线检查见 E0028，dev2 功能发布见 E0026，视觉发布见 E0047。2026-10-03 电脑目录返回 147 条，三店 60 秒/30 秒各两轮短窗已完成；旧凭证到期后，本人正常启动 HAR 观察到 `/api/1.3/initialize` 返回新凭证，其与后续查询授权本机精确匹配。显式导入 revision 2 后，20:41:55–56 三店再次各取得一份成功快照，主库共 18 成功、0 失败、每店 6 份。当前凭证未验签声明为 20:32:49–21:32:49，本机保护边界为 21:32:19；不能把历史成功当作接手时仍有效。初始化所需登录码、签名和设备参数的正常生成路径尚未验证，未实现独立自动更新或全天采集。字段单位、源新鲜度、长期连续和全国覆盖仍待验收。历史失败与视觉试验记录完整保留；没有预测服务、用户小程序或服务器部署。运行与本轮证据见 [DATA_ACCESS.md](DATA_ACCESS.md) 和 E0048。
+**当前本地工具为 `0.2.0.dev4`，准备公开；已公开工具为 `0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)；保留已经选定并公开的浅/深 Logo。** dev3 实现和 212 项离线检查见 E0028，dev2 功能发布见 E0026，视觉发布见 E0047。2026-10-03 电脑目录返回 147 条，三店 60 秒/30 秒各两轮短窗已完成；旧凭证到期后，本人正常启动 HAR 观察到 `/api/1.3/initialize` 返回新凭证，其与后续查询授权本机精确匹配。显式导入 revision 2 后，20:41:55–56 三店再次各取得一份成功快照，主库共 18 成功、0 失败、每店 6 份。当前凭证未验签声明为 20:32:49–21:32:49，本机保护边界为 21:32:19；不能把历史成功当作接手时仍有效。初始化所需登录码、签名和设备参数的正常生成路径尚未验证，未实现独立自动更新或全天采集。字段单位、源新鲜度、长期连续和全国覆盖仍待验收。历史失败与视觉试验记录完整保留；没有预测服务、用户小程序或服务器部署。本轮dev4新增私有文件的零网络auth-status与共享到期保护，226项/0.466秒检查通过；21:19真实revision2状态检查没有环境凭证、客户端/CA/网络/数据库调用，私有文件及主库未改。更新参数证据见 [AUTH_REFRESH.md](AUTH_REFRESH.md)，运行事实见 [DATA_ACCESS.md](DATA_ACCESS.md) 与E0048/E0050。
 
 ## 1.2 项目来源与目标
 
@@ -110,7 +110,7 @@ sushiro-queue-predictor/
 │   ├── auth.py                        # 零网络本机鉴权声明时间检查
 │   ├── credentials.py                 # 显式私有上下文、整组重读与进程内修订检查
 │   ├── capture.py                     # 显式离线 HAR 检查与私有上下文原子生成
-│   └── cli.py                         # auth-status/capture-check/capture-import/只读查询/回放/报告
+│   └── cli.py                         # 文件/环境auth-status、捕获导入、只读查询与共享到期保护
 ├── assets/                            # 选定 Unbounded 白底 Logo、许可及历史标题
 │   ├── sushiwait-logo-light.svg        # 选定的白底红色像素刷痕矢量 Logo
 │   ├── sushiwait-logo-dark.svg         # 同字体深色版，README 随主题自动切换
@@ -122,11 +122,12 @@ sushiro-queue-predictor/
 │   └── logo-studies/                  # 其他试验仅保留本地，不随此次发布
 ├── config/pilot-stores.json            # 目录核对 3014/3004/2009；三店连续数据仍未验收
 ├── examples/fixtures/                 # 两份明确标记的合成样例，不是真实门店
-├── tests/                             # dev3：主执行者独立 212 项离线测试通过
+├── tests/                             # dev4：主执行者独立 226 项离线测试通过
 ├── docs/
 │   ├── PROJECT_HANDOVER.md             # 本文档：四个顶层板块
 │   ├── REFERENCE_REVIEW.md             # 参考项目源码研究及适用范围
 │   ├── DATA_ACCESS.md                  # 已实测状态、工具运行、鉴权与人工对照
+│   ├── AUTH_REFRESH.md                 # 正常更新证据、参数缺口与实现条件
 │   └── BRAND_DESIGN.md                 # 选定 Logo、构图与来源说明
 └── .github/
     ├── pull_request_template.md       # 提醒同步交接和记录真实验证
@@ -369,7 +370,7 @@ target_call_at = desired_arrival_at + call_offset_minutes
 
 ## 3.1 当前状态与已完成范围
 
-**当前已公开工具：`v0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)。** 该提交以 fbad39ddcd5b69d9eb0d86e03cdde6b549500a82（工具 dev2 加上 E0047 视觉/发布核验）为父，只改变15个工具、测试、配置和事实文档；42个远端文件与本机内容逐一相同，见 E0049。dev2 功能提交 8fe3b2d2bb5bee8d3326aae0455f8a79a4142f1a、树 b86fdc92ff270ec42af62eb9b2cb88f825a706c6 的 35 文件核对及同步见 E0026。dev3 固定 gateway 目录、离线捕获检查/原子导入、stores 私有文件与声明保护已实现；版本三处由主执行者同步为 dev3，212 项 / 0.431 秒离线检查通过，完整实证与修正见 E0028。dev3 已推送 main；没有 Release、版本标签或生产部署；营业时段三店单次查询和 60/30 秒短窗采样已完成，长期连续接入仍未验收。
+**当前本地工具：`v0.2.0.dev4`，226项离线检查通过、准备公开；已公开工具为`v0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)。** 该提交以 fbad39ddcd5b69d9eb0d86e03cdde6b549500a82（工具 dev2 加上 E0047 视觉/发布核验）为父，只改变15个工具、测试、配置和事实文档；42个远端文件与本机内容逐一相同，见 E0049。dev2 功能提交 8fe3b2d2bb5bee8d3326aae0455f8a79a4142f1a、树 b86fdc92ff270ec42af62eb9b2cb88f825a706c6 的 35 文件核对及同步见 E0026。dev3 固定 gateway 目录、离线捕获检查/原子导入、stores 私有文件与声明保护已实现；版本三处由主执行者同步为 dev3，212 项 / 0.431 秒离线检查通过，完整实证与修正见 E0028。dev3 已推送 main；没有 Release、版本标签或生产部署；营业时段三店单次查询和 60/30 秒短窗采样已完成，长期连续接入仍未验收。
 
 **独立视觉状态（E0044、E0046、E0047）**：用户已选定 adaptive-ink/ 中最后一款 Unbounded Regular 400 的浅色版并授权 GitHub 发布，正式文件为 assets/sushiwait-logo-light.svg。保留 3,471 像素红色刷痕、配色、外缘渐隐、字形与柔和黑白渐变；增加明确白底，GitHub README 已使用该选定资产，并按主题自动选择浅/深版本。Unbounded OFL 原文和来源同步；用户追加要求深色模式自动显示同字体深色版，正式文件 assets/sushiwait-logo-dark.svg 同步发布；其他字体与尺寸试验保留本地 LOGO_STUDIES.md，不作为此次公开资产。此视觉工作不修改数据代码、工具版本或接入验收结论，已随 main 43a2e5f0d01f9886c8599ff687d1865bc45d2f88 发布并核对实际 GitHub 显示，见 E0047。
 
@@ -378,8 +379,8 @@ target_call_at = desired_arrival_at + call_offset_minutes
 - 固定 legacy / miniapp_gateway profile：legacy 允许 crm stores/getStoreById，dev3 的 gateway 允许已捕获的 sapi getStoreById 与 stores；stores 固定 GET 参数 latitude=1、longitude=1、numresults=10000，没有任意参数/路径扩展。没有跨主机转发、失败回退、任意 URL 或内置凭证；保持完整 TLS、禁止重定向与环境代理、15 秒 I/O 超时和 2 MiB 响应上限，不自动重试。
 - stores 名称筛选、snapshot 单份观察、collect 1–3 店有界采样、明确 synthetic replay 和只读 report。collect 每店 1–120 轮、周期 30–3600 秒，按每轮开始时间调度；查询或本机预检失败停止整次采样。没有守护进程、多实例锁、全国批量、通知或全天调度。
 - dev3 的 `stores` / `snapshot` / `collect --credentials-file` 显式读取一个完整私有查询上下文，与 --anonymous 互斥；严格 schema 1、profile、revision、authorization 和 gateway 五个上下文键，不与环境凭证或环境上下文头混用。文件限 16 KiB，仅支持具备安全文件打开能力的 POSIX，拒绝祖先符号链接；直接父目录/文件须属当前用户、权限分别 0700/0500 与 0600/0400，文件必须为单硬链接常规文件。按每个 GET 和不超过 60 秒的等待检查重读，同进程内禁止 revision 倒退及同 revision 不同内容；完整变化后重建客户端，每个 GET 使用同一整组配置。revision 不是服务端续期证据，重启后不记得上一进程的 revision。
-- stores/snapshot/collect 在请求前解释声明 iat/exp，声明无效、已到期或剩余不超过 30 秒时本机停采；等待会在保护期限唤醒重读。该预检为本机保护，零网络、无虚构 HTTP 状态，未知到期不推默认 TTL。文件损坏、读取不安全或上下文错误也停采。本人正常启动已观察到新查询凭证来自 /api/1.3/initialize；正常参数生成和独立自动续期仍未实现，客户端未加入任何初始化 POST。环境模式缓存首次上下文，更新需重启；`auth-status` 仍只使用各 profile 的授权环境变量，不接受 --credentials-file。stores 支持文件且共用请求前保护，预检只输出安全停止分类，不打开数据库。
-- auth-status 按 profile 只解释授权环境变量的 iat/exp，零网络、不建客户端/CA/opener/数据库，不输出或保存其他 claims/token；声明未验签、未知保留 null。CLI exit 0 / ok 只表示检查成功，不等于凭证有效或服务端接受。
+- stores/snapshot/collect 在请求前解释声明 iat/exp，声明无效、已到期或剩余不超过 30 秒时本机停采；等待会在保护期限唤醒重读。该预检为本机保护，零网络、无虚构 HTTP 状态，未知到期不推默认 TTL。文件损坏、读取不安全或上下文错误也停采。本人正常启动已观察到新查询凭证来自 /api/1.3/initialize；正常参数生成和独立自动续期仍未实现，客户端未加入任何初始化 POST。环境模式缓存首次上下文，更新需重启；dev4的`auth-status --credentials-file`可零网络检查同profile完整私有文件，省略参数保持原环境模式。stores 支持文件且共用请求前保护，预检只输出安全停止分类，不打开数据库。
+- dev4的auth-status可按profile解释完整私有文件的iat/exp、revision、checked_at及共享30秒保护状态；不拼环境、不建客户端/CA/opener/数据库、不落盘，不输出其他claims/头值/文件路径。未知到期仍unknown；stop/unknown仍exit0表示检查完成，安全文件错误exit1。省略文件参数保持原环境输出；各次命令独立读取，不保存跨进程revision历史、不取得新凭证或证明服务器接受。
 - 完整四组字符串展示数组、字段存在状态、raw_wait 与未知单位；waitTimeCounter / waitTimeCap 严格保留非 bool 有符号整数及 -1 原值。缺失/null/invalid 分别记录，旧快照缺新键按 missing 比较；公共变化只说明可观察值/集合变化，不计算 ETA、全局叫号游标、等待桌数或真实过号率。
 - SQLite schema 2、快照 schema 1 与 report schema 2 保持；dev3 没有新增数据库迁移。既有 v1 写打开事务补 legacy、冲突或坏 JSON 回滚，只读 v1 虚拟 legacy 而不修改磁盘。成功/失败均按 store+data_origin+api_profile 隔离；预检失败只保存 checked_at 与安全分类/鉴权时间白名单，不保存请求头、文件路径或秘密。
 - report 输出 schema 2，单列实际 database_schema_version；全历史数量和记录时间范围与每组最新最多 10000 条的质量窗口分开。窗口按样本 ID 选取，SQL 在读取阶段将超过 2 MiB 的 payload 排除为无效，坏 JSON/未知字段形状容错。统计 request/normalization/preflight/unknown 失败、安全错误码、仅失败记录的 HTTP 分类、实际请求起始间隔与耗时、公共字段 presence 和四类数组变化。公共比较仅限同 run 的相邻有效成功，失败/坏记录/run 切换断链；实际请求间隔可包含请求/规范化失败，不含 preflight。first/last_received_at 为兼容记录时间别名，可能包含本机 checked_at，新增 first/last_recorded_at 和 record_time_semantics 明示此语义。来源新鲜度仍 unknown，统计不证明上游缓存或刷新频率。
@@ -436,7 +437,7 @@ target_call_at = desired_arrival_at + call_offset_minutes
 
 1. 最新到期后正常启动文件已完成有限检查，正常查询凭证来源及后续对应已确认；当前先研究初始化参数正常来源，不重复要求同条件手机捕获。原始文件和凭证只在本机私有目录，不进入公共仓库或模型。
 2. 已显式从同一成功详情导入完整上下文 revision 2，并经新的三店 collect 验证当前服务端接受。后续导入须重新检查当前声明保护、选定原始 index 与递增 revision；本机提交成功与服务器实际接受分别记录，不自动选择、补头或续期。
-3. 三店单份详情与目录查询已完成，固定 profile 路线保持；主库 18 成功/0 失败。auth-status 仍查环境，文件模式由 stores/snapshot/collect 请求前检查；未知到期保持未知，接手时不能沿用过去 importable 值。
+3. 三店单份详情与目录查询已完成，固定 profile 路线保持；主库 18 成功/0 失败。auth-status新增显式文件检查，省略文件参数仍查环境；stores/snapshot/collect请求前使用同一声明保护规则；未知到期保持未知，接手时不能沿用过去 importable 值。
 4. 营业期明确点击底部刷新，对照完整号码/后缀、堂食/预约数组、签到桌数、字段单位/-1、缺失状态与本机/页面时间。停业 CLOSED/OFFLINE_CLOSED 和空展示不证明无人排队或源新鲜度。
 5. 每店 60 秒 / 2 轮和 30 秒 / 2 轮已完成；实际请求起始间隔分别为 59.782–59.992 秒、29.987–30.006 秒。继续用 report 核对有限窗口/字段变化，区别本机停采与请求失败，均首错停止、不盲目重试；不生成 ETA/真实过号率。
 6. 覆盖正常上下文更新、到期/坏文件/限流/TLS/网络失败与停止结果，连续观察 7–14 天形成初步可靠性报告；缺异常样本明确未知。同库重启只续写历史，不恢复未完成任务游标/剩余轮数，仍无全天调度。
@@ -1075,3 +1076,16 @@ Git 提交/发布/部署证据（若有）：
 - **公开范围**：版本三处升级0.2.0.dev3；新增src/sushiwait/capture.py、tests/test_capture.py、tests/test_capture_cli.py，更新client/cli、test_client/test_storage_cli、pilot-stores、README/AGENTS/DATA_ACCESS/本文。支持固定gateway目录、stores完整私有上下文和到期保护、离线capture-check与显式原子capture-import；没有新增初始化POST、登录码/签名生成或自动续期。
 - **验证与同步**：212项/0.431秒代码检查沿用E0028，代码内容未再变化；三店60/30秒及新revision2后的18成功0失败是实际本机验证，不能与离线测试混为一谈。发布前后42个文件隐私检查无已知敏感值命中，32个相对链接、四顶层板块/R01–R24/Q01–Q12与E0001–E0048历史完整，git diff检查通过。实际成功后更新README/AGENTS/DATA_ACCESS/本文当前状态为已公开dev3，并为REFERENCE_REVIEW补日期限定，避免旧研究结论被当作当前未验证目录；此次状态/发布证据作为下一份仅文档审计增量，非第二次代码发布。该五文档增量的33个相对链接和完整历史复核通过，实际文档提交身份由Git记录查得。
 - **剩余与下一步**：正常新查询凭证来源已确认且显式更新后电脑查询成功，但独立取得初始化登录码、签名/设备参数及自动续期仍未验证。下一步核对正常参数来源与正式接入可行性，再推进连续采集、字段现场对照、电脑分批门店核验及预测基线；当前不要求重复手机刷新。没有全国完整覆盖、可靠ETA、用户前端、通知、全天调度或服务器运行；完整v1.0需求保留，不以本次开发版代替验收。
+
+
+### E0050 — 2026-10-03 — 续期参数有限研究与dev4私有文件状态检查
+
+- **执行者、动机与范围**：Codex主执行者按用户“好的，咱们继续”推进独立更新的证据缺口及R21采集保护。不操作手机/微信/Surge，不扩大解密域名，不请求寿司郎接口，不重放初始化POST。只在本机处理四份已明确交付的私有HAR白名单字段与相等性，没有搜索本机缓存、输出秘密或账号值。
+- **新的有限证据**：本轮long_token仅作本机声明解析，configured=true/token_kind=opaque/iat与exp均null/expiry_source=unknown；与四份HAR中的查询授权均不相等。gateway initialize另一凭证的整数expiry与捕获时刻加expires_in86400相符，仍与查询Bearer不同、权限/用途待核验；不把字段名当可长期更新或换用24小时凭证。未猜签名、试省参数或生成微信登录码。
+- **公开资料研究**：对实际SAPI主机与initialize、sushiro/long_token、参考仓库long_token/js_code作有界检索，GitHub两次代码搜索各0条，网页未提供可核验寿司郎参数生成协议；这不证明协议不存在或永远不能独立更新。官方腾讯api-typings锁定6092df9100c73b84e140c20b9a42a8e8799e0660，实际读取LoginSuccessCallbackResult的5分钟声明；没有将寿司郎字段来源或一次性使用推断写成实证。Tencent OneID页面本轮读取超时，不依赖第三方社区镜像；TCSAS是不同宿主体系，不当作微信/寿司郎协议。创建AUTH_REFRESH.md保存证据、未知项和实现进入条件，尚未取得可实现的独立更新协议。
+- **实际实现**：cli新增auth-status --credentials-file，复用完整私有文件安全读入/profile验证，不回退环境；读取/验证文件之后取当前时间，只输出revision、checked_at、安全iat/exp声明及authorization_guard（stop/no_declared_stop/unknown），network_performed=false/server_acceptance=unverified。提取共享_authorization_stop_code供QuerySession与状态检查使用，既有30秒/过期/乱序保护语义保持。stop/unknown仍exit0表示检查成功，不能作为可请求结论；不安全/缺失/损坏/错profile文件exit1、固定安全错误。省略参数原环境行为和输出保持，未增定时器、通知或续期提供方。
+- **文件与版本**：VERSION/pyproject/src版本一致为0.2.0.dev4；新增tests/test_auth_status_file.py及docs/AUTH_REFRESH.md，修改cli、README/AGENTS/DATA_ACCESS/本文。无数据库迁移、初始化POST、前端或业务操作。真实查询还是既有固定只读路由与本人正常上下文。
+- **实际检查**：新增14项/0.061秒通过，包含零网络/CA/客户端/数据库/环境凭证、状态脱敏、31/30/0秒及小数保护、未知/乱序声明、安全文件错误、profile隔离、原子替换后新命令重读、读取后时钟、文件不变。全套226项/0.466秒OK，原采样/导入/报告回归通过；--version为dev4、--help显示新增参数，git diff --check通过。本轮有代码变化才运行新全套，不冒称212项历史测试是新结果。
+- **真实私有文件检查**：21:19:14.415（Asia/Shanghai）正式auth-status读取现有revision2，声明20:32:49–21:32:49、remaining814秒、guard=no_declared_stop、未验签、exit0。对client_for/客户端/CA/opener/socket/数据库设置失败守卫，合计0调用，SUSHIWAIT环境凭证读取0，私有文件逐字和主库哈希不变；本机检查不是服务器接受验证。主库仍18成功0失败，不生成新采集记录。
+- **公开与交接检查**：44个计划公开文件与四份明确私有HAR中的14个已知敏感值比较无命中，未发现JWT形状或个人绝对路径，未带入HAR/数据库/证书/字体原包/符号链接。38个相对文档和图片链接在计划公开树内可解析；四顶层板块、R01–R24/Q01–Q12、E0001–E0049原历史和版本一致，git diff --check通过。私有文件保持revision2与0700/0600；扫描不保证识别所有未知秘密。
+- **下一步与发布**：当前参数正常来源与签名合约不足以实现独立自动续期，保持人工显式更新边界；不宣布“必须开微信”或“服务器永远不能续期”。优先核对受支持的更新方式、登录码应用身份及正常生成、设备/签名协议，再做连续跨到期实证；其他字段/采集故障和电脑有界门店验证可独立推进。本次不要求重复手机刷新；dev4准备仅公开代码、测试和证据文档，未选视觉草稿、HAR与凭证保持私有/本地。发布结果随后实际核验记录，没有Release、标签、部署或v1.0验收。

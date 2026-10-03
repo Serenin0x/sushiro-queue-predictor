@@ -1,6 +1,6 @@
 # 实时数据接入验证手册
 
-当前已公开工具为 `0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)，42个远端文件与本机逐一核对，见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0049；保留已选浅/深Logo。dev2 的 35 文件发布核对见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0026；dev3 新增显式离线 capture-check/capture-import、捕获证实的固定 gateway 目录和 stores 私有文件/到期保护，主执行者 **212 项 / 0.431 秒**离线检查通过，独立复核的时钟问题已修，见 E0028。本轮工具与事实文档已推送main，不发布未选定的品牌草稿；没有 Release、服务器、小程序前端或预测服务，仍是接入验证阶段。
+当前本地为`0.2.0.dev4`、226项/0.466秒检查通过、准备公开；已公开工具为 `0.2.0.dev3`，功能发布提交为 [78daceca853574886de8ce77a53ad2b9b80dc8fb](https://github.com/Serenin0x/sushiro-queue-predictor/commit/78daceca853574886de8ce77a53ad2b9b80dc8fb)，42个远端文件与本机逐一核对，见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0049；保留已选浅/深Logo。dev2 的 35 文件发布核对见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0026；dev3 新增显式离线 capture-check/capture-import、捕获证实的固定 gateway 目录和 stores 私有文件/到期保护，主执行者 **212 项 / 0.431 秒**离线检查通过，独立复核的时钟问题已修，见 E0028。dev3已推送main，dev4新增私有文件零网络auth-status和共享到期保护，当前准备另行公开，不发布未选定的品牌草稿；没有 Release、服务器、小程序前端或预测服务，仍是接入验证阶段。
 
 当前营业时段实证：电脑目录返回147条，三店60/30秒各两轮短窗完成。旧凭证到期后，本人正常启动HAR观察到 /api/1.3/initialize 返回新查询凭证，与后续Bearers本机精确匹配；固定单店候选显式导入revision2后，20:41三店电脑各新增一份成功详情，主库共18成功0失败，每店6份。未验签声明为20:32:49–21:32:49、本机保护21:32:19；接手时重新检查，不能沿用历史importable或成功状态。初始化登录码/签名/设备参数的正常生成与独立自动续期仍待验证，尚不能全天无人值守。历史到期拒绝/零请求保留；新结果不推全国完整覆盖或源新鲜度。
 
@@ -141,14 +141,19 @@ E0045当时20:26镜像连接暂停，随后本人交付到期后正常启动文�
 
 2026-10-03 新样本声明为 01:13:05 签发、02:13:05 到期，首次接手 02:13:56 已晚51秒；捕获当时 HTTP200 不等于接手时可用。本轮没有用失效值试探服务端，也没有新运行配置。第三份声明为19:17:02–20:17:02、第四份为20:32:49–21:32:49，均曾显式导入并通过电脑查询；第四份正常来源已观察到初始化响应。四份声明相差3600秒仍不能推固定一小时、精确服务器边界或独立自动更新。
 
-纯本机零网络 auth-status 已实现，并通过此前 dev1 真实配置的安全本机核验；当前 dev3 全套 212 项离线检查通过。按 --api-profile 只读对应授权环境变量（legacy 使用 SUSHIWAIT_QUERY_AUTHORIZATION，miniapp_gateway 使用 SUSHIWAIT_GATEWAY_AUTHORIZATION），不读取其他上下文头/CA，不构造网络客户端/opener/数据库，不联网或落盘。只选取和解释 iat/exp，不输出或保存其他 claims/token。已验证运行方法：
+纯本机零网络auth-status已实现。dev4新增--credentials-file，严格读取显式整组私有文件，不补环境，沿用profile/schema/权限验证；文件读取后取当前时间，并与stores/snapshot/collect共用30秒声明保护。省略文件参数保持原环境模式及输出，只读对应授权变量，不读取其他头或CA。
 
 ```sh
+PYTHONPATH=src python3 -m sushiwait auth-status --api-profile miniapp_gateway --credentials-file "$SUSHIWAIT_CONTEXT_FILE"
 PYTHONPATH=src python3 -m sushiwait auth-status --api-profile miniapp_gateway
 PYTHONPATH=src python3 -m sushiwait auth-status --api-profile legacy
 ```
 
-输出仅包含 ok、api_profile、configured、token_kind、declared_issued_at、declared_expires_at、declared_lifetime_seconds、remaining_seconds、expired、expiry_source、signature_verified。UTC 声明时间与实际请求时间分别理解；此前 dev1 本机实测声明签发 2026-10-02T11:44:37Z、到期 2026-10-02T12:44:37Z、lifetime 3600、remaining 0 / expired true、expiry_source=unverified_claim / signature_verified=false，授权值和裸 token 不在输出。
+文件模式额外输出credential_source=private_file、credential_revision、checked_at、network_performed=false、server_acceptance=unverified，以及authorization_guard.state/stop_reason/margin_seconds。state为stop、no_declared_stop或unknown；声明剩余不超过30秒为auth_expiring，已过期为auth_declared_expired，乱序为auth_claims_invalid。no_declared_stop只表示当时没有声明保护原因，不保证服务端接受；unknown不推TTL或无限有效。各次命令独立读取文件，不保存跨进程revision历史；不写文件/数据库、不登录或续期。
+
+**exit0/ok=true仅表示检查完成，stop/unknown也返回exit0**；文件缺失/损坏/权限不安全/profile不符返回固定安全错误/exit1，不能回退环境。完整说明见[凭证更新证据](AUTH_REFRESH.md)。dev4新增14项并通过全套226项/0.466秒；21:19:14.415真实revision2检查返回remaining814秒/no_declared_stop，客户端/CA/opener/socket/数据库0调用、环境凭证读取0，私有文件和主库未改。接手时当下重查，不能沿用该剩余时长。
+
+环境模式仍只含原ok、api_profile、configured、token_kind、declared_issued_at、declared_expires_at、declared_lifetime_seconds、remaining_seconds、expired、expiry_source、signature_verified字段。UTC声明与实际请求时间分别解释，未验签声明不当服务端保证；此前dev1环境模式真实核验保持原编辑历史。
 
 iat/exp 独立解释：缺 iat 仍可显示 exp/剩余，缺 exp 只显示签发，未知不推默认 TTL；日期乱序时可显示声明，但计算值为 null、expiry_source=invalid_claim。缺失、opaque 或无效输入的未知字段仍为 null，不当 0 或已失效。输入限 8 KiB ASCII，严格校验重复键、非有限数与 base64/padding，剩余时长向下取整且不小于零。CLI exit 0 / ok 只表示本机检查完成，缺失/opaque/无效/已过期也可 exit 0，不能据退出状态认定授权有效。
 
@@ -200,7 +205,7 @@ PYTHONPATH=src python3 -m sushiwait report --db data/local/demo.sqlite3
 
 ### 显式私有查询上下文文件（dev3）
 
-`--credentials-file` 由 **stores、snapshot 和 collect** 支持，与 --anonymous 互斥。不传文件时仍用上表相互隔离的环境变量；该模式缓存本次进程初始查询上下文，修改环境需重启。auth-status 仍只读授权环境变量、不接受文件参数，其结果不会自动对应到另一个文件。文件模式不从环境补授权或五项上下文头，只有可信 CA 的 `SUSHIWAIT_CA_FILE` 继续由本机环境配置。
+`--credentials-file` 由 **stores、snapshot、collect及dev4的auth-status** 支持，查询命令与--anonymous互斥。不传文件时仍用上表相互隔离的环境变量；查询环境模式缓存本次进程初始上下文，修改环境需重启。auth-status指定文件只检查该整组，省略文件只检查环境，两种来源不拼接；状态检查不读取CA。网络查询的文件模式不从环境补授权或五项上下文头，只有可信CA的`SUSHIWAIT_CA_FILE`继续由本机环境配置。
 
 文件由用户本人已授权的正常查询流程在本机受控生成。采集命令只读取显式上下文文件，不寻找登录态或猜 refresh；capture-import 可按下节规则显式离线生成该文件。不要将原始 HAR 当作这个 JSON 文件，不把任何头值粘贴到聊天、命令参数或仓库。以下只描述字段契约，不提供令牌示例：
 
@@ -293,7 +298,7 @@ PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --cred
 PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --store-id 3004 --interval 30 --samples 2 --db data/local/gateway-pilot.sqlite3
 ```
 
-上述文件命令只有在本机已经准备好完整私有文件后才能执行；省略 --credentials-file 可继续使用对应 profile 的环境模式，但更新环境需重启。dev3继承的重读/到期保护已离线验证，2026-10-03 新鲜上下文下的三店60/30秒短窗实测已完成；运行中换成另一份新上下文、正常更新来源与完整实际有效边界仍须另行记录，不靠连续重启或失效值重试代替正常更新验证。Ctrl-C 返回 interrupted / exit 130；修正本机问题或取得正常更新后可用同一 --db 继续追加历史，每次运行有新 run_id、轮数重新开始，**不能恢复上次未完成任务的采样游标/剩余轮数**。
+上述文件命令只有在本机已经准备好完整私有文件后才能执行；省略 --credentials-file 可继续使用对应 profile 的环境模式，但更新环境需重启。dev3继承的重读/到期保护已离线验证，2026-10-03 新鲜上下文下的三店60/30秒短窗实测已完成；运行中换成另一份新上下文、独立正常参数生成/自动更新与完整实际有效边界仍须另行记录，不靠连续重启或失效值重试代替正常更新验证。Ctrl-C 返回 interrupted / exit 130；修正本机问题或取得正常更新后可用同一 --db 继续追加历史，每次运行有新 run_id、轮数重新开始，**不能恢复上次未完成任务的采样游标/剩余轮数**。
 
 ### 旧 legacy 诊断与命令（历史保留）
 
@@ -333,13 +338,13 @@ PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --cred
 
 命令输出 JSON；数据库仅保存规范化公共观察与安全失败分类，文件在 `data/local/`，默认 `sushiwait.sqlite3`。该目录被 Git 排除。posix 环境新目录 0700、数据库 0600；拒绝符号链接数据库，未知数据库版本不覆盖。
 
-- 规范化快照 `schema_version=1` 保持；它与数据库和 report 的版本独立。SQLite `PRAGMA user_version=2`，样本保存 run_id、store_id、data_origin、api_profile、received_at、ok 与规范化 JSON；当前 dev3 全套 212 项离线检查通过；此前实际 dev1 CLI 使用 schema 2 数据库成功保存。本轮没有新增数据库迁移。
+- 规范化快照 `schema_version=1` 保持；它与数据库和 report 的版本独立。SQLite `PRAGMA user_version=2`，样本保存 run_id、store_id、data_origin、api_profile、received_at、ok 与规范化 JSON；当前dev4全套226项离线检查通过；此前实际dev1 CLI使用schema2数据库成功保存。本轮没有新增数据库迁移。
 - 观察、目录项与变化输出顶层 api_profile，仅允许 legacy / miniapp_gateway，不保存任意来源 URL；端点固定映射由客户端负责。compute_change 只有同店、同真实/合成来源、同 API profile 才比较，报告也按三者分组。
 - 写打开旧 v1 数据库在显式事务中为旧成功/失败行补 legacy 列与 JSON 标签，保留行 ID、run_id 与内容；冲突 profile 或坏 JSON 拒绝并回滚。只读打开 v1 不迁移，使用虚拟 legacy 视图；report 的 schema_version=2 表示输出格式，database_schema_version 单独反映磁盘库版本。
 - normalized 字段分别记录 present / missing / null / invalid。缺失不会变成 0，缺失队列不会变成空数组。
 - 保留四类 groupQueues 的完整字符串数组、顺序与重复情况，不将展示最大号码当作全局游标。
 - `raw_wait` 与 `groupQueuesCount` 单位均为 unknown；未经小程序/现场对照，不解释为分钟、人数或已签到桌数。waitTimeCounter / waitTimeCap 另按有符号整数保存 presence/value/unit=unknown，拒绝 bool，保留 -1 等原值；不猜测 -1 的禁用含义或正值的分钟单位。
-- waitTimeCounter / waitTimeCap 的缺失、null、invalid 分别记录，公共哈希与标量变化覆盖两字段；旧快照缺新键按 missing/None 比较，不当 0、不修改历史 JSON。有符号等待字段与本机 auth-status 的既有回归保持；当前 dev3 全套 212 项通过，快照 schema_version 仍为 1。
+- waitTimeCounter / waitTimeCap 的缺失、null、invalid 分别记录，公共哈希与标量变化覆盖两字段；旧快照缺新键按 missing/None 比较，不当 0、不修改历史 JSON。有符号等待字段与本机auth-status的既有回归保持；当前dev4全套226项通过，快照schema_version仍为1。
 - `request_started_at`、`received_at`、`elapsed_ms` 是本地请求时间；`source_updated_at=null`，`upstream_freshness=unknown`。
 - content_hash 只作用于规范化公共字段；相同 hash 仅表示所保存字段相同，不能证明缓存或源新鲜度。
 - 未知字段记录安全键名清单；未知对象、个人字段值和原始响应不落库。如果以后发现有用字段，再核实语义、权限并加入白名单。
