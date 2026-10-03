@@ -1,6 +1,6 @@
 # 接手与协作规则
 
-任何人或 AI 开始工作前，先完整阅读 `docs/PROJECT_HANDOVER.md` 和 `docs/REFERENCE_REVIEW.md`。README 使用全大写展示名 `SUSHIWAIT`，仓库名保持 `sushiro-queue-predictor`。按用户最新要求详细、吸引人地介绍产品价值与功能，明确当前能力和未来目标；简写技术、版本与更新，并链接完整交接文档。README 标题使用开放许可 Montserrat Light 的全大写轮廓 SVG，浅色/深色资产与字体来源见 assets/NOTICE.md；这是文字标题，不是独立 Logo。变更标题时同步资产、来源和交接记录。每次能力或版本变化都同步改进 README 文案与实际状态。
+任何人或 AI 开始工作前，先完整阅读 `docs/PROJECT_HANDOVER.md` 和 `docs/REFERENCE_REVIEW.md`。README 使用全大写展示名 `SUSHIWAIT`，仓库名保持 `sushiro-queue-predictor`。按用户最新要求详细、吸引人地介绍产品价值与功能，明确当前能力和未来目标；简写技术、版本与更新，并链接完整交接文档。README 顶部使用用户选定的 Unbounded Regular 400 浅/深色红色像素刷痕 SVG Logo，README 用 picture / prefers-color-scheme 自动切换，正式资产为 assets/sushiwait-logo-light.svg 和 assets/sushiwait-logo-dark.svg，来源和开放许可见 assets/NOTICE.md 与 assets/Unbounded-OFL.txt。保持柔和黑白字内渐变、边缘渐隐与无描边。变更 Logo 时同步资产、来源和交接记录。每次能力或版本变化都同步改进 README 文案与实际状态。
 
 ## 必须维护的事实来源
 
@@ -15,7 +15,7 @@
 - 当前为 `0.2.0.dev2` 接入验证阶段。官方小程序的新接口为固定 `sapi.sushiro.com.cn/gateway/wechat/api/2.0/getStoreById`；西单大悦城店 ID 3004 已通过正常请求、响应和实际 CLI 快照核对。2026-10-02 20:43 查询成功，20:45 返回 401，凭证本机解析的 exp 声明为 20:44:37（未验证 JWT 签名）。已停止采样，不能重用失效凭证盲目重试或猜续期端点。新增私有上下文更新、到期保护与采集质量统计经 166 项离线检查；必要请求头的单项作用、正常授权续期、字段单位与持续刷新仍未验收。没有预测服务、自动取号、重排或服务器部署。运行说明见 `docs/DATA_ACCESS.md`。
 - 本轮试点：中关村大融城店、西单店、成都世豪店。西单真实 ID 3004 已回填并注明单店核验范围；另外两店 ID 保留 null，合成样例 ID 900001 不可拿来访问真实门店。
 - 使用固定 `legacy` / `miniapp_gateway` 接口配置，凭证按配置隔离，不自动换主机、回退或转发旧鉴权；新接口仅支持实际捕获的单店 GET，目录端点尚未发现。快照、失败记录和历史比较必须保留 api_profile，不能混合相同店号的不同接口数据。
-- 前端在真实实时数据字段与刷新能力验证齐备后开发；Logo 和动态图文介绍在后期制作。不得因规划中出现前端技术而提前开始实现。
+- 前端在真实实时数据字段与刷新能力验证齐备后开发。品牌与 GitHub README 视觉由独立任务推进，实时采集与预测由原任务处理。用户于 2026-10-03 选定最后一款 Unbounded Regular 400 的白色背景 Logo 并授权推送 GitHub；正式 SVG 保持居中 SUSHIWAIT、斜向红色像素刷痕、局部橙黄、外缘渐隐、较小边缘像素与柔和黑白字内渐变，无描边。正式资产和来源见 docs/BRAND_DESIGN.md、assets/NOTICE.md 及 assets/Unbounded-OFL.txt。原 Montserrat 标题保留历史；用户追加要求深色模式显示同字体深色版，因此两份 Unbounded 浅/深 SVG 一起发布；其他字体和比例试验只保留本地。此次视觉发布不包含本地 dev3 数据代码、配置或版本变化。不得因规划中出现前端技术而提前开始实现。
 - 公共门店查询、本人票据、预约、即时排队分别建模。香港与大陆是不同适配器，不能仅改地区参数就宣称适配成功。
 - 保存完整展示号码数组及字段缺失信息；有限展示号码的最大值不能当作全局叫号游标。不能把号码差当作等待桌数，也不能把未知字段默认为零。
 - 用户要求的 60 秒 / 30 秒采集目标与上游更新频率分别记录；请求成功不代表数据新鲜。过期或错误数据不能解释为无需等待。

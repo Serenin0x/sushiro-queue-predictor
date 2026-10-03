@@ -1,7 +1,7 @@
-<h1>
+<h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/sushiwait-title-dark.svg">
-    <img src="assets/sushiwait-title-light.svg" alt="SUSHIWAIT" width="480" height="85">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/sushiwait-logo-dark.svg">
+    <img src="assets/sushiwait-logo-light.svg" alt="SUSHIWAIT" width="840" height="308">
   </picture>
 </h1>
 
@@ -46,7 +46,7 @@
 
 后续规划使用 FastAPI、PostgreSQL、Redis 后台调度及统计与分位数预测。大语言模型用于提取有来源的商场活动、营业调整等外部事件，并辅助解释预测；其实际收益将通过回测验证。这些组件尚未实现。
 
-前端在实时数据准备充分后开发；Logo 和动态图文介绍安排在后期。
+前端在实时数据准备充分后开发。Logo 已选定 Unbounded 的红色像素刷痕矢量版，随 GitHub 浅色／深色模式自动切换；设计与字体来源见 [Logo 说明](docs/BRAND_DESIGN.md)，README 横幅与后续动态图文继续按独立视觉任务推进。
 
 ## 版本说明
 
@@ -54,6 +54,7 @@
 
 ## 更新说明
 
+- **2026-10-03 · Logo**：采用 Unbounded 浅／深色矢量 Logo，随 GitHub 主题自动切换；保留红色像素刷痕、边缘渐隐和柔和黑白文字渐变；同步字体许可及来源说明。
 - **2026-10-03 · v0.2.0.dev2**：新增私有查询上下文的运行中整组更新、声明到期前保护停采，以及请求间隔、错误分类和公共字段变化报告；166 项离线检查通过。标题改用开放许可的 Montserrat Light 轮廓 SVG，适配浅色与深色模式。
 - **2026-10-02 · v0.2.0.dev1**：发现并适配官方小程序实际查询地址，核对西单店 ID 与展示队列；新增来源隔离和本机凭证状态检查；观察到凭证声明到期后的 401，将正常授权续期列为下一步重点；补充同步叫号页面目标并改进产品介绍。
 - **2026-10-02 · v0.2.0.dev0**：实现只读验证工具、离线回放和本地存储；完成匿名接口连通测试，带有效查询鉴权的真实采集待验证。
