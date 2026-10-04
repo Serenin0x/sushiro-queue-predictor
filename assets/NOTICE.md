@@ -28,3 +28,14 @@ SUSHIWAIT 的全大写标题使用 **Montserrat Light**，字重 300；字体作
 标题由 macOS CoreText 以 100 点排版 SUSHIWAIT，提取各字形及位置，用 CGPath 合并轮廓，取路径边界并四周留 18 点，输出为纯路径 SVG。浅色版使用 #111827，深色版使用 #f4f4f5；两份路径与 viewBox 相同。没有嵌入或分发字体文件，无需阅读者安装字体。OFL 对字体的许可要求不适用于用字体创作的文档；保留本说明和原文用于来源记录。
 
 旧版 README 曾使用 picture 的 prefers-color-scheme 条件切换这两份标题。它们作为历史资产保留，当前 README 已采用上方的 Unbounded 像素刷痕 Logo。正文样式继续由 GitHub 渲染。
+
+
+## README 用餐体验矢量版面
+
+2026-10-04 用户确认无框刷痕设计并授权同步 GitHub。正式版面为 [浅色](sushiwait-experiences-light.svg)、[深色](sushiwait-experiences-dark.svg)、[手机浅色](sushiwait-experiences-light-mobile.svg) 与 [手机深色](sushiwait-experiences-dark-mobile.svg)。
+
+六项标题、说明和像素笔触来自已确认的对话设计；笔触沿用正式 Logo 的红色、局部橙黄与外围渐隐，每版含 776 个装饰像素。文字保留为 SVG 文本，使用阅读设备的本地系统字体，不嵌入或分发字体文件。版面使用本项目原创排版与笔触，不含脚本、位图或外部资源。
+
+六个小图标为 Lucide 的 clock-3、calendar-days、list-ordered、bell、chart-no-axes-combined、ticket。路径从实际预览运行时的图标提取；官方来源为 [lucide-icons/lucide](https://github.com/lucide-icons/lucide)，许可文本锁定 [500620a2e8123f8d1db191538886dc0c223f69a9](https://github.com/lucide-icons/lucide/blob/500620a2e8123f8d1db191538886dc0c223f69a9/LICENSE)，完整保留于 [Lucide-LICENSE.txt](Lucide-LICENSE.txt)。Lucide 采用 ISC；其中由 Feather 派生的图标另含 Cole Bemis 的 MIT 许可，保留官方完整归属。此处固定的是许可来源版本，不将预览运行时冒称为该提交构建。
+
+README 通过 picture 的浅深主题及 600px 视口条件选图；桌面两列三行、手机单列，详细业务规则仍为可展开的原生文本，图像 alt 含六项体验说明。此展示不代表规划功能已经上线。

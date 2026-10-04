@@ -2,6 +2,8 @@
 
 任何人或 AI 开始工作前，先完整阅读 `docs/PROJECT_HANDOVER.md` 和 `docs/REFERENCE_REVIEW.md`。README 使用全大写展示名 `SUSHIWAIT`，仓库名保持 `sushiro-queue-predictor`。按用户最新要求详细、吸引人地介绍产品价值与功能，明确当前能力和未来目标；简写技术、版本与更新，并链接完整交接文档。README 顶部使用用户选定的 Unbounded Regular 400 浅/深色红色像素刷痕 SVG Logo，README 用 picture / prefers-color-scheme 自动切换，正式资产为 assets/sushiwait-logo-light.svg 和 assets/sushiwait-logo-dark.svg，来源和开放许可见 assets/NOTICE.md 与 assets/Unbounded-OFL.txt。保持柔和黑白字内渐变、边缘渐隐与无描边。变更 Logo 时同步资产、来源和交接记录。每次能力或版本变化都同步改进 README 文案与实际状态。
 
+README 的“正在奔向的用餐体验”使用用户确认的无框像素刷痕版面：assets/sushiwait-experiences-{light,dark}.svg 及对应 -mobile.svg；picture 按浅深主题和 600px 视口切换，六项标题/说明与尚未上线状态保持，详细规则保留在原生 details 中。保留标题下缘的最终刷痕位置、红色为主与局部橙黄/渐隐；图标来源和完整许可见 assets/NOTICE.md 与 assets/Lucide-LICENSE.txt。视觉发布记录见交接文档，数据功能与版本由原任务独立更新。
+
 ## 必须维护的事实来源
 
 - `docs/PROJECT_HANDOVER.md` 是需求、原则、项目状态和交接的主要事实来源。它必须保留四个一级板块：项目背景、项目要求原则、项目版本迭代信息、项目编辑更改历史。
