@@ -39,3 +39,9 @@ SUSHIWAIT 的全大写标题使用 **Montserrat Light**，字重 300；字体作
 六个小图标为 Lucide 的 clock-3、calendar-days、list-ordered、bell、chart-no-axes-combined、ticket。路径从实际预览运行时的图标提取；官方来源为 [lucide-icons/lucide](https://github.com/lucide-icons/lucide)，许可文本锁定 [500620a2e8123f8d1db191538886dc0c223f69a9](https://github.com/lucide-icons/lucide/blob/500620a2e8123f8d1db191538886dc0c223f69a9/LICENSE)，完整保留于 [Lucide-LICENSE.txt](Lucide-LICENSE.txt)。Lucide 采用 ISC；其中由 Feather 派生的图标另含 Cole Bemis 的 MIT 许可，保留官方完整归属。此处固定的是许可来源版本，不将预览运行时冒称为该提交构建。
 
 README 通过 picture 的浅深主题及 600px 视口条件选图；桌面两列三行、手机单列，详细业务规则仍为可展开的原生文本，图像 alt 含六项体验说明。此展示不代表规划功能已经上线。
+
+## README 原有强调词
+
+`readme-labels/` 的透明 SVG 只显示能力列表和更新列表原有的强调词。浅色沿用 Logo 深红 #99081c，深色沿用体验标题浅红 #ffb4a4；无底色、边框、刷痕、图标、脚本或外部资源。文字使用阅读设备本地系统字体，不嵌入或分发字体文件；完整词句同时保留在 README 的 img alt 和 SVG title/text 中。描述、链接及章节仍为原生 Markdown/HTML，两个三级标题保持中性纯文字。
+
+资产由 [render_readme_labels.py](../scripts/render_readme_labels.py) 按当前 README 的原有强调词生成；浅深配对使用 picture 条件切换。生成器离线运行并核对原文和结构；后续事实文案由主线继续独立维护。
