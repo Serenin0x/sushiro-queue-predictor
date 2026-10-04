@@ -22,6 +22,7 @@ from .observations import compute_change, normalize_directory, normalize_snapsho
 from .outcomes import OutcomeError, OutcomeStore, public_summary, read_episode
 from .localpaths import local_data_directory
 from .storage import SnapshotStore
+from .signals import SignalError, signal_report
 from .transport import sanitize_transport
 
 DEFAULT_DB = str(local_data_directory() / "sushiwait.sqlite3")
@@ -350,6 +351,15 @@ def build_parser() -> argparse.ArgumentParser:
     calendar.add_argument("--as-of", required=True, help="使用信息的当时，带显式时区和秒")
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
+    signals = commands.add_parser("signal-report", help="只读比较展示集合的时间窗口；不推真实过号率")
+    signals.add_argument("--db", required=True)
+    signals.add_argument("--store-id", required=True)
+    signals.add_argument("--api-profile", choices=API_PROFILES, required=True)
+    signals.add_argument("--data-origin", choices=("live", "fixture", "synthetic"), required=True)
+    signals.add_argument("--as-of", required=True, help="分析当时，必须有秒和显式时区")
+    signals.add_argument("--window-seconds", type=int, default=120)
+    signals.add_argument("--max-gap-seconds", type=int, default=90)
+    signals.add_argument("--sample-limit", type=int, default=10000)
     return parser
 
 
@@ -364,9 +374,9 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in ("snapshot", "collect", "context-bridge"):
+    if args.command in ("snapshot", "collect", "context-bridge", "signal-report"):
         try:
-            if args.command == "snapshot":
+            if args.command in ("snapshot", "signal-report"):
                 args.store_id = canonical_store_id(args.store_id)
             else:
                 args.store_id = list(dict.fromkeys(canonical_store_id(s) for s in args.store_id))
@@ -384,6 +394,20 @@ def main(argv: list[str] | None = None) -> int:
             emit({"ok": False, "error_code": "invalid_credential_wait_bounds"})
             return 2
     try:
+        if args.command == "signal-report":
+            try:
+                with SnapshotStore(args.db, read_only=True) as db:
+                    emit({"ok": True, **signal_report(db, args.store_id,
+                        data_origin=args.data_origin, api_profile=args.api_profile,
+                        as_of=args.as_of, window_seconds=args.window_seconds,
+                        max_gap_seconds=args.max_gap_seconds, sample_limit=args.sample_limit)})
+                return 0
+            except (SignalError, CalendarError) as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+            except (OSError, sqlite3.Error):
+                emit({"ok": False, "error_code": "signal_database_error", "network_performed": False})
+                return 1
         if args.command == "date-features":
             try:
                 emit({"ok": True, **date_features(args.at, as_of=args.as_of)})

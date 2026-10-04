@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "outcome-import", "outcome-report", "date-features")):
+            ("capture-import", "context-bridge", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     with tempfile.TemporaryDirectory() as directory:
         database = str(Path(directory).resolve() / "synthetic.sqlite3")
@@ -43,6 +43,13 @@ def check() -> None:
             with contextlib.redirect_stdout(output):
                 if main(["report", "--db", database]) != 0:
                     raise SystemExit("installed_report_failed")
+            group = json.loads(output.getvalue())["groups"][0]
+            signal_output = io.StringIO()
+            with contextlib.redirect_stdout(signal_output):
+                if main(["signal-report", "--db", database, "--store-id", group["store_id"],
+                         "--api-profile", group["api_profile"], "--data-origin", "synthetic",
+                         "--as-of", group["last_received_at"]]) != 0:
+                    raise SystemExit("installed_signals_failed")
             outcome_database = str(Path(directory).resolve() / "outcomes.sqlite3")
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["outcome-check", "--synthetic-fixture", str(args.outcome_fixture)]) != 0:
@@ -70,11 +77,17 @@ def check() -> None:
         if (calendar_report["date_type"] != "makeup_workday" or calendar_report["eta_available"]
                 or calendar_report["store_open_status"] != "unknown"):
             raise SystemExit("installed_calendar_semantics_mismatch")
+        signal_summary = json.loads(signal_output.getvalue())
+        if (signal_summary["scan"].get("valid_successful_rows") != 1
+                or signal_summary["eta_available"] or signal_summary["true_no_show_rate"] is not None
+                or signal_summary["network_performed"]):
+            raise SystemExit("installed_signals_semantics_mismatch")
     print(json.dumps({"installed_version": expected, "import_outside_checkout": True,
         "cli_help_ok": True, "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
-        "calendar_package_data_ok": True, "calendar_socket_calls": 0}))
+        "calendar_package_data_ok": True, "calendar_socket_calls": 0,
+        "readonly_signal_report_ok": True, "signal_socket_calls": 0}))
 
 
 if __name__ == "__main__":
