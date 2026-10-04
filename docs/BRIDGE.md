@@ -66,4 +66,4 @@ PYTHONPATH=src python3 -m sushiwait collect   --api-profile miniapp_gateway --cr
 node tests/surge_context.test.js
 ```
 
-回环绑定需要执行环境允许本机端口；普通沙箱可能报告bridge_unavailable，这不是SAPI失败。当前真实revision2已过期、库18成功0失败，不用合成记录标记live。必须再实际验收正常客户端流量、完整新上下文提交、固定GET服务端接受、连续跨到期恢复与临时调试关闭，才能讨论长期辅助端。服务器独立新code供应仍未解决，不能把本工具当全天服务。
+回环绑定需要执行环境允许本机端口；普通沙箱可能报告bridge_unavailable，这不是SAPI失败。最新真实revision3已过期、主库219成功2失败；三店各67轮/201成功后保护暂停等600秒超时，没有revision4或真实恢复，不用合成记录标记live。用户已在电脑打开正常小程序，但工具读取独立窗口超时，不能据此认为流量已进入Surge或接收器。必须再实际验收正常客户端流量、完整新上下文提交、固定GET服务端接受、连续跨到期恢复与临时调试关闭，才能讨论长期辅助端。服务器独立新code供应仍未解决，不能把本工具当全天服务。
