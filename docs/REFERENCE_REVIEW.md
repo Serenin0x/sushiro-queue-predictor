@@ -131,3 +131,10 @@
 目标181客户端正常login.code→js_code、固定启动long_token及标量排序HMAC-SHA256与本人请求离线一致；官方静态密钥不用于本项目实现，新的运行时code供应仍缺方案。研究中的范围纠正、摘要遮蔽失败与处置完整记录E0052；不输出/公开原文或静态值。
 
 原创同电脑适配器按Surge官方 [响应hook](https://manual.nssurge.com/scripting/http-response.html)、[脚本参数](https://manual.nssurge.com/scripting/overview.html)、[HTTP客户端](https://manual.nssurge.com/scripting/api.html)设计。支持条件、仅回环/白名单字段、60秒参数、DIRECT/禁重定向Cookie与流量视图记录限制见[BRIDGE.md](BRIDGE.md)。合成联动已通过，真实Surge/微信和跨到期仍未验收，不能代替独立服务器续期。
+
+
+## 7. 2026-10-04 正常登录资料与日期证据复核
+
+尝试读取微信wx.login/登录流程官方页面时浏览工具不能打开，未据此补写新协议结论。腾讯官方[OneID微信小程序登录文档](https://cloud.tencent.com/document/product/1441/68677)可读取，说明其code来自客户端wx.login；该文档属于OneID认证服务，不是寿司郎的更新接口，不能用于声称本项目有新的SAPI供应端。已有微信api-typings固定提交与目标181证据仍以AUTH_REFRESH为准；未调用相关POST。
+
+为日期特征准备核对2026国务院通知；中国政府网原页面403、繁体镜像重定向循环，改读[北京市政府转载正文](https://www.beijing.gov.cn/fuwu/bmfw/sy/jrts/202511/t20251104_4258838.html)，来源标中国政府网、发布日期2025-11-04。当前两日样本落在10月1–7日国庆假期，10月10日周六安排上班；日期类型不能仅按星期判断。尚未实现/存档全年日历，也不能从该通知推门店营业保证或客流。数据盘点和后续真实标签/泄漏防范契约见[DATASET_DESIGN.md](DATASET_DESIGN.md)。
