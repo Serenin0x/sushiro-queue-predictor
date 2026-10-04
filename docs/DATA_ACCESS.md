@@ -1,6 +1,6 @@
 # 实时数据接入验证手册
 
-本地工具为`0.2.0.dev5`，本批待发布；最近公开dev4及44文件核验见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0051。dev5新增同电脑回环短时接收与采集可选到期等待恢复，最终252项/1.680秒检查通过，其中wrapper执行26个JS场景；使用合成上下文与模拟上游，真实微信/Surge联动尚未验收。历史dev3/dev4与已选Logo保持；没有Release、产品服务、前端、模型或部署。
+当前已公开工具为`0.2.0.dev5`，功能提交[4230e204dbff5918b889c39ac3960b10b79a7d60](https://github.com/Serenin0x/sushiro-queue-predictor/commit/4230e204dbff5918b889c39ac3960b10b79a7d60)、51文件远端核验见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0054；dev4历史见E0051。dev5新增同电脑回环短时接收与采集可选到期等待恢复，最终252项/1.680秒检查通过，其中wrapper执行26个JS场景；使用合成上下文与模拟上游，真实微信/Surge联动尚未验收。历史dev3/dev4与已选Logo保持；没有Release、产品服务、前端、模型或部署。
 
 历史营业期实证保持：电脑目录147条、三店60/30秒各两轮、正常新凭证导入后的查询，主库18成功0失败，每店6份。revision2声明为2026-10-03 20:32:49–21:32:49、保护21:32:19；2026-10-04 16:09:46.508真实auth-status已为stop/auth_declared_expired，零网络且私有文件/主库未改。目标181客户端的正常运行时login.code、固定启动long_token和HMAC-SHA256签名已离线核对，设备/其他头完整来源与独立新code供应仍待验；没有全天无人值守或新实际GET。
 
