@@ -45,4 +45,4 @@ jobs:
       - name: Check installed package outside checkout
         working-directory: ${{ runner.temp }}
         run: |
-          "$RUNNER_TEMP/sushiwait-package/bin/python" -I "$GITHUB_WORKSPACE/scripts/check_installed_package.py" --source-root "$GITHUB_WORKSPACE" --version-file "$GITHUB_WORKSPACE/VERSION" --fixture "$GITHUB_WORKSPACE/examples/fixtures/store-detail-01.synthetic.json"
+          "$RUNNER_TEMP/sushiwait-package/bin/python" -I "$GITHUB_WORKSPACE/scripts/check_installed_package.py" --source-root "$GITHUB_WORKSPACE" --version-file "$GITHUB_WORKSPACE/VERSION" --fixture "$GITHUB_WORKSPACE/examples/fixtures/store-detail-01.synthetic.json" --outcome-fixture "$GITHUB_WORKSPACE/examples/fixtures/outcome-01.synthetic.json"

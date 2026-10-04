@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "sushiwait"
-version = "0.2.0rc1"
-description = "Read-only mainland Sushiro data validation tools"
+version = "0.2.0rc2"
+description = "Mainland Sushiro read-only data and private outcome tools"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = []
 
 [project.scripts]

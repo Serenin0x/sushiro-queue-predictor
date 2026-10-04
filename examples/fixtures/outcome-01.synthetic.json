@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "episode_id": "9ffeaeca-09b0-4245-8353-71737e8b2928",
+  "revision": 1,
+  "supersedes_revision": null,
+  "store_id": "900001",
+  "api_profile": "miniapp_gateway",
+  "data_origin": "synthetic",
+  "queue_type": "ordinary",
+  "party_size": 2,
+  "table_type": "unknown",
+  "recorded_at": "2020-10-01T11:00:00+08:00",
+  "events": [
+    {"event_id": "a9c8381a-d318-4361-969e-70d7b47ea4ee", "event_type": "issued", "event_time_lower": "2020-10-01T10:00:00+08:00", "event_time_upper": "2020-10-01T10:00:00+08:00", "observed_at": "2020-10-01T10:00:00+08:00", "evidence_kind": "synthetic", "verification_status": "unverified"},
+    {"event_id": "7ec82ddd-b06d-4d2e-97e8-42b4d21faee5", "event_type": "checked_in", "event_time_lower": "2020-10-01T10:35:00+08:00", "event_time_upper": "2020-10-01T10:35:00+08:00", "observed_at": "2020-10-01T10:36:00+08:00", "evidence_kind": "synthetic", "verification_status": "unverified"},
+    {"event_id": "390b6815-bda7-4dc8-9d6f-cc3310adf4c7", "event_type": "called", "event_time_lower": "2020-10-01T10:40:00+08:00", "event_time_upper": "2020-10-01T10:41:00+08:00", "observed_at": "2020-10-01T10:41:00+08:00", "evidence_kind": "synthetic", "verification_status": "unverified"},
+    {"event_id": "2a95e459-7e0d-45b2-bd17-5e088072f48f", "event_type": "seated", "event_time_lower": "2020-10-01T10:45:00+08:00", "event_time_upper": "2020-10-01T10:45:00+08:00", "observed_at": "2020-10-01T10:46:00+08:00", "evidence_kind": "synthetic", "verification_status": "unverified"}
+  ]
+}

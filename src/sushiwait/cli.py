@@ -18,6 +18,7 @@ from .capture import CaptureError, inspect_capture, write_credentials_from_captu
 from .client import QueryResult, SushiroClient
 from .credentials import CredentialError, CredentialSource, QueryCredentials, read_credentials_file
 from .observations import compute_change, normalize_directory, normalize_snapshot
+from .outcomes import OutcomeError, OutcomeStore, public_summary, read_episode
 from .localpaths import local_data_directory
 from .storage import SnapshotStore
 from .transport import sanitize_transport
@@ -277,9 +278,20 @@ def load_fixture(path: str) -> dict:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="sushiwait", description="SushiWait 只读数据验证工具")
+    parser = argparse.ArgumentParser(prog="sushiwait", description="SUSHIWAIT 数据接入与结果记录工具")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
+                           ("outcome-import", "校验并追加私有结果修订，不验证真实性")):
+        command = commands.add_parser(name, help=help_text)
+        inputs = command.add_mutually_exclusive_group(required=True)
+        inputs.add_argument("--input", help="本人明确指定的0600结果JSON，父目录0700")
+        inputs.add_argument("--synthetic-fixture", help="只接受明确标记的合成结果，不算真实标签")
+        if name == "outcome-import":
+            command.add_argument("--db", required=True, help="独立私有结果库，不使用公共快照库")
+    outcomes = commands.add_parser("outcome-report", help="只读汇总私有结果，不输出号码、身份或行程时间")
+    outcomes.add_argument("--db", required=True)
+    outcomes.add_argument("--limit", type=int, default=1000, help="最近1–10000个episode的最新修订")
     auth_status = commands.add_parser(
         "auth-status", help="纯本机查看凭证声明到期时间（不联网、不验证签名）"
     )
@@ -368,6 +380,26 @@ def main(argv: list[str] | None = None) -> int:
             emit({"ok": False, "error_code": "invalid_credential_wait_bounds"})
             return 2
     try:
+        if args.command in ("outcome-check", "outcome-import", "outcome-report"):
+            try:
+                if args.command == "outcome-report":
+                    with OutcomeStore(args.db, read_only=True) as outcomes:
+                        emit({"ok": True, **outcomes.report(limit=args.limit)})
+                else:
+                    episode = read_episode(args.input or args.synthetic_fixture,
+                        synthetic=bool(args.synthetic_fixture))
+                    result = public_summary(episode)
+                    if args.command == "outcome-import":
+                        with OutcomeStore(args.db) as outcomes:
+                            result.update(outcomes.append(episode, now=_utc_clock()))
+                    emit({"ok": True, **result})
+                return 0
+            except OutcomeError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+            except (CaptureError, OSError, ImportError, sqlite3.Error):
+                emit({"ok": False, "error_code": "outcome_database_error", "network_performed": False})
+                return 1
         if args.command == "context-bridge":
             try:
                 result = receive_context(credentials_file=args.credentials_file,
