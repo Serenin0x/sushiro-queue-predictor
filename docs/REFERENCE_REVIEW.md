@@ -110,3 +110,24 @@
 这些资料用于划分设计条件；上线、接口许可、运营规则和消息额度须在相关阶段核实。
 
 2026-10-02 后续正常小程序捕获及独立只读请求确认，西单大悦城店实际使用 `https://sapi.sushiro.com.cn/gateway/wechat/api/2.0/getStoreById?storeId=3004`，返回 HTTP 200、直接 Store 对象与四类展示数组。这项本机证据补充了公开参考源码使用旧主机的局限；旧目录的匿名 401 与新主机单店成功分别记录。2026-10-02当时新接口目录地址、凭证续期、字段单位与持续刷新未验收；2026-10-03已补充固定目录147条、三店短窗及新正常凭证导入后的查询实证，正常初始化来源已确认、独立自动更新仍未实现，见E0036/E0048/E0049。短窗结果不能推全国可用、字段单位或源新鲜度。实际适配与后续结果见 DATA_ACCESS.md 和交接文档 E0017 起的记录；没有模型或部署验收结果。
+
+
+## 6. 2026-10-04 更新来源与辅助端有限研究
+
+本轮锁定下列公开提交，只读所列文件，不运行项目、不复制源码/共享鉴权或测试公开凭证。结论限已读范围，“自动”名称、README和缺搜索结果均不证明实际独立续期。
+
+| 仓库及提交 | 本轮实际范围 | 可借鉴与限制 |
+| --- | --- | --- |
+| [Ryujoxys/sushiro-overdose a2514e3](https://github.com/Ryujoxys/sushiro-overdose/tree/a2514e3c5044c1b9ab8516e37fd63ca2c5e99af4) | internal/app/auth_lifecycle.go、auth_health.go、tokens.go；internal/api/api.go | 已保存查询上下文/到期状态/捕获管理；所读API使用旧crm，没有本项目可验收的正常SAPI新code/initialize供应 |
+| [anran11-pku/sushiro-smart 8fa4f16](https://github.com/anran11-pku/sushiro-smart/blob/8fa4f16511e1ccc9a9ca4b9e6bbfdd8d41656efa/internal/api/api.go) | internal/api/api.go，MIT元数据 | 旧crm查询；所读文件无实际SAPI正常初始化生成，不能推整个项目/分支不存在 |
+| [MiliJhM/sushiro-smart-mili 2118f72](https://github.com/MiliJhM/sushiro-smart-mili/blob/2118f725e6cb913f7d2bd27e3a522b5f3945b4eb/internal/api/api.go) | internal/api/api.go，MIT元数据 | 同类查询/操作隔离线索；没有取得独立新code供应证据 |
+| [donokey/sushiro-monitor ada85d0](https://github.com/donokey/sushiro-monitor/tree/ada85d023b276f56da995c4e1783b8b9de0c71f9) | monitor.py、capture_proxy.py，license元数据空 | 捕获/配置查询方式；不当作独立初始化已验证，不复制无许可实现 |
+| [Gitnapp/sushiro-skill b5760cc](https://github.com/Gitnapp/sushiro-skill/tree/b5760cc286f7c95a881730ab428a3e6b1c439436) | README.md、scripts/sushiro，MIT元数据 | 旧crm静态查询方式；未落实本项目独立SAPI更新 |
+
+[keliguru/sushiro-queue fb3725e](https://github.com/keliguru/sushiro-queue/tree/fb3725ea83482b5661f97cd7e32de046f6259c19)仅查看树/README线索，不计为实现审查。
+
+[f1tz/wxunpack cdedad1](https://github.com/f1tz/wxunpack/tree/cdedad11c3e8dff7e72338e2b491e3db62439459)提供目标客户端包格式研究线索；自行有界解析本人正常下载的明确目标181包，官方源码只在内存解析而未执行/发布。[Tencent/MMKV MiniPBCoder.cpp ad7657e](https://github.com/Tencent/MMKV/blob/ad7657ef9d120dbcdd7432d75aa6c59391149b22/Core/MiniPBCoder.cpp)用于有限格式比较；目标三份存储未按该格式解析出新凭证，不推断一定加密、未猜密钥或读取聊天。
+
+目标181客户端正常login.code→js_code、固定启动long_token及标量排序HMAC-SHA256与本人请求离线一致；官方静态密钥不用于本项目实现，新的运行时code供应仍缺方案。研究中的范围纠正、摘要遮蔽失败与处置完整记录E0052；不输出/公开原文或静态值。
+
+原创同电脑适配器按Surge官方 [响应hook](https://manual.nssurge.com/scripting/http-response.html)、[脚本参数](https://manual.nssurge.com/scripting/overview.html)、[HTTP客户端](https://manual.nssurge.com/scripting/api.html)设计。支持条件、仅回环/白名单字段、60秒参数、DIRECT/禁重定向Cookie与流量视图记录限制见[BRIDGE.md](BRIDGE.md)。合成联动已通过，真实Surge/微信和跨到期仍未验收，不能代替独立服务器续期。

@@ -1,10 +1,10 @@
 # 实时数据接入验证手册
 
-当前已公开工具为`0.2.0.dev4`、226项/0.466秒检查通过，功能发布提交为[1bb4e65ce74be25835d4501c4a965cb57299c7e7](https://github.com/Serenin0x/sushiro-queue-predictor/commit/1bb4e65ce74be25835d4501c4a965cb57299c7e7)，44个远端文件与本机逐一核对，见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0051；保留已选浅/深Logo。dev2 的 35 文件发布核对见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0026；dev3 新增显式离线 capture-check/capture-import、捕获证实的固定 gateway 目录和 stores 私有文件/到期保护，主执行者 **212 项 / 0.431 秒**离线检查通过，独立复核的时钟问题已修，见 E0028。dev3和dev4均已推送main，dev4新增私有文件零网络auth-status和共享到期保护，不发布未选定的品牌草稿；没有 Release、服务器、小程序前端或预测服务，仍是接入验证阶段。
+本地工具为`0.2.0.dev5`，本批待发布；最近公开dev4及44文件核验见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0051。dev5新增同电脑回环短时接收与采集可选到期等待恢复，最终252项/1.680秒检查通过，其中wrapper执行26个JS场景；使用合成上下文与模拟上游，真实微信/Surge联动尚未验收。历史dev3/dev4与已选Logo保持；没有Release、产品服务、前端、模型或部署。
 
-当前营业时段实证：电脑目录返回147条，三店60/30秒各两轮短窗完成。旧凭证到期后，本人正常启动HAR观察到 /api/1.3/initialize 返回新查询凭证，与后续Bearers本机精确匹配；固定单店候选显式导入revision2后，20:41三店电脑各新增一份成功详情，主库共18成功0失败，每店6份。未验签声明为20:32:49–21:32:49、本机保护21:32:19；接手时重新检查，不能沿用历史importable或成功状态。初始化登录码/签名/设备参数的正常生成与独立自动续期仍待验证，尚不能全天无人值守。历史到期拒绝/零请求保留；新结果不推全国完整覆盖或源新鲜度。
+历史营业期实证保持：电脑目录147条、三店60/30秒各两轮、正常新凭证导入后的查询，主库18成功0失败，每店6份。revision2声明为2026-10-03 20:32:49–21:32:49、保护21:32:19；2026-10-04 16:09:46.508真实auth-status已为stop/auth_declared_expired，零网络且私有文件/主库未改。目标181客户端的正常运行时login.code、固定启动long_token和HMAC-SHA256签名已离线核对，设备/其他头完整来源与独立新code供应仍待验；没有全天无人值守或新实际GET。
 
-当前路线为 **本人新鲜正常 HAR → 离线检查 → 显式单店上下文导入 → 固定 gateway 单份快照/目录 → 营业期 60/30 秒有界试点**。所有真实查询明确 `--api-profile miniapp_gateway`，没有自动主机回退；正常查询凭证来源已观察到，独立正常参数生成未知，不自动续期。捕获 HTTP 200 与本机生成配置均不证明服务器现在接受，短窗成功也不代表全天稳定或 1.0。
+当前已验证的真实路线仍为**本人新鲜正常HAR→离线检查→显式导入→固定gateway查询与有界试点**。dev5另提供**正常客户端成功单店响应→同电脑回环→完整新上下文原子提交→采集恢复**，这一辅助路线仅实现并通过合成联动，实际微信/Surge验收尚缺。所有外部真实GET保持固定miniapp_gateway，没有初始化POST或自动回退。操作步骤与进入条件见[BRIDGE.md](BRIDGE.md)，参数研究见[AUTH_REFRESH.md](AUTH_REFRESH.md)。
 
 ## 已取得的证据
 
@@ -244,7 +244,7 @@ mv -f "$PRIVATE_QUERY_DIR/gateway.next.json" "$SUSHIWAIT_CONTEXT_FILE"
 
 每个 GET 前重新读取整组文件，包括同轮的不同门店；上下文有变化时先完整构建新的客户端再替换，每个 GET 只用一组。等待中最多每 60 秒重读，并按声明到期前的保护期限提前唤醒。由此可以接收本机正常更新，但官方更新来源与自动续期仍未知。
 
-stores/snapshot/collect 请求前检查声明 iat/exp，未验证 JWT 签名；声明无效返回 auth_claims_invalid，已到期为 auth_declared_expired，剩余不超过 30 秒为 auth_expiring。**这些都是零网络的本机停采**，不是上游 401。等待到了保护期限仍无有效更新就停止，文件读取或配置错误也停止整次采样。opaque、缺失 exp 等未知到期不填默认 TTL，也不表示服务器会接受；真实 GET 失败仍首错停止、没有自动重试。已有在途 GET 不会因为文件替换而混入新头，下一次 GET 再检查。
+stores/snapshot/collect 请求前检查声明 iat/exp，未验证 JWT 签名；声明无效返回 auth_claims_invalid，已到期为 auth_declared_expired，剩余不超过 30 秒为 auth_expiring。**这些都是零网络的本机停采**，不是上游 401。默认等待到了保护期限仍无有效更新就停止；dev5可显式启用有界到期等待，见BRIDGE。文件读取或配置错误仍停止整次采样。opaque、缺失 exp 等未知到期不填默认 TTL，也不表示服务器会接受；真实 GET 失败仍首错停止、没有自动重试。已有在途 GET 不会因为文件替换而混入新头，下一次 GET 再检查。
 
 ### 从本人正常 HAR 离线检查与导入（dev3）
 
@@ -338,17 +338,17 @@ PYTHONPATH=src python3 -m sushiwait collect --api-profile miniapp_gateway --cred
 
 命令输出 JSON；数据库仅保存规范化公共观察与安全失败分类，文件在 `data/local/`，默认 `sushiwait.sqlite3`。该目录被 Git 排除。posix 环境新目录 0700、数据库 0600；拒绝符号链接数据库，未知数据库版本不覆盖。
 
-- 规范化快照 `schema_version=1` 保持；它与数据库和 report 的版本独立。SQLite `PRAGMA user_version=2`，样本保存 run_id、store_id、data_origin、api_profile、received_at、ok 与规范化 JSON；当前dev4全套226项离线检查通过；此前实际dev1 CLI使用schema2数据库成功保存。本轮没有新增数据库迁移。
+- 规范化快照 `schema_version=1` 保持；它与数据库和 report 的版本独立。SQLite `PRAGMA user_version=2`，样本保存 run_id、store_id、data_origin、api_profile、received_at、ok 与规范化 JSON；当前dev5全套252项检查通过（真实接口模拟）；此前实际dev1 CLI使用schema2数据库成功保存。本轮没有新增数据库迁移。
 - 观察、目录项与变化输出顶层 api_profile，仅允许 legacy / miniapp_gateway，不保存任意来源 URL；端点固定映射由客户端负责。compute_change 只有同店、同真实/合成来源、同 API profile 才比较，报告也按三者分组。
 - 写打开旧 v1 数据库在显式事务中为旧成功/失败行补 legacy 列与 JSON 标签，保留行 ID、run_id 与内容；冲突 profile 或坏 JSON 拒绝并回滚。只读打开 v1 不迁移，使用虚拟 legacy 视图；report 的 schema_version=2 表示输出格式，database_schema_version 单独反映磁盘库版本。
 - normalized 字段分别记录 present / missing / null / invalid。缺失不会变成 0，缺失队列不会变成空数组。
 - 保留四类 groupQueues 的完整字符串数组、顺序与重复情况，不将展示最大号码当作全局游标。
 - `raw_wait` 与 `groupQueuesCount` 单位均为 unknown；未经小程序/现场对照，不解释为分钟、人数或已签到桌数。waitTimeCounter / waitTimeCap 另按有符号整数保存 presence/value/unit=unknown，拒绝 bool，保留 -1 等原值；不猜测 -1 的禁用含义或正值的分钟单位。
-- waitTimeCounter / waitTimeCap 的缺失、null、invalid 分别记录，公共哈希与标量变化覆盖两字段；旧快照缺新键按 missing/None 比较，不当 0、不修改历史 JSON。有符号等待字段与本机auth-status的既有回归保持；当前dev4全套226项通过，快照schema_version仍为1。
+- waitTimeCounter / waitTimeCap 的缺失、null、invalid 分别记录，公共哈希与标量变化覆盖两字段；旧快照缺新键按 missing/None 比较，不当 0、不修改历史 JSON。有符号等待字段与本机auth-status的既有回归保持；当前dev5全套252项通过，快照schema_version仍为1。
 - `request_started_at`、`received_at`、`elapsed_ms` 是本地请求时间；`source_updated_at=null`，`upstream_freshness=unknown`。
 - content_hash 只作用于规范化公共字段；相同 hash 仅表示所保存字段相同，不能证明缓存或源新鲜度。
 - 未知字段记录安全键名清单；未知对象、个人字段值和原始响应不落库。如果以后发现有用字段，再核实语义、权限并加入白名单。
-- 失败不生成成功快照；GET 返回错误为 failure_phase=request，收到正常响应但规范化失败为 normalization。本机文件/声明/配置保护为 preflight，只保存 checked_at、http_status=null 和安全鉴权时间元数据，不虚构请求开始/响应接收/耗时；三者都使 collect 首错停止。数据库沿用 received_at 列保存事件时间，preflight 行在此列保存 checked_at。
+- 失败不生成成功快照；GET 返回错误为 failure_phase=request，收到正常响应但规范化失败为 normalization。本机文件/声明/配置保护为 preflight，只保存 checked_at、http_status=null 和安全鉴权时间元数据，不虚构请求开始/响应接收/耗时；默认三者都使 collect 首错停止；只有到期类preflight可显式开启有界等待正常新凭证，其他错误仍停止。数据库沿用 received_at 列保存事件时间，preflight 行在此列保存 checked_at。
 
 ### 只读质量报告（dev2继承，dev3格式保持）
 
@@ -379,7 +379,7 @@ elapsed_ms 与 start_interval_ms 汇总为 count/min/max/mean，mean 四舍五�
 2. **显式整组更新与边界。** 新正常单店GET通过当前声明保护后，capture-import明确原始index/output/递增revision；不能目录导入、自动选条目或拼头。当前本机文件revision1，下一份更新必须更大；committed/durability_confirmed分别解读，文件模式由stores/snapshot/collect预检。
 3. **保持三店的实际能力范围。** 3014/3004/2009均完成详情身份和短窗采样，single_store_read_only+sampling_validation=short_window；live_data_verified均false表示长期/源刷新未验收。目录147条不证明全部门店详情权限或全国完整覆盖。
 4. **补齐页面和真实结果对照。** 有效凭证期间电脑查询已独立于小程序；接下来逐项核实完整堂食/预约号码、签到桌数、等待字段单位/-1、missing/null/invalid、来源时间。实际60/30秒请求节奏已验证，不等同源更新延迟或限流允许上限。
-5. **保留失败与证据口径。** 15份主采集成功/0失败，另一次省略授权头对照401不混入数据库；到期/坏文件本机停采与request/normalization失败分开。均首错停止、不重试，report区分全历史/有限窗口，不推ETA、真实过号率或缓存周期。
+5. **保留失败与证据口径。** 15份主采集成功/0失败，另一次省略授权头对照401不混入数据库；到期/坏文件本机停采与request/normalization失败分开。默认首错停止、不重试；dev5只对到期preflight可选有界等待正常新上下文，report区分全历史/有限窗口，不推ETA、真实过号率或缓存周期。
 6. **扩大持续验收再部署。** 覆盖正常更新、完整到期边界、限流/TLS/网络/文件故障和停机结果，形成长期可靠性证据。当前没有官方自动续期、全天调度、任务游标恢复或服务器部署；同库重启仅续写历史，两轮与147目录项不替代可靠性或1.0验收。
 
 实际操作的凭证与原始网络记录留本机受控位置，公开仓库只记录无秘密的结构、证据与结论。本人账号授权不包含真实取号、取消或重排。
@@ -467,3 +467,12 @@ E0013 阶段的官方排障资料指出过滤器可能隐藏请求，但当时�
 本轮临时手机 VPN、HTTP 捕获与解密已关闭；Direct、过滤规则与 CA 信任为后续单域名对照保留，尚未完全恢复。整个手机试验结束时恢复本轮修改的出站模式及捕获过滤设置，由用户取消临时手机证书信任并移除本轮新装描述文件，保留原有配置。Mac 局域网代理未启用，无需将其误记为本轮已开启后恢复。
 
 若后续改用 Mac 作为手机代理，需另行明确同意临时开放局域网 HTTP 代理：手机 HTTP/HTTPS 流量会经过 Mac，解密和内容捕获仍只限指定寿司郎域名。开启前核对实际局域网地址、HTTP 监听端口及恢复办法，不把回环地址 127.0.0.1、SOCKS5 / HTTP API 端口或文档默认端口当作手机可用服务器事实；记下并在结束时恢复手机原 Wi-Fi 代理状态。[Surge 配置说明](https://manual.nssurge.com/profile/general.html)、[Apple Wi-Fi 设置](https://support.apple.com/guide/iphone/manage-wi-fi-settings-iphw5gjwl8k2/ios)
+
+
+## 2026-10-04 新研究与合成联动
+
+E0052确认目标181客户端正常login.code→js_code，固定启动long_token与本人样本一致，标量参数排序拼接后的HMAC-SHA256与本人签名离线精确一致。官方签名常量未写入本项目、未运行官方代码或发送初始化；新应用绑定登录码供应仍未实现。静态源码摘要曾出现遮蔽不完整，已停止原文输出并改成白名单核对；处置与研究限制完整记录E0052，不能用删除本地文件撤回旧工具输出。
+
+dev5实现context-bridge、adapters/surge-context.js和collect --wait-for-credentials；操作、权限、退出码与真实验收计划见[BRIDGE.md](BRIDGE.md)。最初沙箱禁止回环绑定，随后仅合成本机连接的执行获准；最终252项/1.680秒全套OK，包括26个JS场景，真实回环+模拟上游联动验证同进程恢复。没有实际Surge配置安装或捕获、没有新凭证/真实GET；主库18/0不变，不能将模拟结果添加为live。
+
+电脑主窗白屏及子运行时读取超时只代表当前观察限制，未核实锁屏/退出。继续自主推进可执行工作；下一个实际验收必须是正常客户端新上下文、revision3+、固定GET接受与连续跨到期，再核实字段/来源刷新/长期采集。用户离开电脑后不反复要求导出同条件HAR；需要本人设备认证时不能绕过。

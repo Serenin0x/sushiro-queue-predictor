@@ -13,6 +13,7 @@ from typing import Any
 
 from . import __version__
 from .auth import describe_authorization
+from .bridge import BridgeError, receive_context
 from .capture import CaptureError, inspect_capture, write_credentials_from_capture
 from .client import QueryResult, SushiroClient
 from .credentials import CredentialError, CredentialSource, QueryCredentials, read_credentials_file
@@ -119,6 +120,9 @@ class _QuerySession:
         self._client_credentials: QueryCredentials | None = None
         self._client: SushiroClient | None = None
         self.auth_status: dict | None = None
+        self.observed_revision: int | None = None
+        self._observed_authorization: str | None = None
+        self.recovery_count = 0
 
     def _refresh(self) -> None:
         self.auth_status = None
@@ -127,6 +131,8 @@ class _QuerySession:
         except CredentialError as error:
             raise _PreflightStop(error.error_code) from None
         status = describe_authorization(credentials.authorization, now=_utc_clock())
+        self.observed_revision = credentials.revision
+        self._observed_authorization = credentials.authorization
         self.auth_status = status
         stop_code = _authorization_stop_code(status)
         if stop_code is not None:
@@ -170,6 +176,53 @@ def _record_preflight_stop(
     if stop.auth_status is not None:
         output["auth_status"] = stop.auth_status
     emit(output)
+
+
+def _await_credentials(session: _QuerySession, stop: _PreflightStop) -> bool:
+    """Opt-in bounded pause. A different, higher revision must pass preflight."""
+    seconds = getattr(session.args, "wait_for_credentials", 0)
+    if not seconds or stop.error_code not in ("auth_declared_expired", "auth_expiring"):
+        return False
+    stopped_revision = session.observed_revision
+    stopped_authorization = session._observed_authorization
+    deadline = time.monotonic() + seconds
+    metadata = {"api_profile": session.args.api_profile, "network_performed": False}
+    emit({"event": "credentials_paused", "timeout_seconds": seconds, **metadata})
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            emit({"event": "credentials_recovery_failed", "error_code": "credentials_wait_timeout", **metadata})
+            return False
+        time.sleep(min(remaining, 1))
+        try:
+            session._refresh()
+        except _PreflightStop as error:
+            if error.error_code in ("auth_declared_expired", "auth_expiring"):
+                continue
+            emit({"event": "credentials_recovery_failed", "error_code": error.error_code, **metadata})
+            return False
+        if time.monotonic() >= deadline:
+            continue
+        if (stopped_revision is not None and session.observed_revision > stopped_revision
+                and session._observed_authorization != stopped_authorization):
+            session.recovery_count += 1
+            emit({"event": "credentials_resumed", "credential_revision": session.observed_revision, **metadata})
+            return True
+
+
+def _collect_client(session: _QuerySession, db: SnapshotStore, store_id: str) -> SushiroClient | None:
+    try:
+        return session.client()
+    except _PreflightStop as stop:
+        _record_preflight_stop(db, store_id, session.args.api_profile, stop)
+        if not _await_credentials(session, stop):
+            return None
+    # Recheck once at use time; do not restart the pause budget on a race.
+    try:
+        return session.client()
+    except _PreflightStop as stop:
+        _record_preflight_stop(db, store_id, session.args.api_profile, stop)
+        return None
 
 
 def observe(
@@ -240,6 +293,12 @@ def build_parser() -> argparse.ArgumentParser:
     capture_import.add_argument("--output", required=True, help="私有查询上下文的目标文件")
     capture_import.add_argument("--revision", required=True, type=int,
                                 help="完整上下文修订号，更新既有文件时必须递增")
+    bridge = commands.add_parser("context-bridge", help="最多60秒接收同电脑正常查询上下文；不登录或续期")
+    bridge.add_argument("--credentials-file", required=True, help="现有gateway完整私有上下文")
+    bridge.add_argument("--session-file", required=True, help="新建0600短时接入配置，结束自动清理")
+    bridge.add_argument("--revision", required=True, type=int)
+    bridge.add_argument("--store-id", action="append", required=True, help="仅接受明确指定的1–3店")
+    bridge.add_argument("--seconds", type=int, default=60, help="接收窗口1–60秒")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -260,6 +319,8 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--interval", type=int, default=60)
     collect.add_argument("--samples", type=int, default=3, help="每店轮数，1–120")
     collect.add_argument("--db", default=DEFAULT_DB)
+    collect.add_argument("--wait-for-credentials", type=int, default=0,
+                         help="私有文件模式到期后暂停等正常新上下文，0–600秒；默认停止")
     collect_auth = collect.add_mutually_exclusive_group()
     collect_auth.add_argument("--anonymous", action="store_true")
     collect_auth.add_argument("--credentials-file", help="每次查询前重读完整私有上下文；整组原子更新")
@@ -282,7 +343,7 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in ("snapshot", "collect"):
+    if args.command in ("snapshot", "collect", "context-bridge"):
         try:
             if args.command == "snapshot":
                 args.store_id = canonical_store_id(args.store_id)
@@ -297,7 +358,22 @@ def main(argv: list[str] | None = None) -> int:
             emit({"ok": False, "error_code": "invalid_sampling_bounds",
                   "detail": "验证阶段限 1–3 店、30–3600 秒周期、1–120 轮"})
             return 2
+        if (not 0 <= args.wait_for_credentials <= 600
+                or args.wait_for_credentials and args.credentials_file is None):
+            emit({"ok": False, "error_code": "invalid_credential_wait_bounds"})
+            return 2
     try:
+        if args.command == "context-bridge":
+            try:
+                result = receive_context(credentials_file=args.credentials_file,
+                    session_file=args.session_file, revision=args.revision,
+                    store_ids=tuple(args.store_id), seconds=args.seconds, on_ready=emit)
+                emit({"ok": True, **result})
+                return 0
+            except (BridgeError, CaptureError, CredentialError) as error:
+                emit({"ok": False, "error_code": error.error_code,
+                      "external_network_performed": False})
+                return 1
         if args.command in ("capture-check", "capture-import"):
             try:
                 inspection = inspect_capture(args.har, now=_utc_clock())
@@ -371,11 +447,12 @@ def main(argv: list[str] | None = None) -> int:
                 for i in range(args.samples):
                     started = time.monotonic()
                     for store_id in ids:
-                        try:
-                            client = session.client()
-                        except _PreflightStop as stop:
-                            _record_preflight_stop(db, store_id, args.api_profile, stop)
+                        before_recovery = session.recovery_count
+                        client = _collect_client(session, db, store_id)
+                        if client is None:
                             return 1
+                        if session.recovery_count != before_recovery:
+                            started = time.monotonic()
                         if not observe(client, store_id, db, api_profile=args.api_profile):
                             return 1
                     if i + 1 < args.samples:
@@ -383,7 +460,14 @@ def main(argv: list[str] | None = None) -> int:
                             session.wait_until(started + args.interval)
                         except _PreflightStop as stop:
                             _record_preflight_stop(db, ids[0], args.api_profile, stop)
-                            return 1
+                            if not _await_credentials(session, stop):
+                                return 1
+                            try:
+                                # No catch-up burst after a pause: a full interval.
+                                session.wait_until(time.monotonic() + args.interval)
+                            except _PreflightStop as stop:
+                                _record_preflight_stop(db, ids[0], args.api_profile, stop)
+                                return 1
                 return 0
             if args.command == "replay":
                 # Prevalidate every input before the first database insertion.
