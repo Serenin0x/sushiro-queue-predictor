@@ -12,6 +12,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from .transport import sanitize_transport
+
 
 API_PROFILES = ("legacy", "miniapp_gateway")
 QUEUE_NAMES = (
@@ -183,6 +185,7 @@ def _canonical_id(data: dict) -> str:
 def normalize_snapshot(
     payload: dict, store_id: str, *, request_started_at: str, received_at: str,
     elapsed_ms: int, data_origin: str, api_profile: str = "legacy",
+    transport: dict | None = None,
 ) -> dict:
     """Normalize a successful store response; never retain an entire response."""
     api_profile = _validate_api_profile(api_profile)
@@ -232,7 +235,7 @@ def normalize_snapshot(
     if received < started:
         _issue(issues, "timing", "received_before_request_started")
     content = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return {
+    snapshot = {
         "schema_version": 1,
         "store_id": str(int(store_id)),
         "api_profile": api_profile,
@@ -250,6 +253,10 @@ def normalize_snapshot(
         "field_inventory": inventory,
         "issues": issues,
     }
+    safe_transport = sanitize_transport(transport)
+    if safe_transport is not None:
+        snapshot["transport"] = safe_transport
+    return snapshot
 
 
 def normalize_directory(payload: dict, *, api_profile: str = "legacy") -> list[dict]:

@@ -1,10 +1,10 @@
 # 实时数据接入验证手册
 
-当前已公开工具为`0.2.0.dev5`，功能提交[4230e204dbff5918b889c39ac3960b10b79a7d60](https://github.com/Serenin0x/sushiro-queue-predictor/commit/4230e204dbff5918b889c39ac3960b10b79a7d60)、51文件远端核验见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0054；dev4历史见E0051。dev5新增同电脑回环短时接收与采集可选到期等待恢复，最终252项/1.680秒检查通过，其中wrapper执行26个JS场景；使用合成上下文与模拟上游，真实微信/Surge联动尚未验收。历史dev3/dev4与已选Logo保持；没有Release、产品服务、前端、模型或部署。
+当前公开基线dev5，本地准备 **0.2.0rc1 接入候选**；正式v0.2.0仍待真实恢复/电脑接入/签到桌数同屏数值。261项/2.172秒本机检查通过，含26个JS场景但不重复算287。新增安全HTTP时间/缓存/配额提示、非桌面默认目录与离线CI；当前schema1快照/DB2/report2保持，运行依赖仍为标准库。最终候选安装和GitHub结果分别记入[验收报告](V0_2_ACCEPTANCE.md)及编辑历史。
 
-历史营业期实证保持：电脑目录147条、三店60/30秒各两轮、正常新凭证导入后的查询，主库18成功0失败，每店6份。revision2声明为2026-10-03 20:32:49–21:32:49、保护21:32:19；2026-10-04 16:09:46.508真实auth-status已为stop/auth_declared_expired，零网络且私有文件/主库未改。目标181客户端的正常运行时login.code、固定启动long_token和HMAC-SHA256签名已离线核对，设备/其他头完整来源与独立新code供应仍待验；没有全天无人值守或新实际GET。
+2026-10-04本人正常刷新HAR唯一3014详情显式index0/revision3导入，声明17:04:54–18:04:54/未验签；固定三店30秒实测各67轮共201成功、17:31–18:04约33分钟。保护preflight后本机等600秒无新上下文，exit1，没有resumed或revision4；主库全历史219成功、2失败（TLS请求1、到期preflight1），各店73成功。新transport代码未加载到该旧dev5运行，不能把它记为新代码线上验收。目录147条、原60/30短窗及旧18成功基线均保留历史；全国、源时间、长期配额与7–14天稳定性未验收。
 
-当前已验证的真实路线仍为**本人新鲜正常HAR→离线检查→显式导入→固定gateway查询与有界试点**。dev5另提供**正常客户端成功单店响应→同电脑回环→完整新上下文原子提交→采集恢复**，这一辅助路线仅实现并通过合成联动，实际微信/Surge验收尚缺。所有外部真实GET保持固定miniapp_gateway，没有初始化POST或自动回退。操作步骤与进入条件见[BRIDGE.md](BRIDGE.md)，参数研究见[AUTH_REFRESH.md](AUTH_REFRESH.md)。
+真实路线仍为**本人正常新鲜HAR→离线检查→明确导入→固定gateway查询**，当前revision3已过期，后续须revision4+并当下核对。同电脑被动适配器/回环的真实联动仍未通过，手机HAR不等于bridge验收。用户拿走手机前临时设置已关闭；电脑正常账号/搜索入口的主体内容暂无法核对，没有新捕获或初始化POST。正常参数见[AUTH_REFRESH](AUTH_REFRESH.md)，辅助接入见[BRIDGE](BRIDGE.md)，客户端映射与源时间限制见[FIELD_MAPPING](FIELD_MAPPING.md)。
 
 ## 已取得的证据
 
@@ -162,6 +162,10 @@ iat/exp 独立解释：缺 iat 仍可显示 exp/剩余，缺 exp 只显示签发
 ## 运行与离线检查
 
 要求 Python 3.11 或更新版本，运行时不依赖第三方包。以下从仓库根目录执行，macOS / Linux 示例直接使用 src 路径，不需要联网安装依赖。
+
+v0.2.0rc1 候选版将默认数据库移出 Git checkout 和桌面目录：macOS 为 `~/Library/Application Support/SUSHIWAIT/local/sushiwait.sqlite3`；Linux 为绝对 `XDG_DATA_HOME`（未配置则 `~/.local/share`）下的 `SUSHIWAIT/local/sushiwait.sqlite3`；Windows 为绝对 `LOCALAPPDATA`（未配置则用户 AppData/Local）下的同一子路径。只有实际写入时才创建目录；显式 `--db` 仍优先，既有数据库不会自动搬迁。Windows 私有凭证文件读取仍因 POSIX 安全要求不受支持，默认路径支持不等于整个接入链路已经适配 Windows。
+
+真实 HAR、查询上下文及运行资料建议放在操作者确认未同步的本机私有目录，避免桌面、下载和云盘；父目录 `0700`、上下文 `0600`，不要提交、发到公开 Issue 或上传给模型。下文历史 `data/local` 示例仍描述既有行为；操作真实文件时须替换为自己的私有路径。本轮明确迁移的项目文件哈希保持一致，默认路径变化不代表已检查其他设备、备份或同步服务。
 
 ```sh
 PYTHONPATH=src python3 -m sushiwait --help

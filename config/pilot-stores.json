@@ -1,9 +1,104 @@
 {
   "schema_version": 1,
-  "source": "用户指定三家试点；2026-10-03 本人正常查询上下文通过电脑目录及三店详情核对，完成每店60秒/30秒各两轮短窗采样；源新鲜度、长期连续采集及目录完整覆盖未验收",
+  "source": "用户指定三家试点；2026-10-03电脑目录/详情与60秒、30秒各两轮成功，2026-10-04三店30秒各67轮成功后到期等待超时停止；源新鲜度、跨到期与长期/全国完整覆盖未验收",
   "stores": [
-    {"user_label": "中关村大融城店", "search_terms": ["中关村", "大融城"], "store_id": 3014, "verified_name": "中关村大融城店", "api_profile": "miniapp_gateway", "verification_scope": "single_store_read_only", "verified_on": "2026-10-03", "directory_verified_on": "2026-10-03", "sampling_validation": {"scope": "short_window", "intervals_seconds": [60, 30], "rounds_per_interval": 2, "source_freshness_verified": false}, "live_data_verified": false},
-    {"user_label": "西单店", "search_terms": ["西单"], "store_id": 3004, "verified_name": "西单大悦城店", "api_profile": "miniapp_gateway", "verification_scope": "single_store_read_only", "first_verified_on": "2026-10-02", "verified_on": "2026-10-03", "directory_verified_on": "2026-10-03", "sampling_validation": {"scope": "short_window", "intervals_seconds": [60, 30], "rounds_per_interval": 2, "source_freshness_verified": false}, "live_data_verified": false},
-    {"user_label": "成都世豪店", "search_terms": ["世豪"], "store_id": 2009, "verified_name": "世豪广场店", "api_profile": "miniapp_gateway", "verification_scope": "single_store_read_only", "verified_on": "2026-10-03", "directory_verified_on": "2026-10-03", "sampling_validation": {"scope": "short_window", "intervals_seconds": [60, 30], "rounds_per_interval": 2, "source_freshness_verified": false}, "live_data_verified": false}
+    {
+      "user_label": "中关村大融城店",
+      "search_terms": [
+        "中关村",
+        "大融城"
+      ],
+      "store_id": 3014,
+      "verified_name": "中关村大融城店",
+      "api_profile": "miniapp_gateway",
+      "verification_scope": "single_store_read_only",
+      "verified_on": "2026-10-03",
+      "directory_verified_on": "2026-10-03",
+      "sampling_validation": {
+        "scope": "short_window",
+        "intervals_seconds": [
+          60,
+          30
+        ],
+        "rounds_per_interval": 2,
+        "source_freshness_verified": false
+      },
+      "live_data_verified": false,
+      "extended_sampling_validation": {
+        "date": "2026-10-04",
+        "scope": "bounded_pre_expiry",
+        "interval_seconds": 30,
+        "successful_rounds": 67,
+        "target_rounds": 100,
+        "termination": "credentials_wait_timeout",
+        "cross_expiry_recovery_verified": false,
+        "source_freshness_verified": false
+      }
+    },
+    {
+      "user_label": "西单店",
+      "search_terms": [
+        "西单"
+      ],
+      "store_id": 3004,
+      "verified_name": "西单大悦城店",
+      "api_profile": "miniapp_gateway",
+      "verification_scope": "single_store_read_only",
+      "first_verified_on": "2026-10-02",
+      "verified_on": "2026-10-03",
+      "directory_verified_on": "2026-10-03",
+      "sampling_validation": {
+        "scope": "short_window",
+        "intervals_seconds": [
+          60,
+          30
+        ],
+        "rounds_per_interval": 2,
+        "source_freshness_verified": false
+      },
+      "live_data_verified": false,
+      "extended_sampling_validation": {
+        "date": "2026-10-04",
+        "scope": "bounded_pre_expiry",
+        "interval_seconds": 30,
+        "successful_rounds": 67,
+        "target_rounds": 100,
+        "termination": "credentials_wait_timeout",
+        "cross_expiry_recovery_verified": false,
+        "source_freshness_verified": false
+      }
+    },
+    {
+      "user_label": "成都世豪店",
+      "search_terms": [
+        "世豪"
+      ],
+      "store_id": 2009,
+      "verified_name": "世豪广场店",
+      "api_profile": "miniapp_gateway",
+      "verification_scope": "single_store_read_only",
+      "verified_on": "2026-10-03",
+      "directory_verified_on": "2026-10-03",
+      "sampling_validation": {
+        "scope": "short_window",
+        "intervals_seconds": [
+          60,
+          30
+        ],
+        "rounds_per_interval": 2,
+        "source_freshness_verified": false
+      },
+      "live_data_verified": false,
+      "extended_sampling_validation": {
+        "date": "2026-10-04",
+        "scope": "bounded_pre_expiry",
+        "interval_seconds": 30,
+        "successful_rounds": 67,
+        "target_rounds": 100,
+        "termination": "credentials_wait_timeout",
+        "cross_expiry_recovery_verified": false,
+        "source_freshness_verified": false
+      }
+    }
   ]
 }

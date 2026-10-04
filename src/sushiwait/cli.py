@@ -18,15 +18,17 @@ from .capture import CaptureError, inspect_capture, write_credentials_from_captu
 from .client import QueryResult, SushiroClient
 from .credentials import CredentialError, CredentialSource, QueryCredentials, read_credentials_file
 from .observations import compute_change, normalize_directory, normalize_snapshot
+from .localpaths import local_data_directory
 from .storage import SnapshotStore
+from .transport import sanitize_transport
 
-DEFAULT_DB = "data/local/sushiwait.sqlite3"
+DEFAULT_DB = str(local_data_directory() / "sushiwait.sqlite3")
 API_PROFILES = ("legacy", "miniapp_gateway")
 EXPIRY_MARGIN_SECONDS = 30
 
 
 def emit(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, allow_nan=False))
+    print(json.dumps(value, ensure_ascii=False, allow_nan=False), flush=True)
 
 
 def client_for(
@@ -237,15 +239,18 @@ def observe(
         db.save_failure(store_id, result, api_profile=api_profile, failure_phase="request")
         emit({"ok": False, "store_id": store_id, "error_code": result.error_code,
               "http_status": result.http_status, "received_at": result.received_at,
-              "api_profile": api_profile, "failure_phase": "request"})
+              "api_profile": api_profile, "failure_phase": "request",
+              "transport": sanitize_transport(result.transport)})
         return False
     try:
         snapshot = normalize_snapshot(result.payload, store_id,
             request_started_at=result.started_at, received_at=result.received_at,
-            elapsed_ms=result.elapsed_ms, data_origin="live", api_profile=api_profile)
+            elapsed_ms=result.elapsed_ms, data_origin="live", api_profile=api_profile,
+            transport=result.transport)
     except (ValueError, TypeError, KeyError, OverflowError):
         failure = QueryResult(False, None, "normalization_failed", result.http_status,
-                              result.started_at, result.received_at, result.elapsed_ms)
+                              result.started_at, result.received_at, result.elapsed_ms,
+                              transport=result.transport)
         db.save_failure(store_id, failure, api_profile=api_profile, failure_phase="normalization")
         emit({"ok": False, "store_id": store_id, "error_code": failure.error_code,
               "http_status": failure.http_status, "received_at": failure.received_at,
@@ -417,14 +422,15 @@ def main(argv: list[str] | None = None) -> int:
             result = client.fetch_stores()
             if not result.ok:
                 emit({"ok": False, "error_code": result.error_code,
-                      "http_status": result.http_status, "api_profile": args.api_profile})
+                      "http_status": result.http_status, "api_profile": args.api_profile,
+                      "transport": sanitize_transport(result.transport)})
                 return 1
             stores = normalize_directory(result.payload, api_profile=args.api_profile)
             if args.match:
                 stores = [s for s in stores if any(word in str(s["normalized"]["name"]["value"]) for word in args.match)]
             emit({"ok": True, "data_origin": "live", "stores": stores,
                   "received_at": result.received_at, "upstream_freshness": "unknown",
-                  "api_profile": args.api_profile})
+                  "api_profile": args.api_profile, "transport": result.transport})
             return 0
         if args.command == "report":
             if not Path(args.db).is_file():

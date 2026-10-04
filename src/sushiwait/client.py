@@ -32,6 +32,8 @@ from urllib.request import (
     build_opener,
 )
 
+from .transport import observe_headers
+
 
 _READ_ONLY_ENDPOINTS = frozenset({"stores", "getStoreById"})
 _MAX_TIMEOUT_SECONDS = 15
@@ -78,6 +80,7 @@ class QueryResult:
     started_at: str
     received_at: str
     elapsed_ms: int
+    transport: dict | None = field(default=None, repr=False)
 
 
 class _Opener(Protocol):
@@ -310,6 +313,7 @@ class SushiroClient:
         started_at = _utc_now()
         started_ns = time.monotonic_ns()
         status: int | None = None
+        transport = None
 
         def result(error: str | None, payload: dict[str, Any] | None = None) -> QueryResult:
             return QueryResult(
@@ -320,6 +324,7 @@ class SushiroClient:
                 started_at=started_at,
                 received_at=_utc_now(),
                 elapsed_ms=max(0, (time.monotonic_ns() - started_ns) // 1_000_000),
+                transport=transport,
             )
 
         if endpoint not in _READ_ONLY_ENDPOINTS:
@@ -370,6 +375,7 @@ class SushiroClient:
             status = response_status
             if 300 <= status < 400 or response.geturl() != url:
                 return result("redirect_blocked")
+            transport = observe_headers(response.headers)
             if not 200 <= status < 300:
                 return result("http_error")
             declared_length = response.headers.get("Content-Length")
@@ -391,6 +397,8 @@ class SushiroClient:
                 if type(error.code) is int and 100 <= error.code <= 599
                 else None
             )
+            if status is not None and not 300 <= status < 400 and error.geturl() == url:
+                transport = observe_headers(error.headers)
             try:
                 error.close()
             except Exception:

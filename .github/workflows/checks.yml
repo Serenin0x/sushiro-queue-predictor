@@ -1,0 +1,48 @@
+name: Offline checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Python and adapter checks
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+      - name: Build and install wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/sushiwait-wheels"
+          python -m venv "$RUNNER_TEMP/sushiwait-package"
+          "$RUNNER_TEMP/sushiwait-package/bin/python" -m pip install --no-index --no-deps "$RUNNER_TEMP"/sushiwait-wheels/*.whl
+      - name: Check installed package outside checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/sushiwait-package/bin/python" -I "$GITHUB_WORKSPACE/scripts/check_installed_package.py" --source-root "$GITHUB_WORKSPACE" --version-file "$GITHUB_WORKSPACE/VERSION" --fixture "$GITHUB_WORKSPACE/examples/fixtures/store-detail-01.synthetic.json"

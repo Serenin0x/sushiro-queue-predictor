@@ -16,6 +16,7 @@ from .observations import (
     QUEUE_NAMES, _SCALAR_FIELDS, _SIGNED_INT_FIELDS, _TEXT_FIELDS,
     _nonnegative_int, _public_id, _string_array, _validate_api_profile, compute_change,
 )
+from .transport import sanitize_transport
 
 
 _LEGACY_COLUMNS = {
@@ -321,6 +322,9 @@ class SnapshotStore:
                    "error_code": _safe_error(result.error_code), "http_status": result.http_status,
                    "timing": {"request_started_at": result.started_at,
                               "received_at": result.received_at, "elapsed_ms": result.elapsed_ms}}
+        transport = sanitize_transport(getattr(result, "transport", None))
+        if transport is not None:
+            failure["transport"] = transport
         return self._insert(store_id, data_origin, api_profile, result.received_at, False, failure)
 
     def save_preflight_stop(
@@ -432,6 +436,10 @@ class SnapshotStore:
         errors = {key: Counter() for key in phases}
         http = {key: Counter() for key in ("request", "normalization")}
         intervals, durations = _empty_summary(), _empty_summary()
+        transport_count = 0
+        cache_hints = Counter()
+        quota_remaining = _empty_summary()
+        last_transport = None
         field_presence = {key: {presence: 0 for presence in _REPORT_PRESENCES}
                           for key in (*_SCALAR_FIELDS, "groupQueues")}
         queue_stats = {key: {"presence": {presence: 0 for presence in _REPORT_PRESENCES},
@@ -475,6 +483,13 @@ class SnapshotStore:
 
             if ok == 1 or phase in ("request", "normalization"):
                 request_records += 1
+                transport = sanitize_transport(payload.get("transport"))
+                if transport is not None:
+                    transport_count += 1
+                    last_transport = transport
+                    cache_hints[transport["gateway_cache"] or "unknown"] += 1
+                    if transport["rate_remaining"] is not None:
+                        _add_summary(quota_remaining, transport["rate_remaining"])
                 timing = payload.get("timing")
                 timing = timing if isinstance(timing, dict) else {}
                 start, received = _timestamp(timing.get("request_started_at")), _timestamp(timing.get("received_at"))
@@ -539,6 +554,12 @@ class SnapshotStore:
                          "reversed_start_pairs": reversed_starts,
                          "interval_semantics": "adjacent_valid_request_records_in_same_run"},
             "public_content": public, "field_presence": field_presence, "queues": queue_stats,
+            "transport": {"observed_records": transport_count,
+                          "gateway_cache_hints": dict(sorted(cache_hints.items())),
+                          "rate_remaining": _summary(quota_remaining),
+                          "last_observed": last_transport,
+                          "source_update_time_verified": False,
+                          "rate_window_verified": False},
             "comparison_semantics": "adjacent_valid_successes_in_same_run_failures_or_invalid_payloads_break_chain",
             "upstream_freshness": "unknown",
         }

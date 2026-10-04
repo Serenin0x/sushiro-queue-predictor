@@ -1,0 +1,11 @@
+# 自动检查与安装验证
+
+工作流为 [.github/workflows/checks.yml](../.github/workflows/checks.yml)，本机安装包检查入口为 [scripts/check_installed_package.py](../scripts/check_installed_package.py)。每次 main 推送、针对 main 的普通 pull_request，以及显式 workflow_dispatch 运行离线检查；没有定时采集、业务操作、部署或凭证更新任务。
+
+Ubuntu 24.04 的 Python 3.11、3.12、3.13 三组分别执行完整检查，Node 22 执行既有适配器场景。每组再构建 wheel、安装到临时虚拟环境，在 checkout 外用 `-I` 运行安装验证：核对版本与实际导入位置、CLI 帮助、合成回放及只读报告。回放/报告路径将 socket 调用设为失败，数据库只在临时目录；CLI 帮助子进程单独核对退出状态。它不访问寿司郎，不读 HAR、微信数据或本机凭证，也不把合成测试算作 live 验收。
+
+权限仅 contents:read，checkout 不持久化授权；没有项目 secrets、OIDC、发布权限、pull_request_target、生产服务器或 artifact 上传。测试使用标准库；构建所需 setuptools 由标准构建隔离取得，项目运行依赖仍为空。工作流十分钟超时，较旧同分支检查可取消；这不是采集器的停止/重试策略。
+
+2026-10-04 按官方仓库实际标签解析到不可变 commit，并核对该 commit 的 action.yml 输入：checkout v7 `3d3c42e5aac5ba805825da76410c181273ba90b1`，setup-python v7 `5fda3b95a4ea91299a34e894583c3862153e4b97`，setup-node v6 `249970729cb0ef3589644e2896645e5dc5ba9c38`。动作自身使用 Node 24；项目适配器测试另用 Node 22。后续更新须重查来源与实际 CI，不把可变标签自动漂移作为验证。
+
+来源：[GitHub 工作流语法](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)、[checkout 固定动作](https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/action.yml)、[setup-python 固定动作](https://github.com/actions/setup-python/blob/5fda3b95a4ea91299a34e894583c3862153e4b97/action.yml)、[setup-node 固定动作](https://github.com/actions/setup-node/blob/249970729cb0ef3589644e2896645e5dc5ba9c38/action.yml)。本机、GitHub 实际运行及真实接口结果分别记录在 [V0_2_ACCEPTANCE.md](V0_2_ACCEPTANCE.md) 和 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)。
