@@ -1,6 +1,6 @@
 # 预测数据、真实结果与日期特征规范
 
-这是数据阶段的设计和已有盘点，不是训练或预测接口。rc2已实现本机结果校验、独立私有库修订追加与汇总，操作见[OUTCOMES.md](OUTCOMES.md)；真实性审核和训练资格仍未实现。公开基线rc1；rc2增加本机结果记录工具，正式v0.2的剩余条件见[V0_2_ACCEPTANCE.md](V0_2_ACCEPTANCE.md)。完整需求和每轮历史见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)；字段含义见[FIELD_MAPPING.md](FIELD_MAPPING.md)。
+这是数据阶段的设计和已有盘点，不是训练或预测接口。rc2已实现本机结果校验、独立私有库修订追加与汇总，操作见[OUTCOMES.md](OUTCOMES.md)；真实性审核和训练资格仍未实现。公开基线rc2；本机结果记录工具已发布并通过三版本离线CI，正式v0.2的剩余条件见[V0_2_ACCEPTANCE.md](V0_2_ACCEPTANCE.md)。完整需求和每轮历史见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)；字段含义见[FIELD_MAPPING.md](FIELD_MAPPING.md)。
 
 ## 当前数据能回答什么
 

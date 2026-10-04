@@ -1,6 +1,6 @@
 # v0.2.0 接入验收报告
 
-结论：公开rc1基线通过离线检查；本地rc2增加结果记录工具，**正式v0.2.0仍未通过全部接入验收**。三店持续查询和到期停采已经实测；正常新上下文的同进程跨到期恢复、电脑客户端接入及签到桌数同屏数值对照仍缺实证。候选已推送GitHub main，代码提交 [3279059c423f4d9874327e160cee150495cb1eb3](https://github.com/Serenin0x/sushiro-queue-predictor/commit/3279059c423f4d9874327e160cee150495cb1eb3)，没有正式v0.2标签或Release。版本发布和最后检查以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 编辑历史为准。本阶段为少量大陆门店的只读数据验证工具；预测模型、用户前端、自动取号和服务器全天服务属于后续目标。
+结论：公开rc2已增加结果记录工具并通过离线检查，**正式v0.2.0仍未通过全部接入验收**。三店持续查询和到期停采已经实测；正常新上下文的同进程跨到期恢复、电脑客户端接入及签到桌数同屏数值对照仍缺实证。候选已推送GitHub main，代码提交 [a728bf93cb4e1b5dd98de97d02cebe06461aa97c](https://github.com/Serenin0x/sushiro-queue-predictor/commit/a728bf93cb4e1b5dd98de97d02cebe06461aa97c)，没有正式v0.2标签或Release。版本发布和最后检查以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 编辑历史为准。本阶段为少量大陆门店的只读数据验证工具；预测模型、用户前端、自动取号和服务器全天服务属于后续目标。
 
 ## 验收范围
 
@@ -54,4 +54,4 @@
 
 ## rc2结果工具补充
 
-本地0.2.0rc2新增三个本机结果命令、私有修订追加库及[OUTCOMES](OUTCOMES.md)；专项22项通过，完整283项/1.619秒在获准本机回环环境通过、无跳过。默认沙箱两次3失败/5错误均旧回环绑定限制，实际errno1探针确认后复核通过；没有删测试或把上游模拟当真实恢复。全部新增结果为合成/模拟输入，未输入真实个人资料，主库真实标签仍未验收。结果库独立schema1，快照DB2/report2保持；rc2最终wheel57,328字节、SHA256 `63e86cbd2b88f8d278a58e58da5cd2023c603ac155bcb16888e909eb7a579ab8`，13个代码模块与src相同；SPDX MIT/显式LICENSE和最低构建版本77.0.3核对。checkout外独立安装及合成公共/结果路径通过，socket0、已验证训练标签0。GitHub rc2实际成绩待发布后核对。
+已公开0.2.0rc2新增三个本机结果命令、私有修订追加库及[OUTCOMES](OUTCOMES.md)；专项22项通过，完整283项/1.619秒在获准本机回环环境通过、无跳过。默认沙箱两次3失败/5错误均旧回环绑定限制，实际errno1探针确认后复核通过；没有删测试或把上游模拟当真实恢复。全部新增结果为合成/模拟输入，未输入真实个人资料，主库真实标签仍未验收。结果库独立schema1，快照DB2/report2保持；rc2最终wheel57,328字节、SHA256 `63e86cbd2b88f8d278a58e58da5cd2023c603ac155bcb16888e909eb7a579ab8`，13个代码模块与src相同；SPDX MIT/显式LICENSE和最低构建版本77.0.3核对。checkout外独立安装及合成公共/结果路径通过，socket0、已验证训练标签0。rc2[实际运行37199591656](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37199591656)三组均success，Python3.11、3.12、3.13分别283项/2.596秒、2.553秒、2.291秒；全部构建/安装步骤通过、结果socket0/训练标签0。69个远端blob与暂存区一致，电脑和真实恢复验收仍缺。

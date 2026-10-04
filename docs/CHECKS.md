@@ -12,4 +12,4 @@ Ubuntu 24.04 的 Python 3.11、3.12、3.13 三组分别执行完整检查，Node
 
 2026-10-04，提交3279059的[实际工作流运行](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37196578650)已completed/success，三组均261项检查及构建/checkout外安装通过。普通HTTPS推送因既有PAT缺workflow scope被拒绝，远端当时未移动；使用现有GitHub连接以force=false更新同一提交后成功，不新增凭证或权限授权。完整失败/发布核对见编辑历史E0065；这些离线成功不证明真实续期或服务器可持续运行。
 
-rc2构建时按[PyPA许可元数据格式](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license-and-license-files)采用SPDX MIT/显式LICENSE，最低构建后端setuptools77.0.3；运行依赖仍0。最终本机wheel13个模块与src一致，checkout外合成结果路径也通过socket0检查。283项本机已通过；GitHub rc2实际结果待核对，不能继承rc1的261项成绩。
+rc2构建时按[PyPA许可元数据格式](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license-and-license-files)采用SPDX MIT/显式LICENSE，最低构建后端setuptools77.0.3；运行依赖仍0。最终本机wheel13个模块与src一致，checkout外合成结果路径也通过socket0检查。283项本机已通过；rc2提交a728bf93cb4e1b5dd98de97d02cebe06461aa97c的[实际运行37199591656](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37199591656)completed/success，Python3.11、3.12、3.13分别283项/2.596秒、2.553秒、2.291秒，均OK，三组构建/checkout外安装步骤success。结果路径socket0、已验证训练标签0；未发生产请求，没有正式版本或部署。
