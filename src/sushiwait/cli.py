@@ -15,6 +15,7 @@ from . import __version__
 from .auth import describe_authorization
 from .bridge import BridgeError, receive_context
 from .capture import CaptureError, inspect_capture, write_credentials_from_capture
+from .calendar import CalendarError, date_features
 from .client import QueryResult, SushiroClient
 from .credentials import CredentialError, CredentialSource, QueryCredentials, read_credentials_file
 from .observations import compute_change, normalize_directory, normalize_snapshot
@@ -344,6 +345,9 @@ def build_parser() -> argparse.ArgumentParser:
     replay = commands.add_parser("replay", help="离线导入明确标记的合成快照（不联网）")
     replay.add_argument("--fixture", action="append", required=True)
     replay.add_argument("--db", default=DEFAULT_DB)
+    calendar = commands.add_parser("date-features", help="离线日期分类；明确预测当时，不推门店营业或等待时间")
+    calendar.add_argument("--at", required=True, help="目标时刻，带显式时区和秒")
+    calendar.add_argument("--as-of", required=True, help="使用信息的当时，带显式时区和秒")
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     return parser
@@ -380,6 +384,13 @@ def main(argv: list[str] | None = None) -> int:
             emit({"ok": False, "error_code": "invalid_credential_wait_bounds"})
             return 2
     try:
+        if args.command == "date-features":
+            try:
+                emit({"ok": True, **date_features(args.at, as_of=args.as_of)})
+                return 0
+            except CalendarError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
         if args.command in ("outcome-check", "outcome-import", "outcome-report"):
             try:
                 if args.command == "outcome-report":

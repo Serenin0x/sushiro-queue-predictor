@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "outcome-import", "outcome-report")):
+            ("capture-import", "context-bridge", "outcome-import", "outcome-report", "date-features")):
         raise SystemExit("installed_cli_missing_commands")
     with tempfile.TemporaryDirectory() as directory:
         database = str(Path(directory).resolve() / "synthetic.sqlite3")
@@ -54,6 +54,11 @@ def check() -> None:
             with contextlib.redirect_stdout(outcome_output):
                 if main(["outcome-report", "--db", outcome_database]) != 0:
                     raise SystemExit("installed_outcome_report_failed")
+            calendar_output = io.StringIO()
+            with contextlib.redirect_stdout(calendar_output):
+                if main(["date-features", "--at", "2026-10-10T12:00:00+08:00",
+                         "--as-of", "2026-10-04T12:00:00Z"]) != 0:
+                    raise SystemExit("installed_calendar_failed")
         report = json.loads(output.getvalue())
         if not report["groups"] or any(g["data_origin"] != "synthetic" for g in report["groups"]):
             raise SystemExit("installed_report_origin_mismatch")
@@ -61,10 +66,15 @@ def check() -> None:
         if (outcome_report["origins"] != {"synthetic": 1} or outcome_report["verified_training_labels"] != 0
                 or outcome_report["eta_available"]):
             raise SystemExit("installed_outcome_report_semantics_mismatch")
+        calendar_report = json.loads(calendar_output.getvalue())
+        if (calendar_report["date_type"] != "makeup_workday" or calendar_report["eta_available"]
+                or calendar_report["store_open_status"] != "unknown"):
+            raise SystemExit("installed_calendar_semantics_mismatch")
     print(json.dumps({"installed_version": expected, "import_outside_checkout": True,
         "cli_help_ok": True, "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
-        "outcomes_socket_calls": 0, "verified_training_labels": 0}))
+        "outcomes_socket_calls": 0, "verified_training_labels": 0,
+        "calendar_package_data_ok": True, "calendar_socket_calls": 0}))
 
 
 if __name__ == "__main__":
