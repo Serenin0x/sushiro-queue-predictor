@@ -1,6 +1,6 @@
 # v0.2.0 接入验收报告
 
-结论：公开rc2已增加结果记录工具并通过离线检查，**正式v0.2.0仍未通过全部接入验收**。三店持续查询和到期停采已经实测；正常新上下文的同进程跨到期恢复、电脑客户端接入及签到桌数同屏数值对照仍缺实证。候选已推送GitHub main，代码提交 [a728bf93cb4e1b5dd98de97d02cebe06461aa97c](https://github.com/Serenin0x/sushiro-queue-predictor/commit/a728bf93cb4e1b5dd98de97d02cebe06461aa97c)，没有正式v0.2标签或Release。版本发布和最后检查以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 编辑历史为准。本阶段为少量大陆门店的只读数据验证工具；预测模型、用户前端、自动取号和服务器全天服务属于后续目标。
+结论：公开rc3已增加结果记录与日期准备工具并通过离线检查，**正式v0.2.0仍未通过全部接入验收**。三店持续查询和到期停采已经实测；正常新上下文的同进程跨到期恢复、电脑客户端接入及签到桌数同屏数值对照仍缺实证。候选已推送GitHub main，代码提交 [d7897ed26f1bf3705efd3cae771bdcae0d18d4f2](https://github.com/Serenin0x/sushiro-queue-predictor/commit/d7897ed26f1bf3705efd3cae771bdcae0d18d4f2)，没有正式v0.2标签或Release。版本发布和最后检查以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 编辑历史为准。本阶段为少量大陆门店的只读数据验证工具；预测模型、用户前端、自动取号和服务器全天服务属于后续目标。
 
 ## 验收范围
 
@@ -58,4 +58,4 @@
 
 ## rc3日期准备补充
 
-本地0.2.0rc3新增[CALENDAR](CALENDAR.md)、2026固定年度资源与date-features离线入口；专项15项/0.011秒、完整298项/1.741秒通过，无跳过。已核对公告全部七段放假与六个调休日，未知年份/公告未可用保留unknown；明确Asia/Shanghai、at/as-of、官方公开重建与本项目审核时间，不伪造过去生产日志。主库只读重建219份均为两天国庆假期/日历秋季、字节不变，不等于全年训练覆盖。最终wheel61,358字节、SHA256 `dd7de9a21e8101b0bb7c6d0926d2616c99ae0ae8f4cff4bac693957254a4f99c`，14模块及JSON一致，checkout外独立安装/三路径socket0通过；辅助路径误写首次失败与修正保留E0068，公开CI待实际核对；接入剩余条件保持，不称v0.2/v1已完成。
+已公开0.2.0rc3新增[CALENDAR](CALENDAR.md)、2026固定年度资源与date-features离线入口；专项15项/0.011秒、完整298项/1.741秒通过，无跳过。已核对公告全部七段放假与六个调休日，未知年份/公告未可用保留unknown；明确Asia/Shanghai、at/as-of、官方公开重建与本项目审核时间，不伪造过去生产日志。主库只读重建219份均为两天国庆假期/日历秋季、字节不变，不等于全年训练覆盖。最终wheel61,358字节、SHA256 `dd7de9a21e8101b0bb7c6d0926d2616c99ae0ae8f4cff4bac693957254a4f99c`，14模块及JSON一致，checkout外独立安装/三路径socket0通过；辅助路径误写首次失败与修正保留E0068，[GitHub实际运行37200713068](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37200713068)三组success，Python3.11、3.12、3.13分别298项/1.918秒、2.306秒、2.445秒；构建/安装/年度资源与三个路径socket0全部通过，73远端blob一致；接入剩余条件保持，不称v0.2/v1已完成。

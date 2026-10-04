@@ -14,4 +14,4 @@ Ubuntu 24.04 的 Python 3.11、3.12、3.13 三组分别执行完整检查，Node
 
 rc2构建时按[PyPA许可元数据格式](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license-and-license-files)采用SPDX MIT/显式LICENSE，最低构建后端setuptools77.0.3；运行依赖仍0。最终本机wheel13个模块与src一致，checkout外合成结果路径也通过socket0检查。283项本机已通过；rc2提交a728bf93cb4e1b5dd98de97d02cebe06461aa97c的[实际运行37199591656](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37199591656)completed/success，Python3.11、3.12、3.13分别283项/2.596秒、2.553秒、2.291秒，均OK，三组构建/checkout外安装步骤success。结果路径socket0、已验证训练标签0；未发生产请求，没有正式版本或部署。
 
-本地rc3新增15项日期检查，完整298项/1.741秒通过；安装检查增加date-features及2026固定JSON包资源，从checkout外验证调休上班日、营业未知/ETA不可用及socket0。最终本机wheel/14代码模块及JSON一致、checkout外安装/date-features通过socket0；实际GitHub结果随后记入验收与交接，未运行检查不能称成功；工作流动作/权限/输入保持。
+已公开rc3新增15项日期检查，完整298项/1.741秒通过；安装检查增加date-features及2026固定JSON包资源，从checkout外验证调休上班日、营业未知/ETA不可用及socket0。最终本机wheel/14代码模块及JSON一致、checkout外安装/date-features通过socket0；提交d7897ed的[实际GitHub运行37200713068](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37200713068)三组298项及构建/安装/包资源检查全部success，实际日志核对公共/结果/日期路径socket0；工作流动作/权限/输入保持。
