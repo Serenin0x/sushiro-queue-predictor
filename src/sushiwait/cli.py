@@ -25,6 +25,7 @@ from .storage import SnapshotStore
 from .signals import SignalError, signal_report
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
+from .promotion import PromotionError, promote_context
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 
@@ -404,6 +405,10 @@ def build_parser() -> argparse.ArgumentParser:
     guard = commands.add_parser("surge-guard", help="独立1–45秒仅关闭本机Surge解密；不启用、不更新凭证或恢复域名")
     guard.add_argument("--seconds", type=int, default=40,
                        help="准备后1–45秒发出关闭并核验；须在另一个进程运行，初始三开关须关闭")
+    promotion = commands.add_parser("context-promote", help="调试关闭后显式原子提交完整私有暂存上下文；不查询或登录")
+    promotion.add_argument("--credentials-file", required=True, help="当前gateway私有上下文")
+    promotion.add_argument("--staged-file", required=True, help="完整新gateway私有暂存上下文")
+    promotion.add_argument("--expected-revision", required=True, type=int, help="预计当前版本；不符则保留原文件")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -492,6 +497,19 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": False, "error_code": "collection_task_path_conflict"})
                 return 2
     try:
+        if args.command == "context-promote":
+            try:
+                result = promote_context(credentials_file=args.credentials_file,
+                                         staged_file=args.staged_file,
+                                         expected_revision=args.expected_revision)
+                emit({"ok": result["durability_confirmed"], **result})
+                return 0 if result["durability_confirmed"] else 1
+            except PromotionError as error:
+                emit({"ok": False, "error_code": error.error_code,
+                      "committed": error.committed,
+                      "durability_confirmed": error.durability_confirmed,
+                      "external_network_performed": False})
+                return 1
         if args.command == "surge-guard":
             try:
                 result = run_guard(seconds=args.seconds, on_ready=emit)

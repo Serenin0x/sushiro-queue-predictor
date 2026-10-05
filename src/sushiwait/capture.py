@@ -430,11 +430,14 @@ def _named_identity(parent_fd: int, name: str) -> tuple | None:
 
 
 def _write_private(body: bytes, destination: str | Path, revision: int,
-                   context: QueryCredentials, now: datetime | None) -> bool:
+                   context: QueryCredentials, now: datetime | None, *,
+                   expected_current: QueryCredentials | None = None) -> bool:
     """Commit atomically; same-account writers must honor the directory lock.
 
     POSIX rename has no compare-and-swap. Identity checks and the advisory lock
-    prevent cooperating writers from racing; an uncooperative same-user process
+    prevent cooperating writers from racing; expected_current, when provided,
+    also verifies the previously validated complete context under that lock.
+    An uncooperative same-user process
     can still race the final check. Once renamed, a directory-fsync failure is
     reported as committed with unconfirmed durability, never as an unwritten
     result. There is no retry or rollback of a committed context.
@@ -453,8 +456,12 @@ def _write_private(body: bytes, destination: str | Path, revision: int,
             old = read_credentials_file(destination, api_profile=_PROFILE)
             if _named_identity(parent_fd, name) != before:
                 raise CaptureError("capture_destination_changed")
+            if expected_current is not None and old != expected_current:
+                raise CaptureError("capture_destination_changed")
             if revision <= old.revision:
                 raise CaptureError("capture_revision_conflict")
+        elif expected_current is not None:
+            raise CaptureError("capture_destination_changed")
         # Detect known directory-fsync limitations before changing a target.
         os.fsync(parent_fd)
         temp_name = ".sushiwait-context-" + secrets.token_hex(16) + ".tmp"

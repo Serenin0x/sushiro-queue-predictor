@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -46,6 +46,12 @@ def check() -> None:
         capture_output=True, text=True, timeout=10, check=True)
     if "--seconds" not in guard_help.stdout:
         raise SystemExit("installed_surge_guard_missing")
+    promotion_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
+                                     "context-promote", "--help"],
+        capture_output=True, text=True, timeout=10, check=True)
+    if any(option not in promotion_help.stdout for option in
+           ("--credentials-file", "--staged-file", "--expected-revision")):
+        raise SystemExit("installed_promotion_missing")
     collect_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "collect", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(option not in collect_help.stdout for option in ("--task-file", "--resume-task")):
@@ -63,6 +69,15 @@ def check() -> None:
             if (native.call_count != 0 or
                     json.loads(guard_output.getvalue())["error_code"] != "surge_guard_invalid_window"):
                 raise SystemExit("installed_guard_validation_semantics_mismatch")
+            promotion_output = io.StringIO()
+            with patch("sushiwait.promotion.read_state", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    contextlib.redirect_stdout(promotion_output):
+                if main(["context-promote", "--credentials-file", "unused-current.json",
+                         "--staged-file", "unused-staged.json", "--expected-revision", "0"]) != 1:
+                    raise SystemExit("installed_promotion_invalid_revision_accepted")
+            if (native.call_count != 0 or
+                    json.loads(promotion_output.getvalue())["error_code"] != "promotion_invalid_input"):
+                raise SystemExit("installed_promotion_validation_semantics_mismatch")
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["replay", "--fixture", str(args.fixture), "--db", database]) != 0:
                     raise SystemExit("installed_replay_failed")
@@ -131,6 +146,8 @@ def check() -> None:
         "cli_help_ok": True, "bridge_diagnostic_option_ok": True, "surge_intake_help_ok": True,
         "surge_guard_help_ok": True, "guard_invalid_window_ok": True,
         "guard_validation_socket_calls": 0, "guard_validation_native_cli_calls": 0,
+        "promotion_help_ok": True, "promotion_invalid_revision_ok": True,
+        "promotion_validation_socket_calls": 0, "promotion_validation_native_cli_calls": 0,
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
