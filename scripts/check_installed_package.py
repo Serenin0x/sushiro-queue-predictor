@@ -31,7 +31,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -146,6 +146,48 @@ def check() -> None:
                     or shared_policy["scheduler_applied"] or shared_policy["eta_available"]
                     or not shared_policy["output_requires_private_handling"]):
                 raise SystemExit("installed_shared_monitoring_semantics_mismatch")
+            from datetime import datetime, timedelta, timezone
+            from types import SimpleNamespace
+            adaptive_file = Path(directory).resolve() / "adaptive-plans.json"
+            adaptive_database = str(Path(directory).resolve() / "adaptive.sqlite3")
+            adaptive_file.write_text(json.dumps({"schema_version":1,"plans":[
+                {"store_id":"900001","desired_arrival_at":"2020-01-01T00:10:00Z"},
+                {"store_id":"900001","desired_arrival_at":"2020-01-01T00:12:00Z"}]}))
+            adaptive_file.chmod(0o600)
+            adaptive_before = adaptive_file.read_bytes()
+            adaptive_clock, adaptive_starts = [0], []
+            def adaptive_wall():
+                return datetime(2020,1,1,tzinfo=timezone.utc)+timedelta(seconds=adaptive_clock[0])
+            def adaptive_wait(deadline):
+                adaptive_clock[0] = deadline
+            def adaptive_observe(_client, store_id, _database, **_options):
+                adaptive_starts.append((store_id, adaptive_clock[0]))
+                return True
+            adaptive_session = SimpleNamespace(args=SimpleNamespace(api_profile="miniapp_gateway"),
+                client=lambda: object(), wait_until=adaptive_wait)
+            adaptive_output = io.StringIO()
+            with patch("sushiwait.cli._QuerySession", return_value=adaptive_session), \
+                    patch("sushiwait.cli._utc_clock", side_effect=adaptive_wall), \
+                    patch("sushiwait.cli.time.monotonic", side_effect=lambda:adaptive_clock[0]), \
+                    patch("sushiwait.cli.observe", side_effect=adaptive_observe), \
+                    patch("sushiwait.credentials.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child, \
+                    contextlib.redirect_stdout(adaptive_output):
+                if main(["monitor-collect", "--plans-file", str(adaptive_file), "--db", adaptive_database,
+                         "--credentials-file", str(Path(directory).resolve()/"unused-context.json"),
+                         "--store-id", "900001", "--api-profile", "miniapp_gateway",
+                         "--duration-seconds", "90"]) != 0:
+                    raise SystemExit("installed_adaptive_simulation_failed")
+            adaptive_summary = json.loads(adaptive_output.getvalue())
+            if (auth.call_count or native.call_count or child.call_count
+                    or adaptive_starts != [("900001",0),("900001",30),("900001",60)]
+                    or adaptive_file.read_bytes() != adaptive_before
+                    or adaptive_summary["successful_queries"] != 3
+                    or not adaptive_summary["scheduler_applied"]
+                    or adaptive_summary["eta_available"]
+                    or adaptive_summary["missed_call_prevention_guaranteed"]):
+                raise SystemExit("installed_adaptive_simulation_semantics_mismatch")
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["replay", "--fixture", str(args.fixture), "--db", database]) != 0:
                     raise SystemExit("installed_replay_failed")
@@ -243,6 +285,10 @@ def check() -> None:
         "monitoring_policy_native_cli_calls": 0, "monitoring_policy_credentials_accessed": False,
         "shared_monitoring_policy_ok": True, "shared_monitoring_socket_calls": 0,
         "shared_monitoring_native_cli_calls": 0, "shared_monitoring_credentials_accessed": False,
+        "adaptive_scheduler_simulation_ok": True, "adaptive_simulated_queries": 3,
+        "adaptive_simulation_socket_calls": 0, "adaptive_simulation_native_cli_calls": 0,
+        "adaptive_simulation_child_process_calls": 0, "adaptive_simulation_credentials_accessed": False,
+        "adaptive_plan_unchanged": True, "adaptive_simulation_is_live_acceptance": False,
         "interval_evaluation_ok": True, "evaluation_socket_calls": 0,
         "evaluation_native_cli_calls": 0, "evaluation_child_process_calls": 0,
         "evaluation_query_credentials_accessed": False,

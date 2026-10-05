@@ -33,6 +33,7 @@ from .evaluation import EvaluationError, evaluate_document, read_evaluation_docu
 from .cohort import CohortError, cohort_report, reconstruct_claims
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
+from .adaptive import ScheduleError, schedule_from_file, run_adaptive
 
 DEFAULT_DB = str(local_data_directory() / "sushiwait.sqlite3")
 API_PROFILES = ("legacy", "miniapp_gateway")
@@ -432,6 +433,16 @@ def build_parser() -> argparse.ArgumentParser:
     shared.add_argument("--plans-file", required=True, help="明确的私有16KiB计划文件；不读取凭证")
     shared.add_argument("--as-of", required=True, help="带时区的判断时刻")
     shared.add_argument("--base-interval", required=True, type=int, help="窗口外目标周期60–3600秒")
+    adaptive = commands.add_parser("monitor-collect", help="按私有计划合并同店60/30秒只读查询；有界运行、首错停止")
+    adaptive.add_argument("--plans-file", required=True, help="明确的私有16KiB计划；不接受外部last_poll_started_at")
+    adaptive.add_argument("--credentials-file", required=True, help="完整私有查询上下文；每次GET前及等待重读")
+    adaptive.add_argument("--api-profile", choices=API_PROFILES, required=True)
+    adaptive.add_argument("--store-id", action="append", required=True, help="明确允许的1–3店，与计划相符")
+    adaptive.add_argument("--db", required=True)
+    adaptive.add_argument("--base-interval", type=int, default=300)
+    adaptive.add_argument("--duration-seconds", type=int, default=300, help="运行30–3600秒；截止后不开始新查询")
+    adaptive.add_argument("--max-queries", type=int, default=120, help="全店合计1–360次；不补发错过的周期")
+    adaptive.set_defaults(anonymous=False)
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -500,7 +511,7 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in ("snapshot", "collect", "context-bridge", "signal-report"):
+    if args.command in ("snapshot", "collect", "context-bridge", "signal-report", "monitor-collect"):
         try:
             if args.command in ("snapshot", "signal-report"):
                 args.store_id = canonical_store_id(args.store_id)
@@ -528,6 +539,29 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": False, "error_code": "collection_task_path_conflict"})
                 return 2
     try:
+        if args.command == "monitor-collect":
+            try:
+                paths = [Path(p).resolve() for p in (args.plans_file, args.credentials_file, args.db)]
+                if (len(set(paths)) != 3 or any(
+                        a.exists() and b.exists() and os.path.samefile(a, b)
+                        for i, a in enumerate(paths) for b in paths[i + 1:])):
+                    raise ScheduleError("schedule_path_conflict")
+                schedule = schedule_from_file(args.plans_file, allowed_stores=args.store_id,
+                    base_interval=args.base_interval, duration_seconds=args.duration_seconds,
+                    max_queries=args.max_queries, wall=_utc_clock().isoformat(), monotonic=time.monotonic())
+                session = _QuerySession(args)
+                if schedule.decision(wall=_utc_clock().isoformat(), monotonic=time.monotonic())["done"]:
+                    return run_adaptive(schedule, session, None, wall_clock=_utc_clock,
+                        monotonic_clock=time.monotonic, observe=observe,
+                        record_stop=_record_preflight_stop, emit=emit, preflight_stop=_PreflightStop)
+                with SnapshotStore(args.db) as db:
+                    return run_adaptive(schedule, session, db, wall_clock=_utc_clock,
+                        monotonic_clock=time.monotonic, observe=observe,
+                        record_stop=_record_preflight_stop, emit=emit, preflight_stop=_PreflightStop)
+            except ScheduleError as error:
+                emit({"ok": False, "error_code": error.error_code,
+                      "eta_available": False, "business_operation_performed": False})
+                return 1
         if args.command == "monitor-plan":
             try:
                 result = polling_policy(desired_arrival_at=args.desired_arrival_at,
