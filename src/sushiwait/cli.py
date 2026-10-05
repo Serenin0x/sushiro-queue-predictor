@@ -27,6 +27,7 @@ from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
 from .monitoring import MonitoringError, polling_policy
+from .shared_monitoring import SharedMonitoringError, read_plan_file, shared_polling_policy
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 
@@ -418,6 +419,10 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--plan-status", choices=("waiting", "called", "no_show", "cancelled", "ended"), default="waiting")
     monitor.add_argument("--earliest-call-at", help="外部提供的最早叫号估计；本工具不认证或计算预测")
     monitor.add_argument("--accelerated-display-turnover", action="store_true", help="外部展示集合加速输入；不当真实过号率")
+    shared = commands.add_parser("monitor-stores", help="离线合并同店刷新需求和时间边界；不启动调度或查询")
+    shared.add_argument("--plans-file", required=True, help="明确的私有16KiB计划文件；不读取凭证")
+    shared.add_argument("--as-of", required=True, help="带时区的判断时刻")
+    shared.add_argument("--base-interval", required=True, type=int, help="窗口外目标周期60–3600秒")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -516,6 +521,15 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": True, **result})
                 return 0
             except MonitoringError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "monitor-stores":
+            try:
+                result = shared_polling_policy(read_plan_file(args.plans_file), as_of=args.as_of,
+                                               base_interval=args.base_interval)
+                emit({"ok": True, **result})
+                return 0
+            except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
         if args.command == "context-promote":

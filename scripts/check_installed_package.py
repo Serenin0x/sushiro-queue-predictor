@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "monitor-plan", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "monitor-plan", "monitor-stores", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -91,6 +91,25 @@ def check() -> None:
                     or monitoring["requested_interval_seconds"] != 30 or monitoring["eta_available"]
                     or monitoring["scheduler_applied"] or monitoring["notification_sent"]):
                 raise SystemExit("installed_monitoring_semantics_mismatch")
+            shared_file = Path(directory).resolve() / "synthetic-plans.json"
+            shared_file.write_text(json.dumps({"schema_version": 1, "plans": [
+                {"store_id": "3004", "desired_arrival_at": "2026-10-06T19:00:00+08:00"},
+                {"store_id": "3004", "desired_arrival_at": "2026-10-06T18:50:00+08:00"}]}))
+            shared_file.chmod(0o600)
+            shared_output = io.StringIO()
+            with patch("sushiwait.credentials.read_credentials_file", side_effect=AssertionError("unexpected_credentials")), \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")), \
+                    contextlib.redirect_stdout(shared_output):
+                if main(["monitor-stores", "--plans-file", str(shared_file), "--as-of",
+                         "2026-10-06T18:40:00+08:00", "--base-interval", "300"]) != 0:
+                    raise SystemExit("installed_shared_monitoring_failed")
+            shared_policy = json.loads(shared_output.getvalue())
+            if (shared_policy["store_count"] != 1 or shared_policy["plan_count"] != 2
+                    or shared_policy["stores"][0]["requested_interval_seconds"] != 30
+                    or shared_policy["stores"][0]["requested_queries_per_due"] != 1
+                    or shared_policy["scheduler_applied"] or shared_policy["eta_available"]
+                    or not shared_policy["output_requires_private_handling"]):
+                raise SystemExit("installed_shared_monitoring_semantics_mismatch")
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["replay", "--fixture", str(args.fixture), "--db", database]) != 0:
                     raise SystemExit("installed_replay_failed")
@@ -163,6 +182,8 @@ def check() -> None:
         "promotion_validation_socket_calls": 0, "promotion_validation_native_cli_calls": 0,
         "monitoring_policy_ok": True, "monitoring_policy_socket_calls": 0,
         "monitoring_policy_native_cli_calls": 0, "monitoring_policy_credentials_accessed": False,
+        "shared_monitoring_policy_ok": True, "shared_monitoring_socket_calls": 0,
+        "shared_monitoring_native_cli_calls": 0, "shared_monitoring_credentials_accessed": False,
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,

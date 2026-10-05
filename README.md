@@ -37,9 +37,9 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史。人工记录与合成样例分别统计；真实性和训练资格还需审核，当前没有据此发布误差或预测。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；实际调度与提醒继续推进。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。实际调度与提醒继续推进。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、438 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、456 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -73,7 +73,7 @@
 
 字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)。
 
-展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。用餐偏移与近时段刷新目标见[监控时间策略](docs/MONITORING_TARGETS.md)，当前仅离线核对。
+展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。用餐偏移与近时段刷新目标见[监控时间策略](docs/MONITORING_TARGETS.md)，当前仅离线核对；[同店共享策略](docs/SHARED_MONITORING.md)会合并请求目标，并在时间窗口切换前安排重新判断，不启动实际查询。
 
 后续规划使用 FastAPI、PostgreSQL、Redis 后台调度及统计与分位数预测。大语言模型用于提取有来源的商场活动、营业调整等外部事件，并辅助解释预测；其实际收益将通过回测验证。这些组件尚未实现。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc10 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。新增用餐时间偏移与近时段监控目标，17 项专项和 438 项完整本机检查通过；安装包与 checkout 外时间策略验证已通过，本次公开与 GitHub 实际结果继续单独核验，见验收报告。三店各 67 次查询及到期保护保留历史；西单 120 次成功与一次真实跨到期恢复已经完成，另一次真实任务中断后跨进程续采得到 1+2 份成功快照。常驻凭证提供方、长期可靠性与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
+当前代码为 **v0.2.0rc11 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。新增同店共享监控目标，18 项专项和 456 项完整本机检查通过；离线合并刷新需求、提前重算时间边界，实际调度仍待接入。安装包、公开代码与 GitHub 运行逐次核验，见验收报告。三店各 67 次查询及到期保护保留历史；西单 120 次成功与一次真实跨到期恢复已经完成，另一次真实任务中断后跨进程续采得到 1+2 份成功快照。常驻凭证提供方、长期可靠性与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/dda7e700869c57f1-dark.svg"><img src="assets/readme-labels/dda7e700869c57f1-light.svg" alt="2026-10-06 · v0.2.0rc11" width="179" height="20"></picture></strong>：新增同店共享监控策略，多个关注计划共用一份查询目标，取更紧迫的刷新节奏，并在 30／15 分钟窗口边界及时重算；断采后不补发积压请求。18 项专项及 456 项完整本机检查通过，当前仅离线规划，持续调度和提醒仍待实现。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/ce7fbc78085b759a-dark.svg"><img src="assets/readme-labels/ce7fbc78085b759a-light.svg" alt="2026-10-06 · v0.2.0rc10" width="179" height="20"></picture></strong>：新增离线用餐时间策略，正确处理 `+10`／`-10`、30／15 分钟边界、提前叫号估计和加速输入。17 项专项及 438 项完整本机检查通过；后台调度、真实预测和提醒继续分阶段实现。
 
