@@ -1,5 +1,7 @@
 # 无 HAR 的电脑正常查询接入
 
+10-06最新状态：当前正常7已于03:34:59.632530接入，声明03:12:28–04:12:28未验签、下一次正常8+；退出小程序/关调试后独立三店成功，另一个新私有120轮/30秒有界任务仍在运行。本机研究保护进程实测40.122秒自动关解密，原名单随后由操作者恢复，见E0101/E0102；完整全天控制器、永久调度和名单自动恢复尚未交付。E0100的失败/越时保持历史。常规自动更新与本人认证边界见[长期采集方案](LONG_TERM_COLLECTION.md)。
+
 rc6新增 `context-surge`。实际研究、安装和发布状态见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0084起；原响应脚本路径仍见 [BRIDGE.md](BRIDGE.md)。这是辅助端接入工具，不是服务器独立登录或全天自动续期。
 
 ## 为什么增加这条路径
@@ -12,11 +14,11 @@ rc6新增 `context-surge`。实际研究、安装和发布状态见 [PROJECT_HAN
 
 仅支持已观察的Surge Mac6.4.3本机CLI摘要格式。Python标准库，无新运行依赖；固定调用已安装的 `/Applications/Surge.app/Contents/Applications/surge-cli dump request --raw`，不支持任意命令或可配置程序地址。其他平台或格式明确拒绝；安装帮助存在不意味着这台设备实际装有Surge。
 
-已有gateway私有文件必须包含完整上下文和正确应用referer，父目录0700、文件0600/0400，revision显式递增。当前研究文件已提交revision6；运行时仍须重读当前版本，示例数字不是默认版本。
+已有gateway私有文件必须包含完整上下文和正确应用referer，父目录0700、文件0600/0400，revision显式递增。当前研究文件已提交revision7；运行时仍须重读当前版本，示例数字不是默认版本。
 
 ```sh
 PYTHONPATH=src python3 -m sushiwait context-surge \
-  --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --revision 7 --seconds 45
+  --credentials-file "$SUSHIWAIT_CONTEXT_FILE" --revision 8 --seconds 45
 ```
 
 收到 `surge_ready` 后，操作者在已授权的sapi单域名短窗内正常重新打开小程序，进入“用餐预约”门店列表。命令不打开微信、不启用解密、不刷新页面；结束后须及时关闭临时解密并恢复原名单。不要扩展域名、开启原始捕获或分享摘要原文。

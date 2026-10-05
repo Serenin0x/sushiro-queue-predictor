@@ -39,7 +39,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、345 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、372 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
