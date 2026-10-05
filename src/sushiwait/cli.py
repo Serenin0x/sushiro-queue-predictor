@@ -30,6 +30,7 @@ from .monitoring import MonitoringError, polling_policy
 from .shared_monitoring import SharedMonitoringError, read_plan_file, shared_polling_policy
 from .window import WindowError, run_window
 from .evaluation import EvaluationError, evaluate_document, read_evaluation_document
+from .cohort import CohortError, cohort_report, reconstruct_claims
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 
@@ -466,6 +467,12 @@ def build_parser() -> argparse.ArgumentParser:
     calendar.add_argument("--as-of", required=True, help="使用信息的当时，带显式时区和秒")
     evaluation = commands.add_parser("interval-evaluate", help="离线核对区间叫号记录的误差与覆盖界；不预测或认证标签")
     evaluation.add_argument("--input", required=True, help="明确的私有16KiB JSON记录；仅输出聚合算术")
+    cohort = commands.add_parser("outcome-cohort", help="只读核对历史结果声明与完整修订链；不认证训练标签")
+    cohort.add_argument("--db", required=True)
+    cohort.add_argument("--as-of", required=True, help="重建当时，含时区和秒；依据记录声明而非接收证据")
+    cohort.add_argument("--data-origin", choices=("synthetic", "self_reported"), required=True)
+    cohort.add_argument("--api-profile", choices=API_PROFILES, required=True)
+    cohort.add_argument("--max-revisions", type=int, default=10000)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -540,6 +547,20 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": True, **result})
                 return 0
             except SharedMonitoringError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "outcome-cohort":
+            try:
+                if not 1 <= args.max_revisions <= 10000:
+                    raise CohortError("cohort_invalid_bounds")
+                reconstruct_claims([], as_of=args.as_of, data_origin=args.data_origin,
+                                   api_profile=args.api_profile)
+                with OutcomeStore(args.db, read_only=True) as store:
+                    result = cohort_report(store, as_of=args.as_of, data_origin=args.data_origin,
+                        api_profile=args.api_profile, max_revisions=args.max_revisions)
+                emit({"ok": True, **result})
+                return 0
+            except (CohortError, OutcomeError) as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
         if args.command == "interval-evaluate":

@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import io
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -30,7 +31,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "interval-evaluate", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -184,6 +185,26 @@ def check() -> None:
             with contextlib.redirect_stdout(outcome_output):
                 if main(["outcome-report", "--db", outcome_database]) != 0:
                     raise SystemExit("installed_outcome_report_failed")
+            cohort_before = hashlib.sha256(Path(outcome_database).read_bytes()).digest()
+            cohort_reports = []
+            with patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.cli.SnapshotStore", side_effect=AssertionError("unexpected_public_store")) as public_store, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child:
+                for at in ("2020-10-01T11:30:00+08:00", "2020-10-01T10:59:59+08:00"):
+                    cohort_output = io.StringIO()
+                    with contextlib.redirect_stdout(cohort_output):
+                        if main(["outcome-cohort", "--db", outcome_database, "--as-of", at,
+                                 "--data-origin", "synthetic", "--api-profile", "miniapp_gateway"]) != 0:
+                            raise SystemExit("installed_cohort_failed")
+                    cohort_reports.append(json.loads(cohort_output.getvalue()))
+            if (auth.call_count or public_store.call_count or native.call_count or child.call_count
+                    or cohort_before != hashlib.sha256(Path(outcome_database).read_bytes()).digest()
+                    or [r["selected_episodes"] for r in cohort_reports] != [1, 0]
+                    or cohort_reports[0]["unverified_called_wait_candidates"] != 1
+                    or any(r["verified_training_labels"] != 0 or r["historical_availability_verified"]
+                           or not r["output_requires_private_handling"] for r in cohort_reports)):
+                raise SystemExit("installed_cohort_semantics_mismatch")
             calendar_output = io.StringIO()
             with contextlib.redirect_stdout(calendar_output):
                 if main(["date-features", "--at", "2026-10-10T12:00:00+08:00",
@@ -225,6 +246,10 @@ def check() -> None:
         "interval_evaluation_ok": True, "evaluation_socket_calls": 0,
         "evaluation_native_cli_calls": 0, "evaluation_child_process_calls": 0,
         "evaluation_query_credentials_accessed": False,
+        "private_claim_cohort_ok": True, "cohort_database_unchanged": True,
+        "cohort_socket_calls": 0, "cohort_native_cli_calls": 0,
+        "cohort_child_process_calls": 0, "cohort_query_credentials_accessed": False,
+        "cohort_public_snapshot_store_accessed": False,
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
