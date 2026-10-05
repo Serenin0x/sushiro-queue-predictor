@@ -25,7 +25,7 @@ rc5最终离线wheel为67,262字节、SHA256 ae8804d35da1f50580fcb13da8836903e8c
 rc5代码197d465的[实际GitHub运行37265092281](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37265092281)已completed/success；Python3.11、3.12、3.13分别324项/4.883秒、4.748秒、4.800秒，全部构建/安装步骤成功，实际日志确认版本rc5、诊断选项和四路径socket0。132远端blob逐一一致，详见E0082；没有真实新凭证独立GET或恢复。
 
 
-rc6当前候选新增19项正常目录摘要检查，全343项/4.295秒OK无跳过，26个JS场景已含wrapper。覆盖固定目录/窗口/纪元/完整头/应用/声明/冲突/原子并发/有界子进程回收。安装检查增加context-surge帮助/必需选项；最终wheel/checkout外安装/GitHub另记，不借rc5成绩。检查合成且不访问真实Surge/上游，研究及持续采集见E0084/E0085。
+rc6初版当时新增19项正常目录摘要检查，全343项/4.295秒OK无跳过，26个JS场景已含wrapper。覆盖固定目录/窗口/纪元/完整头/应用/声明/冲突/原子并发/有界子进程回收。安装检查增加context-surge帮助/必需选项；最终wheel/checkout外安装/GitHub另记，不借rc5成绩。检查合成且不访问真实Surge/上游，研究及持续采集见E0084/E0085。
 
 rc6最终本机安装检查：16个代码模块、2026年度JSON及构建时README元数据逐字节一致，运行依赖0；checkout外隔离安装版本rc6，context-surge帮助/三个必需选项和既有诊断选项通过，公共/结果/日期/信号四路径socket0、真实训练标签0。wheel与实际公开/CI审计见E0086及后续历史；不当真实接口或独立续期验收。
 
@@ -35,3 +35,7 @@ rc6实际公开代码[0c4cce8](https://github.com/Serenin0x/sushiro-queue-predic
 rc6修正版（E0089）：真实近期200行/Unix完成秒兼容，21项0.119秒与完整345项4.246秒通过，无跳过。原50条非法场景改为201，新加200边界/Unix与≤60秒窗；4MiB/全头/声明/唯一落窗和固定CLI保持。旧0c4cce8的343项CI不能套用345；修正版最终构建/公开/CI另验，真实恢复见E0090。
 
 修正版rc6最终本机wheel/16模块/年度JSON/当前README及checkout外安装已验，四路径socket0/context-surge帮助通过，SHA/实际边界见E0091；新345项远端CI与公开结果另记，不借初版343项。
+
+修正版实际代码[2a0050e](https://github.com/Serenin0x/sushiro-queue-predictor/commit/2a0050edc1b482b3c69936f2025754f692393fe4)、137远端blob一致；[运行37355621524](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37355621524)三版本各345项/构建/checkout外安装全部success，帮助与四路径socket0通过，见E0092。真实一次恢复另见E0090；这仍不代表长期服务器/完整产品验收。
+
+10-06有界运行最终完成：西单原进程120成功/exit0、90保护前+30恢复后，新库125成功1preflight，旧库219/2保持；只读质量报告socket0、数据库SHA前后一致，见E0093。新增[长期采集方案](LONG_TERM_COLLECTION.md)明确实际依赖和未实现组件，文档编辑未重复功能测试或重建wheel。

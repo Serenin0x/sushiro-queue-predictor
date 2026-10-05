@@ -52,3 +52,7 @@ rc6实际公开代码[0c4cce8](https://github.com/Serenin0x/sushiro-queue-predic
 最新真实接入/恢复：5到期前保护暂停，45秒正常目录短窗于02:15:28.859209接入6，原进程02:15:59.320查询成功且继续采集；6声明02:10:55–03:10:55，下一正常7+。最后解密实际45秒后关闭/原名单恢复，随后小程序关闭，另两店02:18独立成功。此为一次受控客户端辅助恢复，服务器独立供应/长期可靠性仍未验；旧343项CI只属于0c4cce8，修正版另记。
 
 修正版rc6最终本机wheel/16模块/年度JSON/当前README及checkout外安装已验，四路径socket0/context-surge帮助通过，SHA/实际边界见E0091；新345项远端CI与公开结果另记，不借初版343项。
+
+修正版实际代码[2a0050e](https://github.com/Serenin0x/sushiro-queue-predictor/commit/2a0050edc1b482b3c69936f2025754f692393fe4)、137远端blob一致；[运行37355621524](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37355621524)三版本各345项/构建/checkout外安装全部success，帮助与四路径socket0通过，见E0092。真实一次恢复另见E0090；这仍不代表长期服务器/完整产品验收。
+
+10-06有界运行最终完成：西单原进程120成功/exit0、90保护前+30恢复后，新库125成功1preflight，旧库219/2保持；只读质量报告socket0、数据库SHA前后一致，见E0093。新增[长期采集方案](LONG_TERM_COLLECTION.md)明确实际依赖和未实现组件，文档编辑未重复功能测试或重建wheel。
