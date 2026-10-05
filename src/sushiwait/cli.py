@@ -29,6 +29,7 @@ from .promotion import PromotionError, promote_context
 from .monitoring import MonitoringError, polling_policy
 from .shared_monitoring import SharedMonitoringError, read_plan_file, shared_polling_policy
 from .window import WindowError, run_window
+from .evaluation import EvaluationError, evaluate_document, read_evaluation_document
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 
@@ -463,6 +464,8 @@ def build_parser() -> argparse.ArgumentParser:
     calendar = commands.add_parser("date-features", help="离线日期分类；明确预测当时，不推门店营业或等待时间")
     calendar.add_argument("--at", required=True, help="目标时刻，带显式时区和秒")
     calendar.add_argument("--as-of", required=True, help="使用信息的当时，带显式时区和秒")
+    evaluation = commands.add_parser("interval-evaluate", help="离线核对区间叫号记录的误差与覆盖界；不预测或认证标签")
+    evaluation.add_argument("--input", required=True, help="明确的私有16KiB JSON记录；仅输出聚合算术")
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -537,6 +540,14 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": True, **result})
                 return 0
             except SharedMonitoringError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "interval-evaluate":
+            try:
+                result = evaluate_document(read_evaluation_document(args.input))
+                emit({"ok": True, **result})
+                return 0
+            except EvaluationError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
         if args.command == "context-window":

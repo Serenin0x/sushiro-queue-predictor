@@ -20,6 +20,7 @@ def check() -> None:
     parser.add_argument("--version-file", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--outcome-fixture", type=Path, required=True)
+    parser.add_argument("--evaluation-fixture", type=Path)
     args = parser.parse_args()
     expected = args.version_file.read_text(encoding="utf-8").strip()
     if sushiwait.__version__ != expected:
@@ -29,7 +30,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "interval-evaluate", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -61,6 +62,29 @@ def check() -> None:
         # Fail immediately if the replay/report smoke path tries any socket I/O.
         with patch("socket.socket", side_effect=AssertionError("unexpected_network")), \
                 patch("socket.create_connection", side_effect=AssertionError("unexpected_network")):
+            evaluation_input = Path(directory).resolve() / "synthetic-evaluation.json"
+            evaluation_fixture = (args.evaluation_fixture or
+                                  args.source_root / "examples/fixtures/evaluation-01.synthetic.json")
+            evaluation_input.write_bytes(evaluation_fixture.read_bytes())
+            evaluation_input.chmod(0o600)
+            evaluation_output = io.StringIO()
+            with patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child, \
+                    contextlib.redirect_stdout(evaluation_output):
+                if main(["interval-evaluate", "--input", str(evaluation_input)]) != 0:
+                    raise SystemExit("installed_interval_evaluation_failed")
+            evaluation_summary = json.loads(evaluation_output.getvalue())
+            if (auth.call_count or native.call_count or child.call_count
+                    or evaluation_summary["data_origin"] != "synthetic"
+                    or evaluation_summary["interval_labels_evaluated"] != 2
+                    or evaluation_summary["mean_absolute_error_seconds"] != {"lower": 60, "upper": 210}
+                    or evaluation_summary["coverage"]["lower"] != .5
+                    or evaluation_summary["coverage"]["upper"] != 1
+                    or evaluation_summary["model_performance_verified"]
+                    or evaluation_summary["verified_training_labels"] != 0
+                    or not evaluation_summary["output_requires_private_handling"]):
+                raise SystemExit("installed_interval_evaluation_semantics_mismatch")
             guard_output = io.StringIO()
             with patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
                     contextlib.redirect_stdout(guard_output):
@@ -198,6 +222,9 @@ def check() -> None:
         "monitoring_policy_native_cli_calls": 0, "monitoring_policy_credentials_accessed": False,
         "shared_monitoring_policy_ok": True, "shared_monitoring_socket_calls": 0,
         "shared_monitoring_native_cli_calls": 0, "shared_monitoring_credentials_accessed": False,
+        "interval_evaluation_ok": True, "evaluation_socket_calls": 0,
+        "evaluation_native_cli_calls": 0, "evaluation_child_process_calls": 0,
+        "evaluation_query_credentials_accessed": False,
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,

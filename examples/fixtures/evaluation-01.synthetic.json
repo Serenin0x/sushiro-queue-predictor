@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "as_of": "2020-01-02T00:00:00Z",
+  "data_origin": "synthetic",
+  "records": [
+    {
+      "prediction_id": "00000000-0000-4000-8000-000000000001",
+      "prediction_made_at": "2020-01-01T00:00:00+00:00",
+      "point_call_at": "2020-01-01T00:15:00+00:00",
+      "predicted_call_lower": "2020-01-01T00:12:00+00:00",
+      "predicted_call_upper": "2020-01-01T00:18:00+00:00",
+      "observed_call_lower": "2020-01-01T00:10:00+00:00",
+      "observed_call_upper": "2020-01-01T00:20:00+00:00",
+      "observation_received_at": "2020-01-01T00:20:00+00:00"
+    },
+    {
+      "prediction_id": "00000000-0000-4000-8000-000000000002",
+      "prediction_made_at": "2020-01-01T00:00:00+00:00",
+      "point_call_at": "2020-01-01T00:12:00+00:00",
+      "predicted_call_lower": "2020-01-01T00:08:00+00:00",
+      "predicted_call_upper": "2020-01-01T00:14:00+00:00",
+      "observed_call_lower": "2020-01-01T00:10:00+00:00",
+      "observed_call_upper": "2020-01-01T00:10:00+00:00",
+      "observation_received_at": "2020-01-01T00:10:00+00:00"
+    }
+  ]
+}
