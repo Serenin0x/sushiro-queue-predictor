@@ -9,7 +9,7 @@
 
 想吃寿司，却不知道该几点取号、还要等多久、会不会突然过号？SUSHIWAIT 希望把这些不确定，变成有依据的用餐计划：结合寿司郎小程序的实时排队数据、历史规律和日期差异，帮助你安排取号与到店时间，把时间留给自己喜欢的事。
 
-这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：已有三店持续采集与到期保护的实证，最新又走通电脑正常查询取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。同进程跨到期恢复已在两个独立运行中实测成功，最新三店各 120 次采集已完成；长期更新仍待验证；预测模型、用户小程序和自动排队继续按阶段推进。**
+这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：已有三店持续采集与到期保护的实证，最新又走通电脑正常查询取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。同进程跨到期恢复已在三个独立任务中实测成功，最新三店各 120 次采集和西单新任务的 12 次主配置提交验证已完成；长期更新仍待验证；预测模型、用户小程序和自动排队继续按阶段推进。**
 
 ## 产品与模型功能
 
@@ -23,7 +23,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/c886e589de78387b-dark.svg"><img src="assets/readme-labels/c886e589de78387b-light.svg" alt="把一次正常刷新接到电脑查询" width="210" height="20"></picture></strong>：可离线检查本人导出的捕获文件，明确选择正常单店请求，将完整上下文写入私有配置。到期或临近到期时拒绝导入；此功能不自动登录或续期。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与真实同进程恢复已通过一次；新增独立的短窗关闭保护工具，到时关闭调试并核对状态；新增私有暂存提交组件，调试关闭后才更新采集上下文。重复可靠性和长期自动更新继续验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与同进程恢复已有重复实证；新增独立的短窗关闭保护工具，到时关闭调试并核对状态；新增私有暂存提交组件，调试关闭后才更新采集上下文，已实测公开组件完成主配置更新及原进程恢复；新增一个短窗协调入口，将暂存接收与独立关闭保护联动，减少步骤之间的等待，真实联动继续验证。重复可靠性和长期自动更新继续验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。长期无人值守与服务器独立更新仍待验证。
 
@@ -39,7 +39,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。实际调度与提醒继续推进。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、456 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、485 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -69,7 +69,7 @@
 
 ## 技术手段
 
-当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)。
+当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。
 
 字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc11 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。新增同店共享监控目标，18 项专项和 456 项完整本机检查通过；离线合并刷新需求、提前重算时间边界，实际调度仍待接入。安装包、公开代码与 GitHub 运行逐次核验，见验收报告。三店各 67 次查询及到期保护保留历史；西单 120 次成功与一次真实跨到期恢复已经完成，另一次真实任务中断后跨进程续采得到 1+2 份成功快照。常驻凭证提供方、长期可靠性与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
+当前代码为 **v0.2.0rc12 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。新增私有暂存接入与独立限时关闭的协调入口，29 项专项和 485 项完整本机检查通过；正常客户端、单域名准备与主配置提交仍按各自条件执行。同店共享监控策略继续离线核对，实际调度仍待接入。安装包、公开代码与 GitHub 运行逐次核验，见验收报告。三店各 67 次查询及到期保护保留历史；西单 120 次成功与一次真实跨到期恢复已经完成，另一次真实任务中断后跨进程续采得到 1+2 份成功快照。常驻凭证提供方、长期可靠性与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/ecfc0b982f5dc444-dark.svg"><img src="assets/readme-labels/ecfc0b982f5dc444-light.svg" alt="2026-10-06 · v0.2.0rc12" width="179" height="20"></picture></strong>：新增短窗协调工具，独立守护进程保持限时关闭，接收结束后提前通知关闭，并保留主配置与私有暂存。29 项专项及 485 项完整本机检查通过；真实短窗、提前正常更新与长期自动运行继续分别验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/dda7e700869c57f1-dark.svg"><img src="assets/readme-labels/dda7e700869c57f1-light.svg" alt="2026-10-06 · v0.2.0rc11" width="179" height="20"></picture></strong>：新增同店共享监控策略，多个关注计划共用一份查询目标，取更紧迫的刷新节奏，并在 30／15 分钟窗口边界及时重算；断采后不补发积压请求。18 项专项及 456 项完整本机检查通过，当前仅离线规划，持续调度和提醒仍待实现。
 

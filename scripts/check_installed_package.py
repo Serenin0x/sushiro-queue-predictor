@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "monitor-plan", "monitor-stores", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -78,6 +78,17 @@ def check() -> None:
             if (native.call_count != 0 or
                     json.loads(promotion_output.getvalue())["error_code"] != "promotion_invalid_input"):
                 raise SystemExit("installed_promotion_validation_semantics_mismatch")
+            window_output = io.StringIO()
+            with patch("sushiwait.window._spawn_guard", side_effect=AssertionError("unexpected_guard_child")) as child, \
+                    patch("sushiwait.window.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as context, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    contextlib.redirect_stdout(window_output):
+                if main(["context-window", "--credentials-file", "synthetic-main", "--staged-file", "synthetic-stage",
+                         "--revision", "2", "--seconds", "0", "--collector-paused"]) != 1:
+                    raise SystemExit("installed_window_invalid_seconds_failed")
+            if (child.call_count or context.call_count or native.call_count
+                    or json.loads(window_output.getvalue())["error_code"] != "window_invalid_input"):
+                raise SystemExit("installed_window_validation_semantics_mismatch")
             monitoring_output = io.StringIO()
             with patch("sushiwait.credentials.read_credentials_file", side_effect=AssertionError("unexpected_credentials")), \
                     patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")), \
@@ -180,6 +191,9 @@ def check() -> None:
         "guard_validation_socket_calls": 0, "guard_validation_native_cli_calls": 0,
         "promotion_help_ok": True, "promotion_invalid_revision_ok": True,
         "promotion_validation_socket_calls": 0, "promotion_validation_native_cli_calls": 0,
+        "window_invalid_seconds_ok": True, "window_validation_child_process_calls": 0,
+        "window_validation_socket_calls": 0, "window_validation_native_cli_calls": 0,
+        "window_validation_credentials_accessed": False,
         "monitoring_policy_ok": True, "monitoring_policy_socket_calls": 0,
         "monitoring_policy_native_cli_calls": 0, "monitoring_policy_credentials_accessed": False,
         "shared_monitoring_policy_ok": True, "shared_monitoring_socket_calls": 0,

@@ -28,6 +28,7 @@ from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
 from .monitoring import MonitoringError, polling_policy
 from .shared_monitoring import SharedMonitoringError, read_plan_file, shared_polling_policy
+from .window import WindowError, run_window
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 
@@ -407,6 +408,12 @@ def build_parser() -> argparse.ArgumentParser:
     guard = commands.add_parser("surge-guard", help="独立1–45秒仅关闭本机Surge解密；不启用、不更新凭证或恢复域名")
     guard.add_argument("--seconds", type=int, default=40,
                        help="准备后1–45秒发出关闭并核验；须在另一个进程运行，初始三开关须关闭")
+    window = commands.add_parser("context-window", help="协调私有暂存接入与独立限时关闭；不启用解密、不改主配置")
+    window.add_argument("--credentials-file", required=True, help="现有完整主上下文；只读并协调锁定")
+    window.add_argument("--staged-file", required=True, help="另一私有目录中的相同上下文副本")
+    window.add_argument("--revision", required=True, type=int)
+    window.add_argument("--seconds", type=int, default=40, help="5–40秒独立关闭上限")
+    window.add_argument("--collector-paused", action="store_true", help="确认相关采集均已暂停或未运行；工具不认证此状态")
     promotion = commands.add_parser("context-promote", help="调试关闭后显式原子提交完整私有暂存上下文；不查询或登录")
     promotion.add_argument("--credentials-file", required=True, help="当前gateway私有上下文")
     promotion.add_argument("--staged-file", required=True, help="完整新gateway私有暂存上下文")
@@ -531,6 +538,19 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "context-window":
+            try:
+                result = run_window(credentials_file=args.credentials_file, staged_file=args.staged_file,
+                                    revision=args.revision, seconds=args.seconds,
+                                    collector_paused=args.collector_paused, on_ready=emit)
+                emit({"ok": result["durability_confirmed"], **result})
+                return 0 if result["durability_confirmed"] else 1
+            except WindowError as error:
+                emit({"ok": False, "error_code": error.error_code,
+                      "staging_changed": error.staging_changed,
+                      "cleanup_confirmed": error.cleanup_confirmed,
+                      "main_context_updated": False, "external_network_performed": False})
                 return 1
         if args.command == "context-promote":
             try:
