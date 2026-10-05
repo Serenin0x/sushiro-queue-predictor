@@ -1,5 +1,7 @@
 # 自动检查与安装验证
 
+rc8当前本机候选新增[短窗关闭保护](SURGE_GUARD.md)：23项专项0.212秒、完整395项4.672秒通过（无跳过，JS已含），本机新命令2.035秒保持OFF并关闭/回读成功。它只关不启用、不读凭证、不恢复名单；新命令ON→OFF、更新协调及本次公开/CI仍分别待验；最终wheel/checkout外安装已核验，不借私有40秒程序或rc7成绩。当前三店120轮任务继续运行，未提前认定完成或跨下一到期。见E0103/E0104。
+
 rc7已公开[私有有界任务/显式重启恢复](COLLECTION_TASKS.md)，27项专项、完整372项4.408秒及最终checkout外安装通过；西单03:00–03:01真实进程中断/续采1+2份成功、0失败未知，快照DB2保持，见E0096–E0098。代码[257b60b](https://github.com/Serenin0x/sushiro-queue-predictor/commit/257b60b4bb808107cab26a42ec07681617d59730)的143个远端blob一致；[实际CI 37361220235](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37361220235)三版本各372项、构建/安装及公共/结果/日期/信号/任务五路径socket0全部通过，见E0099。正常客户端自动更新与全天无人值守尚未实现/验收。当前正常7已于03:34:59.632530接入，声明03:12:28–04:12:28未验签、下一次正常8+；退出小程序/关调试后独立三店成功，另一个新私有120轮/30秒有界任务仍在运行。本机研究保护进程实测40.122秒自动关解密，原名单随后由操作者恢复，见E0101/E0102；完整全天控制器、永久调度和名单自动恢复尚未交付。E0100的失败/越时保持历史。
 
 工作流为 [.github/workflows/checks.yml](../.github/workflows/checks.yml)，本机安装包检查入口为 [scripts/check_installed_package.py](../scripts/check_installed_package.py)。每次 main 推送、针对 main 的普通 pull_request，以及显式 workflow_dispatch 运行离线检查；没有定时采集、业务操作、部署或凭证更新任务。

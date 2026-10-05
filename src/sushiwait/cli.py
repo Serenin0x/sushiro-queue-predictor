@@ -24,6 +24,7 @@ from .localpaths import local_data_directory
 from .storage import SnapshotStore
 from .signals import SignalError, signal_report
 from .surge import SurgeError, receive_summary
+from .surgeguard import GuardError, run_guard
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 
@@ -400,6 +401,9 @@ def build_parser() -> argparse.ArgumentParser:
     surge.add_argument("--credentials-file", required=True, help="现有gateway完整私有上下文")
     surge.add_argument("--revision", required=True, type=int, help="正常新上下文的递增修订号")
     surge.add_argument("--seconds", type=int, default=60, help="观察窗口1–60秒；须另行及时关闭临时解密")
+    guard = commands.add_parser("surge-guard", help="独立1–45秒仅关闭本机Surge解密；不启用、不更新凭证或恢复域名")
+    guard.add_argument("--seconds", type=int, default=40,
+                       help="准备后1–45秒发出关闭并核验；须在另一个进程运行，初始三开关须关闭")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -488,6 +492,17 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": False, "error_code": "collection_task_path_conflict"})
                 return 2
     try:
+        if args.command == "surge-guard":
+            try:
+                result = run_guard(seconds=args.seconds, on_ready=emit)
+                emit({"ok": True, **result})
+                return 0
+            except GuardError as error:
+                emit({"ok": False, "error_code": error.error_code,
+                      "cleanup_attempted": error.cleanup_attempted,
+                      "cleanup_confirmed": error.cleanup_confirmed,
+                      "external_network_performed": False, "credentials_accessed": False})
+                return 1
         if args.command == "task-status":
             try:
                 emit({"ok": True, **task_status(args.task_file), "network_performed": False})

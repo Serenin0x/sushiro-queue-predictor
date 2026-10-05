@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -41,6 +41,11 @@ def check() -> None:
         capture_output=True, text=True, timeout=10, check=True)
     if any(option not in surge_help.stdout for option in ("--credentials-file", "--revision", "--seconds")):
         raise SystemExit("installed_surge_intake_missing")
+    guard_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
+                                 "surge-guard", "--help"],
+        capture_output=True, text=True, timeout=10, check=True)
+    if "--seconds" not in guard_help.stdout:
+        raise SystemExit("installed_surge_guard_missing")
     collect_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "collect", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(option not in collect_help.stdout for option in ("--task-file", "--resume-task")):
@@ -50,6 +55,14 @@ def check() -> None:
         # Fail immediately if the replay/report smoke path tries any socket I/O.
         with patch("socket.socket", side_effect=AssertionError("unexpected_network")), \
                 patch("socket.create_connection", side_effect=AssertionError("unexpected_network")):
+            guard_output = io.StringIO()
+            with patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    contextlib.redirect_stdout(guard_output):
+                if main(["surge-guard", "--seconds", "0"]) != 1:
+                    raise SystemExit("installed_guard_invalid_window_accepted")
+            if (native.call_count != 0 or
+                    json.loads(guard_output.getvalue())["error_code"] != "surge_guard_invalid_window"):
+                raise SystemExit("installed_guard_validation_semantics_mismatch")
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["replay", "--fixture", str(args.fixture), "--db", database]) != 0:
                     raise SystemExit("installed_replay_failed")
@@ -116,6 +129,8 @@ def check() -> None:
             raise SystemExit("installed_task_status_semantics_mismatch")
     print(json.dumps({"installed_version": expected, "import_outside_checkout": True,
         "cli_help_ok": True, "bridge_diagnostic_option_ok": True, "surge_intake_help_ok": True,
+        "surge_guard_help_ok": True, "guard_invalid_window_ok": True,
+        "guard_validation_socket_calls": 0, "guard_validation_native_cli_calls": 0,
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
