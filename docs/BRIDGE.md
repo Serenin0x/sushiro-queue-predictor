@@ -1,7 +1,7 @@
 
 # 短时本机接入与采集恢复
 
-rc5接入诊断候选；原dev5接收能力保留。完整需求、研究、检查及限制见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0052–E0053；正常授权证据见 [AUTH_REFRESH.md](AUTH_REFRESH.md)，既有查询命令见 [DATA_ACCESS.md](DATA_ACCESS.md)。
+rc5响应诊断保留；rc6正常目录摘要路线见[SURGE_INTAKE](SURGE_INTAKE.md)，适用于本轮闭店列表没有详情按钮的正常查询。完整需求、研究、检查及限制见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) E0052–E0053；正常授权证据见 [AUTH_REFRESH.md](AUTH_REFRESH.md)，既有查询命令见 [DATA_ACCESS.md](DATA_ACCESS.md)。
 
 **2026-10-04电脑微信正常刷新→Surge→回环接收器→私有revision4提交已实际成功一次。** 没有用这份新上下文执行独立GET；重复可靠性和连续跨到期仍待验收。2026-10-05正常刷新重复窗口超时，安全诊断有效投递0，当前revision4已过期。这个工具接收正常查询上下文，不自动登录、刷新小程序或续期。
 
@@ -15,10 +15,10 @@ Python运行只用标准库。脚本参考 [Surge响应脚本](https://manual.ns
 
 ## 开启一次接收窗口
 
-下列变量由本机操作者设置，路径不贴聊天/提交仓库。直接父目录须当前用户0700，现有上下文0600；session是未存在的私有文件名，与上下文不同。当前私有文件已为过期revision4，下一次实际更新须revision5或更高，且大于文件当前revision；示例不能代替运行时重读和到期检查。
+下列变量由本机操作者设置，路径不贴聊天/提交仓库。直接父目录须当前用户0700，现有上下文0600；session是未存在的私有文件名，与上下文不同。10-06研究私有文件已为revision5，下次实际正常更新须revision6或更高，且大于文件当前revision；示例不能代替运行时重读和到期检查。
 
 ```sh
-PYTHONPATH=src python3 -m sushiwait context-bridge   --credentials-file "$SUSHIWAIT_CONTEXT_FILE"   --session-file "$SUSHIWAIT_SESSION_FILE"   --revision 5 --store-id 3004 --seconds 60 --diagnostics
+PYTHONPATH=src python3 -m sushiwait context-bridge   --credentials-file "$SUSHIWAIT_CONTEXT_FILE"   --session-file "$SUSHIWAIT_SESSION_FILE"   --revision 6 --store-id 3004 --seconds 60 --diagnostics
 ```
 
 命令发出bridge_ready后，私有session文件含本轮端口、随机授权、截止时刻、应用身份/门店范围及URI编码adapter_argument。只在同电脑受控配置中读取adapter_argument，不打印/截图/发送其值。文件在成功、超时或中断后清理，过期参数不能复用。
@@ -46,6 +46,8 @@ sushiwait-context = type=http-response,pattern=^https://sapi\.sushiro\.com\.cn/g
 
 ## 当前电脑准备状态
 
+10-06截图可读且可正常重开，目标工具active。正常目录研究新5及关小程序/MitM后的独立三店成功，西单30秒原进程跨到期试验进行中；正式摘要命令实测/长期供应待验。下文10-04/05为响应规则历史。
+
 2026-10-04实际环境为macOS26.6.2、微信4.1.13、Surge Mac6.4.3，既有CA已受系统信任。正常西单刷新于北京时间22:05:47.212完成revision4原子提交和持久化确认，session清理、私有脚本复位通过；声明签发22:01:54、到期23:01:54/3600秒，未验签，不推固定TTL。用户随后关机，此上下文独立GET未执行。2026-10-05声明已过期，下一次须5+；首次用户没赶上窗口，后两次报告正常刷新仍超时，其中安全诊断有效投递0。所有临时规则已移除并保存，原有crm域名恢复，MitM/原始捕获关闭；原代理/增强模式、LAN/API/CA权限没有改动。
 
 [Surge模块文档](https://manual.nssurge.com/profile/module.html)说明本地sgmodule可覆盖hostname并添加Script，但不能改变CA或替代MitM主开关；私有参数应由本机文件生成/装载，不经聊天或可见工具参数粘贴。[CLI文档](https://manual.nssurge.com/tools/cli.html)标明扩展module/feature控制需Mac6.8.0+；当前6.4.3的实际help没有这些命令。不能直接按新版示例控制解密。旧CLI的environment可读取，但set MitMEnabled false实际返回Illegal parameter；主开关已用正常UI按时关闭并核对，不能称CLI自动关闭已实现。此受控窗口不是无人值守看门狗；未启用HTTP API、局域网访问或常开捕获。最后一次重复试验临时开启脚本debug仅为每次重读私有文件，原适配器没有console日志，结束后规则移除。
@@ -58,11 +60,11 @@ local_connections=0只说明本轮未接到连接，不能确定是没有正常�
 
 ## 下一次真实窗口的顺序
 
-13:00左右电脑已锁屏，界面操作必须等本人正常解锁。已清理临时调试，不继续使用过期revision4。
+10-05历史13:00左右电脑锁屏；10-06本人解锁后此限制已解除，不再使用过期旧4。
 
 下一次先在解密关闭时正常关掉寿司郎小程序，准备接收器/私有规则；开启已授权的sapi短窗后再正常打开小程序进入西单页，观察一次成功查询，而不是预先加载门店后仅刷新。同时观察有界目标连接摘要与接收计数，结束及时关闭/移除。已有连接复用是待检验假设，不能据此确定本次失败原因或终止其他连接。
 
-[Surge官方生命周期](https://manual.nssurge.com/getting-started/how-surge-works.html)区分系统代理和VIF接管，再进入HTTP处理；必须先确认本机实际支持的接管路径和目标请求，不能只看MitM开关。最近/当前摘要目标域名0是有限观察，不等于完全没有流量。取得正常5+后当下检查并立即用既有系统CA、完整TLS做独立固定GET；文件提交不能代替服务端接受。
+[Surge官方生命周期](https://manual.nssurge.com/getting-started/how-surge-works.html)区分系统代理和VIF接管，再进入HTTP处理；必须先确认本机实际支持的接管路径和目标请求，不能只看MitM开关。最近/当前摘要目标域名0是有限观察，不等于完全没有流量。10-06正常目录5及系统CA/完整TLS三店独立GET已成功；接着正常6+验真实原进程跨到期。文件提交不替代服务端接受。
 
 ## 采集等待正常新上下文
 

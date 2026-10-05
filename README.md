@@ -9,7 +9,7 @@
 
 想吃寿司，却不知道该几点取号、还要等多久、会不会突然过号？SUSHIWAIT 希望把这些不确定，变成有依据的用餐计划：结合寿司郎小程序的实时排队数据、历史规律和日期差异，帮助你安排取号与到店时间，把时间留给自己喜欢的事。
 
-这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：电脑已连续读取中关村、西单、成都世豪三店约 33 分钟，取得 201 份本轮真实快照，并验证凭证临近到期时安全暂停。跨到期恢复仍待实测，预测模型、用户小程序和自动排队继续按阶段推进。**
+这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：已有三店持续采集与到期保护的实证，最新又走通电脑正常查询取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。跨到期恢复仍待实测，预测模型、用户小程序和自动排队继续按阶段推进。**
 
 ## 产品与模型功能
 
@@ -17,13 +17,13 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/92b0a238e878b9e3-dark.svg"><img src="assets/readme-labels/92b0a238e878b9e3-light.svg" alt="读到真实叫号数据" width="130" height="20"></picture></strong>：从官方微信小程序确认实际查询地址，电脑已独立读取中关村、西单、成都世豪的堂食、预约展示队列。用户退出小程序后，后续电脑查询仍成功；完整保留号码、顺序和后缀。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bb36ec0d24eb180b-dark.svg"><img src="assets/readme-labels/bb36ec0d24eb180b-light.svg" alt="找到试点门店，再用电脑采集" width="210" height="20"></picture></strong>：目录接口已通过电脑查询，返回 147 条门店记录。保留三店 60 秒和 30 秒的短窗结果，并新增 30 秒各 67 轮成功采集；累计保存 219 份成功详情快照。全天稳定访问与全国完整覆盖仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bb36ec0d24eb180b-dark.svg"><img src="assets/readme-labels/bb36ec0d24eb180b-light.svg" alt="找到试点门店，再用电脑采集" width="210" height="20"></picture></strong>：目录接口已通过电脑查询，返回 147 条门店记录。保留三店 60 秒和 30 秒的短窗结果，保留 30 秒各 67 轮、主库 219 份成功快照的历史结果；最新新凭证三店独立验证成功，另库西单持续采集进行中。全天稳定访问与全国完整覆盖仍待验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/9660e24eddc316c0-dark.svg"><img src="assets/readme-labels/9660e24eddc316c0-light.svg" alt="查看查询凭证的到期声明" width="178" height="20"></picture></strong>：直接检查本机私有配置的到期声明、剩余时长与更新版本，显示是否触发到期前保护；不输出凭证内容。已观察到正常初始化返回新凭证，独立自动更新仍在验证中。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/c886e589de78387b-dark.svg"><img src="assets/readme-labels/c886e589de78387b-light.svg" alt="把一次正常刷新接到电脑查询" width="210" height="20"></picture></strong>：可离线检查本人导出的捕获文件，明确选择正常单店请求，将完整上下文写入私有配置。到期或临近到期时拒绝导入；此功能不自动登录或续期。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：新增同电脑短时接收工具，可接收正常门店查询中的完整新上下文，省去中间导出 HAR 的步骤。已实测一次电脑微信正常刷新自动保存新凭证；后续重复接入仍在排查。可选安全诊断能区分连接、投递和拒绝阶段，新凭证独立查询及自动更新仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；正式命令、重复可靠性、跨到期和自动更新继续验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停和等待超时停止；无需重启的恢复通过合成检查，真实恢复和独立自动续期仍待验证。
 
@@ -39,7 +39,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、317 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、343 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 真实跨到期恢复、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -69,7 +69,7 @@
 
 ## 技术手段
 
-当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)。
+当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)。
 
 字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc5 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。324 项本机检查通过，安装与 GitHub 实际结果见验收报告。三店曾各 67 次查询成功，真实到期保护后等待 10 分钟没有新凭证，采集安全停止。电脑正常刷新已成功写入一次新凭证，重复稳定性、新凭证独立查询和跨到期恢复继续验收；服务器自动更新、长期数据与预测继续推进，全部背景和编辑记录保持更新。
+当前代码为 **v0.2.0rc6 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。343 项本机检查通过，安装与 GitHub 实际结果见验收报告。三店各 67 次查询及到期保护保留历史；最新正常目录新凭证已独立查询三店成功，另库西单连续采集进行中。正式命令接入、同进程跨到期、长周期正常提供方和服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/c6802dfe9e84937c-dark.svg"><img src="assets/readme-labels/c6802dfe9e84937c-light.svg" alt="2026-10-06 · v0.2.0rc6" width="171" height="20"></picture></strong>：新增有界本机正常目录摘要接入，整组新上下文私有保存；19 项专项与 343 项完整本机检查通过。目录来源已完成新凭证和退出小程序后的三店独立查询实测，继续验正式命令与真实跨到期。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/cf34e6ba46337826-dark.svg"><img src="assets/readme-labels/cf34e6ba46337826-light.svg" alt="2026-10-05 · v0.2.0rc5" width="171" height="20"></picture></strong>：增加可选接收诊断，只报告连接与投递计数和固定拒绝原因，保护凭证内容；324项完整本机检查通过。记录电脑正常刷新的一次真实接入及后续未收到有效投递的结果，继续验证稳定更新与独立查询。
 

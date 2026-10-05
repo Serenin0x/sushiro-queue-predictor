@@ -23,3 +23,8 @@ rc2构建时按[PyPA许可元数据格式](https://packaging.python.org/en/lates
 rc5最终离线wheel为67,262字节、SHA256 ae8804d35da1f50580fcb13da8836903e8c3dc09d8a57c971337c28e5e3dd5ea；15模块、2026 JSON及当前README元数据逐一匹配，MIT/运行依赖0。官方Python3.12.14/setuptools84构建，在checkout外独立venv/隔离入口通过CLI帮助与诊断选项、公共/结果/日期/信号四条socket0检查，verified_training_labels=0。 GitHub实际新版本CI结果在随后发布审计单列。
 
 rc5代码197d465的[实际GitHub运行37265092281](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37265092281)已completed/success；Python3.11、3.12、3.13分别324项/4.883秒、4.748秒、4.800秒，全部构建/安装步骤成功，实际日志确认版本rc5、诊断选项和四路径socket0。132远端blob逐一一致，详见E0082；没有真实新凭证独立GET或恢复。
+
+
+rc6当前候选新增19项正常目录摘要检查，全343项/4.295秒OK无跳过，26个JS场景已含wrapper。覆盖固定目录/窗口/纪元/完整头/应用/声明/冲突/原子并发/有界子进程回收。安装检查增加context-surge帮助/必需选项；最终wheel/checkout外安装/GitHub另记，不借rc5成绩。检查合成且不访问真实Surge/上游，研究及持续采集见E0084/E0085。
+
+rc6最终本机安装检查：16个代码模块、2026年度JSON及构建时README元数据逐字节一致，运行依赖0；checkout外隔离安装版本rc6，context-surge帮助/三个必需选项和既有诊断选项通过，公共/结果/日期/信号四路径socket0、真实训练标签0。wheel与实际公开/CI审计见E0086及后续历史；不当真实接口或独立续期验收。

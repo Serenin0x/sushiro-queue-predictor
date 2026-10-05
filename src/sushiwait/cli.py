@@ -23,6 +23,7 @@ from .outcomes import OutcomeError, OutcomeStore, public_summary, read_episode
 from .localpaths import local_data_directory
 from .storage import SnapshotStore
 from .signals import SignalError, signal_report
+from .surge import SurgeError, receive_summary
 from .transport import sanitize_transport
 
 DEFAULT_DB = str(local_data_directory() / "sushiwait.sqlite3")
@@ -320,6 +321,10 @@ def build_parser() -> argparse.ArgumentParser:
     bridge.add_argument("--seconds", type=int, default=60, help="接收窗口1–60秒")
     bridge.add_argument("--diagnostics", action="store_true",
                         help="只报告本机有效投递计数和固定拒绝原因，不输出请求或凭证")
+    surge = commands.add_parser("context-surge", help="最多60秒观察电脑Surge中的正常目录查询，无需HAR；不启用解密或登录")
+    surge.add_argument("--credentials-file", required=True, help="现有gateway完整私有上下文")
+    surge.add_argument("--revision", required=True, type=int, help="正常新上下文的递增修订号")
+    surge.add_argument("--seconds", type=int, default=60, help="观察窗口1–60秒；须另行及时关闭临时解密")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -436,6 +441,16 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             except (CaptureError, OSError, ImportError, sqlite3.Error):
                 emit({"ok": False, "error_code": "outcome_database_error", "network_performed": False})
+                return 1
+        if args.command == "context-surge":
+            try:
+                result = receive_summary(credentials_file=args.credentials_file,
+                    revision=args.revision, seconds=args.seconds, on_ready=emit)
+                emit({"ok": True, **result})
+                return 0
+            except (SurgeError, CaptureError, CredentialError) as error:
+                emit({"ok": False, "error_code": error.error_code,
+                      "network_performed": False, "external_network_performed": False})
                 return 1
         if args.command == "context-bridge":
             try:
