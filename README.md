@@ -9,7 +9,7 @@
 
 想吃寿司，却不知道该几点取号、还要等多久、会不会突然过号？SUSHIWAIT 希望把这些不确定，变成有依据的用餐计划：结合寿司郎小程序的实时排队数据、历史规律和日期差异，帮助你安排取号与到店时间，把时间留给自己喜欢的事。
 
-这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：已有三店持续采集与到期保护的实证，最新又走通电脑正常查询取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。同进程跨到期恢复已在三个独立任务中实测成功，最新三店各 120 次采集和西单新任务的 12 次主配置提交验证已完成；长期更新仍待验证；预测模型、用户小程序和自动排队继续按阶段推进。**
+这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：已有三店持续采集与到期保护的实证，最新又走通电脑正常查询取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。同进程跨到期恢复已在四个独立任务中实测成功，最新短窗协调后的西单 5 次采集已完成，另外两店也接受新凭证；采集缺口与长期更新仍待验证；预测模型、用户小程序和自动排队继续按阶段推进。**
 
 ## 产品与模型功能
 
@@ -23,7 +23,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/c886e589de78387b-dark.svg"><img src="assets/readme-labels/c886e589de78387b-light.svg" alt="把一次正常刷新接到电脑查询" width="210" height="20"></picture></strong>：可离线检查本人导出的捕获文件，明确选择正常单店请求，将完整上下文写入私有配置。到期或临近到期时拒绝导入；此功能不自动登录或续期。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与同进程恢复已有重复实证；新增独立的短窗关闭保护工具，到时关闭调试并核对状态；新增私有暂存提交组件，调试关闭后才更新采集上下文，已实测公开组件完成主配置更新及原进程恢复；新增一个短窗协调入口，将暂存接收与独立关闭保护联动，减少步骤之间的等待，真实联动继续验证。重复可靠性和长期自动更新继续验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与同进程恢复已有重复实证；新增独立的短窗关闭保护工具，到时关闭调试并核对状态；新增私有暂存提交组件，调试关闭后才更新采集上下文，已实测公开组件完成主配置更新及原进程恢复；新增一个短窗协调入口，将暂存接收与独立关闭保护联动，已实测接入新凭证、提前关闭调试并恢复原进程；本次仍有约 3 分 47 秒采集缺口，继续改进更新速度。重复可靠性和长期自动更新继续验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。长期无人值守与服务器独立更新仍待验证。
 
@@ -85,7 +85,7 @@
 
 ## 更新说明
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/ecfc0b982f5dc444-dark.svg"><img src="assets/readme-labels/ecfc0b982f5dc444-light.svg" alt="2026-10-06 · v0.2.0rc12" width="179" height="20"></picture></strong>：新增短窗协调工具，独立守护进程保持限时关闭，接收结束后提前通知关闭，并保留主配置与私有暂存。29 项专项及 485 项完整本机检查通过；真实短窗、提前正常更新与长期自动运行继续分别验收。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/ecfc0b982f5dc444-dark.svg"><img src="assets/readme-labels/ecfc0b982f5dc444-light.svg" alt="2026-10-06 · v0.2.0rc12" width="179" height="20"></picture></strong>：新增短窗协调工具，独立守护进程保持限时关闭，接收结束后提前通知关闭，并保留主配置与私有暂存。29 项专项、485 项完整本机检查及 GitHub 三版本安装检查通过；正常新凭证接入与原进程恢复已实测，到期前仍沿用旧凭证的情况被正确拒绝。长期自动运行继续验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/dda7e700869c57f1-dark.svg"><img src="assets/readme-labels/dda7e700869c57f1-light.svg" alt="2026-10-06 · v0.2.0rc11" width="179" height="20"></picture></strong>：新增同店共享监控策略，多个关注计划共用一份查询目标，取更紧迫的刷新节奏，并在 30／15 分钟窗口边界及时重算；断采后不补发积压请求。18 项专项及 456 项完整本机检查通过，当前仅离线规划，持续调度和提醒仍待实现。
 
