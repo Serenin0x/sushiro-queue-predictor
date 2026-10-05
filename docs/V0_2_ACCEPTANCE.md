@@ -82,3 +82,5 @@ rc5最终离线wheel为67,262字节、SHA256 ae8804d35da1f50580fcb13da8836903e8c
 rc5代码197d465的[实际GitHub运行37265092281](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37265092281)已completed/success；Python3.11、3.12、3.13分别324项/4.883秒、4.748秒、4.800秒，全部构建/安装步骤成功，实际日志确认版本rc5、诊断选项和四路径socket0。132远端blob逐一一致，详见E0082；没有真实新凭证独立GET或恢复。
 
 rc6最终本机安装检查：16个代码模块、2026年度JSON及构建时README元数据逐字节一致，运行依赖0；checkout外隔离安装版本rc6，context-surge帮助/三个必需选项和既有诊断选项通过，公共/结果/日期/信号四路径socket0、真实训练标签0。wheel与实际公开/CI审计见E0086及后续历史；不当真实接口或独立续期验收。
+
+rc6实际公开代码[0c4cce8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0c4cce8f0ae64aa9aed39dcc80be1fcdb951819d)、137远端blob一致；[CI运行37351645572](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37351645572)三版本各343项/构建/checkout外安装全部success，context-surge帮助和四路径socket0通过，见E0087。这不等于正式命令真实接入、原进程恢复或全天服务器验收。

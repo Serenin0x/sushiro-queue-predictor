@@ -28,3 +28,5 @@ rc5代码197d465的[实际GitHub运行37265092281](https://github.com/Serenin0x/
 rc6当前候选新增19项正常目录摘要检查，全343项/4.295秒OK无跳过，26个JS场景已含wrapper。覆盖固定目录/窗口/纪元/完整头/应用/声明/冲突/原子并发/有界子进程回收。安装检查增加context-surge帮助/必需选项；最终wheel/checkout外安装/GitHub另记，不借rc5成绩。检查合成且不访问真实Surge/上游，研究及持续采集见E0084/E0085。
 
 rc6最终本机安装检查：16个代码模块、2026年度JSON及构建时README元数据逐字节一致，运行依赖0；checkout外隔离安装版本rc6，context-surge帮助/三个必需选项和既有诊断选项通过，公共/结果/日期/信号四路径socket0、真实训练标签0。wheel与实际公开/CI审计见E0086及后续历史；不当真实接口或独立续期验收。
+
+rc6实际公开代码[0c4cce8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0c4cce8f0ae64aa9aed39dcc80be1fcdb951819d)、137远端blob一致；[CI运行37351645572](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37351645572)三版本各343项/构建/checkout外安装全部success，context-surge帮助和四路径socket0通过，见E0087。这不等于正式命令真实接入、原进程恢复或全天服务器验收。

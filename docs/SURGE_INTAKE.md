@@ -45,3 +45,5 @@ PYTHONPATH=src python3 -m sushiwait context-surge \
 19项新增离线检查覆盖来源/请求行/窗口/纪元/完整头/应用/到期/候选冲突、私有写入和并发保护、CLI与有界子进程回收。全343项/4.295秒通过，无跳过，既有26个JS场景已含在wrapper，不另计为369项。安装、GitHub及实际接入以编辑历史后续实证为准。没有真实标签、ETA、业务取号或部署结果。
 
 rc6最终本机安装检查：16个代码模块、2026年度JSON及构建时README元数据逐字节一致，运行依赖0；checkout外隔离安装版本rc6，context-surge帮助/三个必需选项和既有诊断选项通过，公共/结果/日期/信号四路径socket0、真实训练标签0。wheel与实际公开/CI审计见E0086及后续历史；不当真实接口或独立续期验收。
+
+rc6实际公开代码[0c4cce8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0c4cce8f0ae64aa9aed39dcc80be1fcdb951819d)、137远端blob一致；[CI运行37351645572](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37351645572)三版本各343项/构建/checkout外安装全部success，context-surge帮助和四路径socket0通过，见E0087。这不等于正式命令真实接入、原进程恢复或全天服务器验收。
