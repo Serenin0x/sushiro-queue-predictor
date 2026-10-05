@@ -21,3 +21,5 @@ rc2构建时按[PyPA许可元数据格式](https://packaging.python.org/en/lates
 本轮rc5增加可选接收诊断，完整324项/4.111秒OK、无跳过；新增3项合成回环和4项零网络CLI检查，区分连接/鉴权/帧格式/观测与固定拒绝原因，默认输出保持。原26个JS场景计入wrapper。运行/安装/远端CI以新版本实际编辑记录为准，不套用rc4结果；首次真实诊断有效投递0，不是自动续期或恢复成功。
 
 rc5最终离线wheel为67,262字节、SHA256 ae8804d35da1f50580fcb13da8836903e8c3dc09d8a57c971337c28e5e3dd5ea；15模块、2026 JSON及当前README元数据逐一匹配，MIT/运行依赖0。官方Python3.12.14/setuptools84构建，在checkout外独立venv/隔离入口通过CLI帮助与诊断选项、公共/结果/日期/信号四条socket0检查，verified_training_labels=0。 GitHub实际新版本CI结果在随后发布审计单列。
+
+rc5代码197d465的[实际GitHub运行37265092281](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37265092281)已completed/success；Python3.11、3.12、3.13分别324项/4.883秒、4.748秒、4.800秒，全部构建/安装步骤成功，实际日志确认版本rc5、诊断选项和四路径socket0。132远端blob逐一一致，详见E0082；没有真实新凭证独立GET或恢复。

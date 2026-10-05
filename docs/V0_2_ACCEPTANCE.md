@@ -1,8 +1,8 @@
 # v0.2.0 接入验收报告
 
-公开rc4（829c392）的窗口分析/19项专项、317项完整检查和checkout外安装已验，三店12份历史窗口只读回放通过；它不提供真实过号率、ETA或新上下文，也没有改变下表正式接入的剩余条件。76个远端blob一致，GitHub三版本各317项及安装通过；实际成绩见E0076，不能套用rc3结果。
+上一公开rc4（829c392）的窗口分析/19项专项、317项完整检查和checkout外安装已验，三店12份历史窗口只读回放通过；它不提供真实过号率、ETA或新上下文，也没有改变下表正式接入的剩余条件。76个远端blob一致，GitHub三版本各317项及安装通过；实际成绩见E0076，不能套用rc3结果。
 
-结论：公开rc4已增加只读窗口分析，并保留结果记录与日期准备工具，通过离线检查，**正式v0.2.0仍未通过全部接入验收**。三店持续查询和到期停采已经实测；电脑正常刷新已成功提交一次revision4；新上下文独立GET、重复可靠性、同进程跨到期恢复及签到桌数同屏数值仍缺实证。候选已推送GitHub main，代码提交 [829c392ec7f87f44a41a89149bbafc73e91c7915](https://github.com/Serenin0x/sushiro-queue-predictor/commit/829c392ec7f87f44a41a89149bbafc73e91c7915)，没有正式v0.2标签或Release。版本发布和最后检查以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 编辑历史为准。本阶段为少量大陆门店的只读数据验证工具；预测模型、用户前端、自动取号和服务器全天服务属于后续目标。
+结论：公开rc5增加可选安全接收诊断，324项本机/三组GitHub检查和安装通过；保留rc4窗口分析、结果记录和日期准备，**正式v0.2.0仍未通过全部接入验收**。三店持续查询和到期停采已经实测；电脑正常刷新已成功提交一次revision4；新上下文独立GET、重复可靠性、同进程跨到期恢复及签到桌数同屏数值仍缺实证。候选已推送GitHub main，代码提交 [197d4651a009094319792d2630b773a308b9547d](https://github.com/Serenin0x/sushiro-queue-predictor/commit/197d4651a009094319792d2630b773a308b9547d)，没有正式v0.2标签或Release。版本发布和最后检查以 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) 编辑历史为准。本阶段为少量大陆门店的只读数据验证工具；预测模型、用户前端、自动取号和服务器全天服务属于后续目标。
 
 ## 验收范围
 
@@ -70,3 +70,5 @@
 2026-10-04 22:05:47.212电脑西单正常刷新已提交revision4，声明22:01:54–23:01:54；当时用户结束会话，独立GET未执行。2026-10-05先有一次用户没赶上窗口，随后两次用户报告正常刷新均超时；最后一次初版诊断authenticated_deliveries/validated_observations/rejected_observations均0。该版尚未统计TCP连接，不能断言没有连接；最终版新增local_connections区分此情况。CLI近期摘要筛选目标域名匹配0，只是有界摘要，没有证明客户端没请求或确定微信保护机制。没有revision5、没有新快照；主库219成功2失败保持。临时规则移除保存、原域名恢复、MitM关闭，捕获和自动MitM原为关闭；LAN/HTTP API没有开启。
 
 rc5最终离线wheel为67,262字节、SHA256 ae8804d35da1f50580fcb13da8836903e8c3dc09d8a57c971337c28e5e3dd5ea；15模块、2026 JSON及当前README元数据逐一匹配，MIT/运行依赖0。官方Python3.12.14/setuptools84构建，在checkout外独立venv/隔离入口通过CLI帮助与诊断选项、公共/结果/日期/信号四条socket0检查，verified_training_labels=0。 GitHub实际新版本CI结果在随后发布审计单列。
+
+rc5代码197d465的[实际GitHub运行37265092281](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37265092281)已completed/success；Python3.11、3.12、3.13分别324项/4.883秒、4.748秒、4.800秒，全部构建/安装步骤成功，实际日志确认版本rc5、诊断选项和四路径socket0。132远端blob逐一一致，详见E0082；没有真实新凭证独立GET或恢复。
