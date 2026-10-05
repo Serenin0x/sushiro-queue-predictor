@@ -80,8 +80,14 @@ class SummaryParserTests(unittest.TestCase):
             data=row();data[key]=value
             with self.subTest(key=key), self.assertRaises(surge.SurgeError):self.inspect(summary([data]))
 
+    def test_observed_unix_time_and_sixty_second_window(self):
+        data=row();data["completedDate"]=NOW.timestamp()
+        self.assertEqual(self.inspect(summary([data])).received_at,NOW)
+        with self.assertRaisesRegex(surge.SurgeError,"surge_invalid_input"):
+            surge.inspect_summary(summary(),previous=previous(),since=NOW-timedelta(seconds=61),now=NOW)
+
     def test_pre_window_future_boolean_and_unix_epoch_times_are_ignored(self):
-        for date in (NOW.timestamp()-978307200-2, NOW.timestamp()-978307200+2, True, NOW.timestamp()):
+        for date in (NOW.timestamp()-978307200-2, NOW.timestamp()-978307200+2, True, NOW.timestamp()+2):
             data=row();data["completedDate"]=date
             with self.subTest(date=date), self.assertRaises(surge.SurgeError):self.inspect(summary([data]))
 
@@ -115,8 +121,13 @@ class SummaryParserTests(unittest.TestCase):
         a["completedDate"]=b["completedDate"]
         with self.assertRaisesRegex(surge.SurgeError,"surge_context_ambiguous"):self.inspect(summary([a,b]))
 
+    def test_observed_two_hundred_recent_rows_are_supported_with_a_bound(self):
+        self.assertEqual(self.inspect(summary([row()] * 200)).context.authorization, auth())
+        with self.assertRaisesRegex(surge.SurgeError, "surge_summary_too_large"):
+            self.inspect(summary([row()] * 201))
+
     def test_bounded_json_failure_contains_no_original_input(self):
-        for body in (b'private-invalid-json',b'{"recent-requests":[],"recent-requests":[]}',b'{"recent-requests":NaN}',summary([row()]*51),b'x'*(surge._MAX_BYTES+1)):
+        for body in (b'private-invalid-json',b'{"recent-requests":[],"recent-requests":[]}',b'{"recent-requests":NaN}',summary([row()]*201),b'x'*(surge._MAX_BYTES+1)):
             with self.assertRaises(surge.SurgeError) as caught:self.inspect(body)
             self.assertIsNone(caught.exception.__context__)
             self.assertNotIn("private-invalid-json",repr(caught.exception))

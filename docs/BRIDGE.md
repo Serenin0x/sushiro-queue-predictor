@@ -15,10 +15,10 @@ Python运行只用标准库。脚本参考 [Surge响应脚本](https://manual.ns
 
 ## 开启一次接收窗口
 
-下列变量由本机操作者设置，路径不贴聊天/提交仓库。直接父目录须当前用户0700，现有上下文0600；session是未存在的私有文件名，与上下文不同。10-06研究私有文件已为revision5，下次实际正常更新须revision6或更高，且大于文件当前revision；示例不能代替运行时重读和到期检查。
+下列变量由本机操作者设置，路径不贴聊天/提交仓库。直接父目录须当前用户0700，现有上下文0600；session是未存在的私有文件名，与上下文不同。10-06私有文件已为revision6，下次实际正常更新须revision7或更高，且大于文件当前revision；示例不能代替运行时重读和到期检查。
 
 ```sh
-PYTHONPATH=src python3 -m sushiwait context-bridge   --credentials-file "$SUSHIWAIT_CONTEXT_FILE"   --session-file "$SUSHIWAIT_SESSION_FILE"   --revision 6 --store-id 3004 --seconds 60 --diagnostics
+PYTHONPATH=src python3 -m sushiwait context-bridge   --credentials-file "$SUSHIWAIT_CONTEXT_FILE"   --session-file "$SUSHIWAIT_SESSION_FILE"   --revision 7 --store-id 3004 --seconds 60 --diagnostics
 ```
 
 命令发出bridge_ready后，私有session文件含本轮端口、随机授权、截止时刻、应用身份/门店范围及URI编码adapter_argument。只在同电脑受控配置中读取adapter_argument，不打印/截图/发送其值。文件在成功、超时或中断后清理，过期参数不能复用。
@@ -91,3 +91,6 @@ node tests/surge_context.test.js
 ```
 
 rc5完整324项/4.111秒通过，既有26个JS场景计入Python wrapper；新增3项真实合成回环及4项CLI检查覆盖无投递、旧/到期授权、安全计数、默认输出及错误分发。回环绑定须执行环境允许本机端口；bridge_unavailable不代表SAPI失败。真实revision4接收侧已成功一次，当前过期；主库219成功2失败、真实恢复未验收。后续重复窗口未收到有效投递，CLI近期摘要限定目标域名匹配0，缺完整客户端请求证据。先验证正常流量/规则与新上下文，再做固定GET服务端接受和同进程跨到期；服务器独立code供应与无人值守更新未解决，不把本工具当全天服务。
+
+
+最新受控目录路线：修正版context-surge正常新6已提交、原西单进程真实5保护→6→恢复通过一次（E0090）；不是原响应脚本重复可靠性或服务器独立code验收。6声明02:10:55–03:10:55、下次7+；最后临时解密45秒并关闭、原名单恢复、小程序关闭。

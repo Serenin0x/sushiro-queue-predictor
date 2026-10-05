@@ -27,6 +27,7 @@ from .credentials import CredentialError, QueryCredentials, _context, _unique_ob
 
 _CLI = "/Applications/Surge.app/Contents/Applications/surge-cli"
 _MAX_BYTES = 4 * 1024 * 1024
+_MAX_RECENT_ROWS = 200
 _MAC_EPOCH = 978307200
 _PATH = "/gateway/wechat/api/2.0/stores"
 _QUERY = {"latitude": "1", "longitude": "1", "numresults": "10000"}
@@ -74,11 +75,11 @@ def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
                     now: datetime) -> SummaryCandidate:
     """Parse only recent records in the observed Mac 6.4.3 summary format.
 
-    completedDate uses the macOS 2001 reference epoch in this supported format;
-    unknown formats are rejected. No time is treated as a queue source update.
+    Support verified Unix timestamps plus a Mac-reference representation;
+    exactly one must fit the bounded current window. No source time is inferred.
     """
     since, now = _clock(since), _clock(now)
-    if now < since or previous.api_profile != "miniapp_gateway" or _app(previous.referer) is None:
+    if now < since or (now - since).total_seconds() > 60 or previous.api_profile != "miniapp_gateway" or _app(previous.referer) is None:
         raise SurgeError("surge_invalid_input")
     if not isinstance(body, bytes) or len(body) > _MAX_BYTES:
         raise SurgeError("surge_summary_too_large")
@@ -90,7 +91,7 @@ def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
     if not isinstance(value, dict) or not isinstance(value.get("recent-requests"), list):
         raise SurgeError("surge_summary_invalid")
     rows = value["recent-requests"]
-    if len(rows) > 50:
+    if len(rows) > _MAX_RECENT_ROWS:
         raise SurgeError("surge_summary_too_large")
     candidates = []
     failure = "surge_candidate_not_found"
@@ -100,12 +101,17 @@ def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
         date = row.get("completedDate")
         if type(date) not in (int, float) or not math.isfinite(date):
             continue
-        try:
-            received = datetime.fromtimestamp(date + _MAC_EPOCH, tz=timezone.utc)
-        except (ValueError, OverflowError, OSError):
+        times = []
+        for offset in (0, _MAC_EPOCH):
+            try:
+                candidate_time = datetime.fromtimestamp(date + offset, tz=timezone.utc)
+            except (ValueError, OverflowError, OSError):
+                continue
+            if since <= candidate_time <= now:
+                times.append(candidate_time)
+        if len(times) != 1:
             continue
-        if not since <= received <= now:
-            continue
+        received = times[0]
         response, request = row.get("responseHeader"), row.get("requestHeader")
         if (row.get("method") != "GET" or row.get("completed") is not True
                 or row.get("failed") is not False or row.get("streamHasRequestBody") is not False

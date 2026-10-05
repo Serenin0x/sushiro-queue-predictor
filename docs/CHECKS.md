@@ -30,3 +30,8 @@ rc6当前候选新增19项正常目录摘要检查，全343项/4.295秒OK无跳�
 rc6最终本机安装检查：16个代码模块、2026年度JSON及构建时README元数据逐字节一致，运行依赖0；checkout外隔离安装版本rc6，context-surge帮助/三个必需选项和既有诊断选项通过，公共/结果/日期/信号四路径socket0、真实训练标签0。wheel与实际公开/CI审计见E0086及后续历史；不当真实接口或独立续期验收。
 
 rc6实际公开代码[0c4cce8](https://github.com/Serenin0x/sushiro-queue-predictor/commit/0c4cce8f0ae64aa9aed39dcc80be1fcdb951819d)、137远端blob一致；[CI运行37351645572](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37351645572)三版本各343项/构建/checkout外安装全部success，context-surge帮助和四路径socket0通过，见E0087。这不等于正式命令真实接入、原进程恢复或全天服务器验收。
+
+
+rc6修正版（E0089）：真实近期200行/Unix完成秒兼容，21项0.119秒与完整345项4.246秒通过，无跳过。原50条非法场景改为201，新加200边界/Unix与≤60秒窗；4MiB/全头/声明/唯一落窗和固定CLI保持。旧0c4cce8的343项CI不能套用345；修正版最终构建/公开/CI另验，真实恢复见E0090。
+
+修正版rc6最终本机wheel/16模块/年度JSON/当前README及checkout外安装已验，四路径socket0/context-surge帮助通过，SHA/实际边界见E0091；新345项远端CI与公开结果另记，不借初版343项。
