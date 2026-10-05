@@ -9,7 +9,7 @@
 
 想吃寿司，却不知道该几点取号、还要等多久、会不会突然过号？SUSHIWAIT 希望把这些不确定，变成有依据的用餐计划：结合寿司郎小程序的实时排队数据、历史规律和日期差异，帮助你安排取号与到店时间，把时间留给自己喜欢的事。
 
-这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：已有三店持续采集与到期保护的实证，最新又走通电脑正常查询取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。同进程跨到期恢复已在两个独立运行中实测成功，长期更新仍待验证；预测模型、用户小程序和自动排队继续按阶段推进。**
+这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：已有三店持续采集与到期保护的实证，最新又走通电脑正常查询取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。同进程跨到期恢复已在两个独立运行中实测成功，最新三店各 120 次采集已完成；长期更新仍待验证；预测模型、用户小程序和自动排队继续按阶段推进。**
 
 ## 产品与模型功能
 
@@ -17,7 +17,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/92b0a238e878b9e3-dark.svg"><img src="assets/readme-labels/92b0a238e878b9e3-light.svg" alt="读到真实叫号数据" width="130" height="20"></picture></strong>：从官方微信小程序确认实际查询地址，电脑已独立读取中关村、西单、成都世豪的堂食、预约展示队列。用户退出小程序后，后续电脑查询仍成功；完整保留号码、顺序和后缀。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bb36ec0d24eb180b-dark.svg"><img src="assets/readme-labels/bb36ec0d24eb180b-light.svg" alt="找到试点门店，再用电脑采集" width="210" height="20"></picture></strong>：目录接口已通过电脑查询，返回 147 条门店记录。保留三店 60 秒和 30 秒的短窗结果，保留 30 秒各 67 轮、主库 219 份成功快照的历史结果；最新新凭证三店独立验证成功，另库西单 120 次成功及一次跨到期恢复已完成，又实测保存任务进度后跨进程续采。全天稳定访问与全国完整覆盖仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bb36ec0d24eb180b-dark.svg"><img src="assets/readme-labels/bb36ec0d24eb180b-light.svg" alt="找到试点门店，再用电脑采集" width="210" height="20"></picture></strong>：目录接口已通过电脑查询，返回 147 条门店记录。保留三店 60 秒和 30 秒的短窗结果，保留 30 秒各 67 轮、主库 219 份成功快照的历史结果；最新新凭证三店独立验证成功，另库西单 120 次成功及一次跨到期恢复已完成，又实测保存任务进度后跨进程续采；最新另一个三店任务跨正常更新后各完成 120 次。全天稳定访问与全国完整覆盖仍待验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/9660e24eddc316c0-dark.svg"><img src="assets/readme-labels/9660e24eddc316c0-light.svg" alt="查看查询凭证的到期声明" width="178" height="20"></picture></strong>：直接检查本机私有配置的到期声明、剩余时长与更新版本，显示是否触发到期前保护；不输出凭证内容。已观察到正常初始化返回新凭证，独立自动更新仍在验证中。
 
@@ -37,9 +37,9 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史。人工记录与合成样例分别统计；真实性和训练资格还需审核，当前没有据此发布误差或预测。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；实际调度与提醒继续推进。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、421 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、438 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -73,7 +73,7 @@
 
 字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)。
 
-展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。
+展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。用餐偏移与近时段刷新目标见[监控时间策略](docs/MONITORING_TARGETS.md)，当前仅离线核对。
 
 后续规划使用 FastAPI、PostgreSQL、Redis 后台调度及统计与分位数预测。大语言模型用于提取有来源的商场活动、营业调整等外部事件，并辅助解释预测；其实际收益将通过回测验证。这些组件尚未实现。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc9 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。新增私有暂存提交组件，26 项专项和 421 项完整本机检查通过；安装和本机私有副本验证已通过，本次公开与 GitHub 实际结果继续单独核验，见验收报告。三店各 67 次查询及到期保护保留历史；西单 120 次成功与一次真实跨到期恢复已经完成，另一次真实任务中断后跨进程续采得到 1+2 份成功快照。常驻凭证提供方、长期可靠性与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
+当前代码为 **v0.2.0rc10 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。新增用餐时间偏移与近时段监控目标，17 项专项和 438 项完整本机检查通过；安装包与 checkout 外时间策略验证已通过，本次公开与 GitHub 实际结果继续单独核验，见验收报告。三店各 67 次查询及到期保护保留历史；西单 120 次成功与一次真实跨到期恢复已经完成，另一次真实任务中断后跨进程续采得到 1+2 份成功快照。常驻凭证提供方、长期可靠性与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/ce7fbc78085b759a-dark.svg"><img src="assets/readme-labels/ce7fbc78085b759a-light.svg" alt="2026-10-06 · v0.2.0rc10" width="179" height="20"></picture></strong>：新增离线用餐时间策略，正确处理 `+10`／`-10`、30／15 分钟边界、提前叫号估计和加速输入。17 项专项及 438 项完整本机检查通过；后台调度、真实预测和提醒继续分阶段实现。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/a5653c4e30bc4dd0-dark.svg"><img src="assets/readme-labels/a5653c4e30bc4dd0-light.svg" alt="2026-10-06 · v0.2.0rc9" width="171" height="20"></picture></strong>：新增调试关闭后的完整暂存提交，检查新授权、同应用和版本，在协作锁内核对旧配置并原子保存。26 项专项及 421 项完整本机检查通过；实际接入与长期自动更新继续分别验收。
 

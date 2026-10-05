@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "monitor-plan", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -78,6 +78,19 @@ def check() -> None:
             if (native.call_count != 0 or
                     json.loads(promotion_output.getvalue())["error_code"] != "promotion_invalid_input"):
                 raise SystemExit("installed_promotion_validation_semantics_mismatch")
+            monitoring_output = io.StringIO()
+            with patch("sushiwait.credentials.read_credentials_file", side_effect=AssertionError("unexpected_credentials")), \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")), \
+                    contextlib.redirect_stdout(monitoring_output):
+                if main(["monitor-plan", "--desired-arrival-at", "2026-10-06T19:00:00+08:00",
+                         "--as-of", "2026-10-06T18:40:00+08:00", "--base-interval", "300",
+                         "--call-offset-minutes", "-10"]) != 0:
+                    raise SystemExit("installed_monitoring_failed")
+            monitoring = json.loads(monitoring_output.getvalue())
+            if (monitoring["target_call_at"] != "2026-10-06T10:50:00.000000Z"
+                    or monitoring["requested_interval_seconds"] != 30 or monitoring["eta_available"]
+                    or monitoring["scheduler_applied"] or monitoring["notification_sent"]):
+                raise SystemExit("installed_monitoring_semantics_mismatch")
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["replay", "--fixture", str(args.fixture), "--db", database]) != 0:
                     raise SystemExit("installed_replay_failed")
@@ -148,6 +161,8 @@ def check() -> None:
         "guard_validation_socket_calls": 0, "guard_validation_native_cli_calls": 0,
         "promotion_help_ok": True, "promotion_invalid_revision_ok": True,
         "promotion_validation_socket_calls": 0, "promotion_validation_native_cli_calls": 0,
+        "monitoring_policy_ok": True, "monitoring_policy_socket_calls": 0,
+        "monitoring_policy_native_cli_calls": 0, "monitoring_policy_credentials_accessed": False,
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,

@@ -26,6 +26,7 @@ from .signals import SignalError, signal_report
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
+from .monitoring import MonitoringError, polling_policy
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 
@@ -409,6 +410,14 @@ def build_parser() -> argparse.ArgumentParser:
     promotion.add_argument("--credentials-file", required=True, help="当前gateway私有上下文")
     promotion.add_argument("--staged-file", required=True, help="完整新gateway私有暂存上下文")
     promotion.add_argument("--expected-revision", required=True, type=int, help="预计当前版本；不符则保留原文件")
+    monitor = commands.add_parser("monitor-plan", help="离线核对用餐偏移与60/30秒刷新目标；不采集、预测或通知")
+    monitor.add_argument("--desired-arrival-at", required=True, help="带时区的理想到店时间")
+    monitor.add_argument("--as-of", required=True, help="带时区的策略判断时刻")
+    monitor.add_argument("--base-interval", required=True, type=int, help="窗口外目标周期60–3600秒；不代表上游允许频率")
+    monitor.add_argument("--call-offset-minutes", type=int, default=0, help="-1440至1440；+10表示到店后10分钟叫号，-10表示提前10分钟")
+    monitor.add_argument("--plan-status", choices=("waiting", "called", "no_show", "cancelled", "ended"), default="waiting")
+    monitor.add_argument("--earliest-call-at", help="外部提供的最早叫号估计；本工具不认证或计算预测")
+    monitor.add_argument("--accelerated-display-turnover", action="store_true", help="外部展示集合加速输入；不当真实过号率")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -497,6 +506,18 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": False, "error_code": "collection_task_path_conflict"})
                 return 2
     try:
+        if args.command == "monitor-plan":
+            try:
+                result = polling_policy(desired_arrival_at=args.desired_arrival_at,
+                    as_of=args.as_of, base_interval=args.base_interval,
+                    call_offset_minutes=args.call_offset_minutes, plan_status=args.plan_status,
+                    earliest_call_at=args.earliest_call_at,
+                    accelerated_display_turnover=args.accelerated_display_turnover)
+                emit({"ok": True, **result})
+                return 0
+            except MonitoringError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
         if args.command == "context-promote":
             try:
                 result = promote_context(credentials_file=args.credentials_file,
