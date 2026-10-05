@@ -17,3 +17,7 @@ rc2构建时按[PyPA许可元数据格式](https://packaging.python.org/en/lates
 已公开rc3新增15项日期检查，完整298项/1.741秒通过；安装检查增加date-features及2026固定JSON包资源，从checkout外验证调休上班日、营业未知/ETA不可用及socket0。最终本机wheel/14代码模块及JSON一致、checkout外安装/date-features通过socket0；提交d7897ed的[实际GitHub运行37200713068](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37200713068)三组298项及构建/安装/包资源检查全部success，实际日志核对公共/结果/日期路径socket0；工作流动作/权限/输入保持。
 
 已公开rc4新增[窗口分析](SIGNALS.md)19项/0.077秒，完整317项/1.944秒OK、无跳过。包含实际合成SQLite并发追加时的一致读取、未来/缺口/失败/逆序防污染、只读DB1和CLI零网络/客户端/凭证；既有26个JS场景已含在wrapper，不重复计数。最终离线wheel65,923字节、SHA256 `7bcbe5c255f1581cbf57369dd519b886af21ae174ee509ea285cca33405cd4c8`，15模块/年度JSON/README元数据与源码一致，MIT/运行依赖0。checkout外独立安装入口通过，signal-report及公共/结果/日期四条检查路径socket0；安装检查脚本新增实际信号输出资格核对，工作流本身未改。rc4提交829c392的[实际运行37204416416](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37204416416)completed/success：Python3.11为317项/2.546秒、3.12为317项/2.206秒、3.13为317项/2.927秒，三组构建/checkout外安装及四路径socket0全部通过，76远端blob一致；没有生产请求或真实恢复。
+
+本轮rc5增加可选接收诊断，完整324项/4.111秒OK、无跳过；新增3项合成回环和4项零网络CLI检查，区分连接/鉴权/帧格式/观测与固定拒绝原因，默认输出保持。原26个JS场景计入wrapper。运行/安装/远端CI以新版本实际编辑记录为准，不套用rc4结果；首次真实诊断有效投递0，不是自动续期或恢复成功。
+
+rc5最终离线wheel为67,262字节、SHA256 ae8804d35da1f50580fcb13da8836903e8c3dc09d8a57c971337c28e5e3dd5ea；15模块、2026 JSON及当前README元数据逐一匹配，MIT/运行依赖0。官方Python3.12.14/setuptools84构建，在checkout外独立venv/隔离入口通过CLI帮助与诊断选项、公共/结果/日期/信号四条socket0检查，verified_training_labels=0。 GitHub实际新版本CI结果在随后发布审计单列。

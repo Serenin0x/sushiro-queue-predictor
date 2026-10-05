@@ -23,7 +23,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/c886e589de78387b-dark.svg"><img src="assets/readme-labels/c886e589de78387b-light.svg" alt="把一次正常刷新接到电脑查询" width="210" height="20"></picture></strong>：可离线检查本人导出的捕获文件，明确选择正常单店请求，将完整上下文写入私有配置。到期或临近到期时拒绝导入；此功能不自动登录或续期。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：新增同电脑短时接收工具，可接收正常门店查询中的完整新上下文，省去中间导出 HAR 的步骤。配套适配器与本机合成联动已通过检查；真实微信客户端接入仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：新增同电脑短时接收工具，可接收正常门店查询中的完整新上下文，省去中间导出 HAR 的步骤。已实测一次电脑微信正常刷新自动保存新凭证；后续重复接入仍在排查。可选安全诊断能区分连接、投递和拒绝阶段，新凭证独立查询及自动更新仍待验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停和等待超时停止；无需重启的恢复通过合成检查，真实恢复和独立自动续期仍待验证。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc4 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。317 项本机检查通过，安装与 GitHub 检查结果见验收报告。三店本轮各 67 次查询成功，真实到期保护后等待 10 分钟没有新凭证，采集安全停止；本轮没有完成跨到期恢复。服务器独立取得新登录码、电脑客户端联动、长周期数据与预测继续推进，全部背景和编辑记录保持更新。
+当前代码为 **v0.2.0rc5 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。324 项本机检查通过，安装与 GitHub 实际结果见验收报告。三店曾各 67 次查询成功，真实到期保护后等待 10 分钟没有新凭证，采集安全停止。电脑正常刷新已成功写入一次新凭证，重复稳定性、新凭证独立查询和跨到期恢复继续验收；服务器自动更新、长期数据与预测继续推进，全部背景和编辑记录保持更新。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/cf34e6ba46337826-dark.svg"><img src="assets/readme-labels/cf34e6ba46337826-light.svg" alt="2026-10-05 · v0.2.0rc5" width="171" height="20"></picture></strong>：增加可选接收诊断，只报告连接与投递计数和固定拒绝原因，保护凭证内容；324项完整本机检查通过。记录电脑正常刷新的一次真实接入及后续未收到有效投递的结果，继续验证稳定更新与独立查询。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/cc659ae1fac450d5-dark.svg"><img src="assets/readme-labels/cc659ae1fac450d5-light.svg" alt="2026-10-04 · v0.2.0rc4" width="171" height="20"></picture></strong>：增加只读展示集合窗口分析，保留相邻观测覆盖、前后速率比较、未来数据排除和失败断链；19项专项及317项完整本机检查通过。已回放三店历史窗口，真实过号率、告警和预测仍待验证。
 

@@ -36,8 +36,9 @@ _ERRORS = frozenset({"bridge_invalid_input", "bridge_wrong_app", "bridge_wrong_s
 
 
 class BridgeError(ValueError):
-    def __init__(self, code: str):
+    def __init__(self, code: str, *, diagnostics: dict | None = None):
         self.error_code = code if code in _ERRORS else "bridge_invalid_input"
+        self.diagnostics = diagnostics
         super().__init__(self.error_code)
 
 
@@ -136,9 +137,11 @@ def _create_session(path: str | Path, value: dict) -> tuple[int, str, tuple]:
 
 def receive_context(*, credentials_file: str | Path, session_file: str | Path,
                     revision: int, store_ids: tuple[str, ...], seconds: int = 60,
-                    on_ready: Callable[[dict], None] | None = None) -> dict:
+                    on_ready: Callable[[dict], None] | None = None,
+                    diagnostics: bool = False) -> dict:
     """Explicit one-shot listener: IPv4 loopback, <=60s, no outgoing requests."""
-    if (type(seconds) is not int or not 1 <= seconds <= MAX_WINDOW_SECONDS
+    if (type(diagnostics) is not bool
+            or type(seconds) is not int or not 1 <= seconds <= MAX_WINDOW_SECONDS
             or type(revision) is not int or not 1 <= revision <= 2**63 - 1
             or not 1 <= len(store_ids) <= 3 or len(set(store_ids)) != len(store_ids)
             or any(not isinstance(s, str) or not re.fullmatch(r"[1-9][0-9]{0,18}", s)
@@ -156,12 +159,16 @@ def receive_context(*, credentials_file: str | Path, session_file: str | Path,
     result = None
     parent_fd = None
     cleanup_confirmed = True
+    diagnostic_counts = {"local_connections": 0, "authenticated_deliveries": 0,
+                         "validated_observations": 0,
+                         "rejected_observations": 0, "last_rejection": None}
 
     class Server(HTTPServer):
         allow_reuse_address = False
 
         def get_request(self):
             connection, address = super().get_request()
+            diagnostic_counts["local_connections"] += 1
             connection.settimeout(max(0.001, min(1, deadline - time.monotonic())))
             return connection, address
 
@@ -200,6 +207,7 @@ def receive_context(*, credentials_file: str | Path, session_file: str | Path,
                     or self.headers.get("Expect") is not None):
                 self._reply(403, {"ok": False})
                 return
+            diagnostic_counts["authenticated_deliveries"] += 1
             lengths = self.headers.get_all("Content-Length", [])
             types = self.headers.get_all("Content-Type", [])
             if (len(lengths) != 1 or not re.fullmatch(r"[0-9]{1,6}", lengths[0])
@@ -215,6 +223,7 @@ def receive_context(*, credentials_file: str | Path, session_file: str | Path,
                 now = datetime.now(timezone.utc)
                 inspection = inspect_observation(body, expected_app=expected_app,
                                                  store_ids=store_ids, now=now)
+                diagnostic_counts["validated_observations"] += 1
                 if inspection.entries[0].context.authorization == previous.authorization:
                     raise BridgeError("bridge_context_unchanged")
                 if time.monotonic() >= deadline:
@@ -231,6 +240,9 @@ def receive_context(*, credentials_file: str | Path, session_file: str | Path,
                 failure = error.error_code
             except (OSError, ValueError, TypeError, KeyError, OverflowError):
                 failure = "bridge_invalid_input"
+            if failure is not None:
+                diagnostic_counts["rejected_observations"] += 1
+                diagnostic_counts["last_rejection"] = failure
             self._reply(200 if result else 422, {"ok": result is not None,
                 **({"error_code": failure} if failure else {})})
 
@@ -251,7 +263,8 @@ def receive_context(*, credentials_file: str | Path, session_file: str | Path,
         while result is None and time.monotonic() < deadline:
             server.handle_request()
         if result is None:
-            raise BridgeError("bridge_timeout")
+            raise BridgeError("bridge_timeout",
+                              diagnostics=dict(diagnostic_counts) if diagnostics else None)
     except (socket.error, OverflowError):
         raise BridgeError("bridge_unavailable") from None
     finally:
@@ -267,4 +280,5 @@ def receive_context(*, credentials_file: str | Path, session_file: str | Path,
             except (OSError, CaptureError):
                 cleanup_confirmed = False
             os.close(parent_fd)
-    return {**result, "session_cleanup_confirmed": cleanup_confirmed}
+    return {**result, "session_cleanup_confirmed": cleanup_confirmed,
+            **({"diagnostics": dict(diagnostic_counts)} if diagnostics else {})}

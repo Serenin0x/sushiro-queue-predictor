@@ -31,6 +31,11 @@ def check() -> None:
     if any(command not in help_result.stdout for command in
             ("capture-import", "context-bridge", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
+    bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
+                                  "context-bridge", "--help"],
+        capture_output=True, text=True, timeout=10, check=True)
+    if "--diagnostics" not in bridge_help.stdout:
+        raise SystemExit("installed_bridge_diagnostics_missing")
     with tempfile.TemporaryDirectory() as directory:
         database = str(Path(directory).resolve() / "synthetic.sqlite3")
         # Fail immediately if the replay/report smoke path tries any socket I/O.
@@ -83,7 +88,8 @@ def check() -> None:
                 or signal_summary["network_performed"]):
             raise SystemExit("installed_signals_semantics_mismatch")
     print(json.dumps({"installed_version": expected, "import_outside_checkout": True,
-        "cli_help_ok": True, "synthetic_replay_ok": True, "readonly_report_ok": True,
+        "cli_help_ok": True, "bridge_diagnostic_option_ok": True,
+        "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
         "calendar_package_data_ok": True, "calendar_socket_calls": 0,

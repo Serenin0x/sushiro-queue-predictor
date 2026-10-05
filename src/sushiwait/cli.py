@@ -318,6 +318,8 @@ def build_parser() -> argparse.ArgumentParser:
     bridge.add_argument("--revision", required=True, type=int)
     bridge.add_argument("--store-id", action="append", required=True, help="仅接受明确指定的1–3店")
     bridge.add_argument("--seconds", type=int, default=60, help="接收窗口1–60秒")
+    bridge.add_argument("--diagnostics", action="store_true",
+                        help="只报告本机有效投递计数和固定拒绝原因，不输出请求或凭证")
     stores = commands.add_parser("stores", help="查询目录并按名称筛选（一次只读请求）")
     stores.add_argument("--api-profile", choices=API_PROFILES, default="legacy",
                         help="显式选择固定接口；不会自动切换或回退")
@@ -439,12 +441,15 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 result = receive_context(credentials_file=args.credentials_file,
                     session_file=args.session_file, revision=args.revision,
-                    store_ids=tuple(args.store_id), seconds=args.seconds, on_ready=emit)
+                    store_ids=tuple(args.store_id), seconds=args.seconds, on_ready=emit,
+                    diagnostics=args.diagnostics)
                 emit({"ok": True, **result})
                 return 0
             except (BridgeError, CaptureError, CredentialError) as error:
                 emit({"ok": False, "error_code": error.error_code,
-                      "external_network_performed": False})
+                      "external_network_performed": False,
+                      **({"diagnostics": error.diagnostics}
+                         if isinstance(error, BridgeError) and error.diagnostics is not None else {})})
                 return 1
         if args.command in ("capture-check", "capture-import"):
             try:

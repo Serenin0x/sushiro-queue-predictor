@@ -103,7 +103,7 @@ class BridgeTests(unittest.TestCase):
                 self.assertNotIn("secret-invalid",str(raised.exception))
                 self.assertIsNone(raised.exception.__context__)
 
-    def run_receiver(self, actions, *, seconds=3):
+    def run_receiver(self, actions, *, seconds=3, diagnostics=False, expect_timeout=False):
         outcomes=[]; failures=[]; workers=[];ready_rows=[]
         def ready(meta):
             ready_rows.append(meta)
@@ -122,8 +122,15 @@ class BridgeTests(unittest.TestCase):
             thread=threading.Thread(target=work);thread.start();workers.append(thread)
         with patch("sushiwait.client.SushiroClient.__init__",side_effect=AssertionError("no upstream client")), \
              patch("urllib.request.build_opener",side_effect=AssertionError("no upstream opener")):
-            result=receive_context(credentials_file=self.context,session_file=self.session,
-                revision=2,store_ids=("900001",),seconds=seconds,on_ready=ready)
+            try:
+                result=receive_context(credentials_file=self.context,session_file=self.session,
+                    revision=2,store_ids=("900001",),seconds=seconds,on_ready=ready,
+                    diagnostics=diagnostics)
+            except BridgeError as error:
+                if not expect_timeout:
+                    raise
+                self.assertEqual(error.error_code,"bridge_timeout")
+                result=error
         for thread in workers:thread.join(3)
         self.assertFalse(failures);self.assertTrue(all(not t.is_alive() for t in workers))
         self.assertNotIn("token",json.dumps(ready_rows));self.assertFalse(self.session.exists())
@@ -140,6 +147,46 @@ class BridgeTests(unittest.TestCase):
         self.assertNotIn("captured_at",result)
         self.assertIn("relay_received_at",result)
         self.assertNotIn("synthetic-app-code-secret",json.dumps(result))
+        self.assertNotIn("diagnostics",result)
+
+    def test_opt_in_diagnostics_separates_no_delivery_from_rejected_context(self):
+        before=self.context.read_bytes()
+        no_delivery,_=self.run_receiver([],seconds=1,diagnostics=True,expect_timeout=True)
+        self.assertEqual(no_delivery.diagnostics,{"local_connections":0,"authenticated_deliveries":0,
+            "validated_observations":0,"rejected_observations":0,"last_rejection":None})
+        expired=auth(NOW-timedelta(seconds=60),"different-expired-marker")
+        rejected,outcomes=self.run_receiver([
+            (observation(bundle()["authorization"]),{},"POST","/v1/context"),
+            (observation(expired),{},"POST","/v1/context")],
+            seconds=1,diagnostics=True,expect_timeout=True)
+        self.assertEqual([row[0] for row in outcomes],[422,422])
+        self.assertEqual(rejected.diagnostics,{"local_connections":2,"authenticated_deliveries":2,
+            "validated_observations":2,"rejected_observations":2,
+            "last_rejection":"capture_auth_expired"})
+        self.assertEqual(self.context.read_bytes(),before)
+        self.assertFalse(self.session.exists())
+        text=json.dumps(rejected.diagnostics)
+        for value in (expired,REF,"different-expired-marker","synthetic-app-code-secret",str(self.parent)):
+            self.assertNotIn(value,text)
+
+    def test_diagnostics_distinguishes_connections_authentication_and_payloads(self):
+        actions=[(observation(),{"Authorization":"Bearer wrong"},"POST","/v1/context"),
+                 (observation(),{"Content-Type":"text/plain"},"POST","/v1/context"),
+                 (observation(),{},"POST","/v1/context")]
+        result,outcomes=self.run_receiver(actions,diagnostics=True)
+        self.assertEqual([row[0] for row in outcomes],[403,400,200])
+        self.assertEqual(result["diagnostics"],{"local_connections":3,"authenticated_deliveries":2,
+            "validated_observations":1,"rejected_observations":0,"last_rejection":None})
+        self.assertTrue(result["session_cleanup_confirmed"])
+
+    def test_diagnostics_rejected_payload_uses_fixed_safe_code(self):
+        bad=observation();bad["response"]["store"]["private_account"]="private-canary"
+        result,_=self.run_receiver([(bad,{},"POST","/v1/context"),
+                                  (observation(),{},"POST","/v1/context")],diagnostics=True)
+        self.assertEqual(result["diagnostics"],{"local_connections":2,"authenticated_deliveries":2,
+            "validated_observations":1,"rejected_observations":1,
+            "last_rejection":"bridge_invalid_input"})
+        self.assertNotIn("private-canary",json.dumps(result))
 
     def test_wrong_auth_origin_host_and_path_cannot_commit(self):
         actions=[(observation(),headers,"POST",path) for headers,path in
@@ -230,7 +277,8 @@ class BridgeTests(unittest.TestCase):
 
     def test_bounds_revision_and_profile_rejected_before_bind(self):
         options=[{"seconds":0},{"seconds":61},{"revision":1},{"store_ids":()},
-                 {"store_ids":("900001","900002","900003","900004")},{"session_file":self.context}]
+                 {"store_ids":("900001","900002","900003","900004")},{"session_file":self.context},
+                 {"diagnostics":1},{"diagnostics":"true"}]
         for option in options:
             args=dict(credentials_file=self.context,session_file=self.session,revision=2,store_ids=("900001",),seconds=1)
             args.update(option)
