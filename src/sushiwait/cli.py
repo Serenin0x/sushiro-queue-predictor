@@ -25,6 +25,7 @@ from .storage import SnapshotStore
 from .signals import SignalError, signal_report
 from .surge import SurgeError, receive_summary
 from .transport import sanitize_transport
+from .tasks import CollectionTask, TaskError, public_task, task_status
 
 DEFAULT_DB = str(local_data_directory() / "sushiwait.sqlite3")
 API_PROFILES = ("legacy", "miniapp_gateway")
@@ -118,7 +119,7 @@ def _inspect_private_authorization(args: argparse.Namespace) -> int:
 class _QuerySession:
     """An immutable context per GET, with bounded local rechecks while waiting."""
 
-    def __init__(self, args: argparse.Namespace):
+    def __init__(self, args: argparse.Namespace, *, on_context=None):
         self.args = args
         self.source = CredentialSource(args.api_profile,
             credentials_file=getattr(args, "credentials_file", None), anonymous=args.anonymous)
@@ -129,6 +130,8 @@ class _QuerySession:
         self.observed_revision: int | None = None
         self._observed_authorization: str | None = None
         self.recovery_count = 0
+        self.last_stop_code: str | None = None
+        self._on_context = on_context
 
     def _refresh(self) -> None:
         self.auth_status = None
@@ -141,6 +144,11 @@ class _QuerySession:
         self._observed_authorization = credentials.authorization
         self.auth_status = status
         stop_code = _authorization_stop_code(status)
+        if self._on_context is not None:
+            try:
+                self._on_context(credentials, stop_code)
+            except CredentialError as error:
+                raise _PreflightStop(error.error_code, status) from None
         if stop_code is not None:
             raise _PreflightStop(stop_code, status)
         self._credentials = credentials
@@ -187,7 +195,7 @@ def _record_preflight_stop(
 def _await_credentials(session: _QuerySession, stop: _PreflightStop) -> bool:
     """Opt-in bounded pause. A different, higher revision must pass preflight."""
     seconds = getattr(session.args, "wait_for_credentials", 0)
-    if not seconds or stop.error_code not in ("auth_declared_expired", "auth_expiring"):
+    if not seconds or stop.error_code not in ("auth_declared_expired", "auth_expiring", "credentials_refresh_required"):
         return False
     stopped_revision = session.observed_revision
     stopped_authorization = session._observed_authorization
@@ -203,7 +211,7 @@ def _await_credentials(session: _QuerySession, stop: _PreflightStop) -> bool:
         try:
             session._refresh()
         except _PreflightStop as error:
-            if error.error_code in ("auth_declared_expired", "auth_expiring"):
+            if error.error_code in ("auth_declared_expired", "auth_expiring", "credentials_refresh_required"):
                 continue
             emit({"event": "credentials_recovery_failed", "error_code": error.error_code, **metadata})
             return False
@@ -220,6 +228,7 @@ def _collect_client(session: _QuerySession, db: SnapshotStore, store_id: str) ->
     try:
         return session.client()
     except _PreflightStop as stop:
+        session.last_stop_code = stop.error_code
         _record_preflight_stop(db, store_id, session.args.api_profile, stop)
         if not _await_credentials(session, stop):
             return None
@@ -227,6 +236,7 @@ def _collect_client(session: _QuerySession, db: SnapshotStore, store_id: str) ->
     try:
         return session.client()
     except _PreflightStop as stop:
+        session.last_stop_code = stop.error_code
         _record_preflight_stop(db, store_id, session.args.api_profile, stop)
         return None
 
@@ -264,6 +274,71 @@ def observe(
     db.save(snapshot)
     emit({"ok": True, "snapshot": snapshot, "change": compute_change(previous, snapshot)})
     return True
+
+
+def _persistent_collect(args: argparse.Namespace) -> int:
+    """Resume an explicitly selected bounded task; never silently replay a slot."""
+    config = {"db": os.path.abspath(args.db), "api_profile": args.api_profile,
+              "store_ids": args.store_id, "interval": args.interval, "samples": args.samples,
+              "wait_for_credentials": args.wait_for_credentials}
+    with CollectionTask(args.task_file, config=config, resume=args.resume_task, now=_utc_clock()) as task:
+        task.prepare_database()
+        with SnapshotStore(args.db, read_only=task.value["state"] == "completed") as db:
+            task.bind(db, now=_utc_clock())
+            emit({"event": "collection_task_restored" if task.loaded else "collection_task_created",
+                  **public_task(task.value)})
+            if task.value["state"] == "completed":
+                return 0 if task.value["failed"] == task.value["uncertain"] == 0 else 1
+            session = _QuerySession(args, on_context=task.check_context)
+
+            def wait(deadline: float) -> bool:
+                try:
+                    session.wait_until(deadline)
+                    return True
+                except _PreflightStop as stop:
+                    _record_preflight_stop(db, args.store_id[0], args.api_profile, stop)
+                    task.stop(stop.error_code, now=_utc_clock())
+                    if not _await_credentials(session, stop):
+                        emit({"event": "collection_task_stopped", **public_task(task.value)})
+                        return False
+                try:
+                    session.wait_until(time.monotonic() + args.interval)
+                    return True
+                except _PreflightStop as stop:
+                    _record_preflight_stop(db, args.store_id[0], args.api_profile, stop)
+                    task.stop(stop.error_code, now=_utc_clock())
+                    emit({"event": "collection_task_stopped", **public_task(task.value)})
+                    return False
+
+            # Every unfinished restarted task waits a full period, including a
+            # partially completed round. Downtime cannot create a catch-up burst.
+            if task.loaded and task.value["last_attempt_at"] is not None:
+                if not wait(time.monotonic() + args.interval):
+                    return 1
+            count = len(args.store_id)
+            started = time.monotonic()
+            while task.value["cursor"] < count * args.samples:
+                if task.value["cursor"] % count == 0:
+                    started = time.monotonic()
+                store_id = args.store_id[task.value["cursor"] % count]
+                before_recovery = session.recovery_count
+                client = _collect_client(session, db, store_id)
+                if client is None:
+                    task.stop(session.last_stop_code or "client_configuration_error", now=_utc_clock())
+                    emit({"event": "collection_task_stopped", **public_task(task.value)})
+                    return 1
+                if session.recovery_count != before_recovery:
+                    started = time.monotonic()
+                task.begin(now=_utc_clock())
+                ok = observe(client, store_id, db, api_profile=args.api_profile)
+                task.reconcile(now=_utc_clock())
+                emit({"event": "collection_task_checkpoint", **public_task(task.value)})
+                if not ok:
+                    return 1
+                if task.value["cursor"] < count * args.samples and task.value["cursor"] % count == 0:
+                    if not wait(started + args.interval):
+                        return 1
+            return 0 if task.value["failed"] == task.value["uncertain"] == 0 else 1
 
 
 def load_fixture(path: str) -> dict:
@@ -347,6 +422,8 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--db", default=DEFAULT_DB)
     collect.add_argument("--wait-for-credentials", type=int, default=0,
                          help="私有文件模式到期后暂停等正常新上下文，0–600秒；默认停止")
+    collect.add_argument("--task-file", help="私有有界任务进度；保存槽位/对账并跨重启检查凭证版本")
+    collect.add_argument("--resume-task", action="store_true", help="显式恢复已有task-file；不重发未知或失败槽位")
     collect_auth = collect.add_mutually_exclusive_group()
     collect_auth.add_argument("--anonymous", action="store_true")
     collect_auth.add_argument("--credentials-file", help="每次查询前重读完整私有上下文；整组原子更新")
@@ -358,6 +435,8 @@ def build_parser() -> argparse.ArgumentParser:
     calendar.add_argument("--as-of", required=True, help="使用信息的当时，带显式时区和秒")
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
+    task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
+    task_report.add_argument("--task-file", required=True)
     signals = commands.add_parser("signal-report", help="只读比较展示集合的时间窗口；不推真实过号率")
     signals.add_argument("--db", required=True)
     signals.add_argument("--store-id", required=True)
@@ -400,7 +479,29 @@ def main(argv: list[str] | None = None) -> int:
                 or args.wait_for_credentials and args.credentials_file is None):
             emit({"ok": False, "error_code": "invalid_credential_wait_bounds"})
             return 2
+        if (args.resume_task and not args.task_file or args.task_file and not args.credentials_file):
+            emit({"ok": False, "error_code": "invalid_collection_task_options"})
+            return 2
+        if args.task_file:
+            paths = [os.path.abspath(p) for p in (args.task_file, args.db, args.credentials_file)]
+            if len(set(paths)) != 3 or paths[1] == paths[0] + ".lock" or paths[2] == paths[0] + ".lock":
+                emit({"ok": False, "error_code": "collection_task_path_conflict"})
+                return 2
     try:
+        if args.command == "task-status":
+            try:
+                emit({"ok": True, **task_status(args.task_file), "network_performed": False})
+                return 0
+            except TaskError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "collect" and args.task_file:
+            try:
+                return _persistent_collect(args)
+            except (TaskError, CaptureError) as error:
+                emit({"ok": False, "error_code": error.error_code if isinstance(error, TaskError)
+                      else "collection_task_unavailable_or_unsafe"})
+                return 1
         if args.command == "signal-report":
             try:
                 with SnapshotStore(args.db, read_only=True) as db:

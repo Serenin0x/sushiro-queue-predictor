@@ -32,6 +32,7 @@ _PREFLIGHT_CODES = frozenset({
     "credentials_file_invalid", "credentials_profile_mismatch", "credentials_revision_rollback",
     "credentials_revision_conflict", "auth_expiring", "auth_declared_expired", "auth_claims_invalid",
     "client_configuration_error", "credentials_invalid",
+    "credentials_refresh_required",
 })
 _REQUEST_CODES = frozenset({
     "invalid_endpoint", "unsupported_endpoint", "invalid_store_id", "invalid_response",

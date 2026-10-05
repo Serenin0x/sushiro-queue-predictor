@@ -1,5 +1,7 @@
 # 自动检查与安装验证
 
+rc7本机新增[私有有界任务/显式重启恢复](COLLECTION_TASKS.md)，27项专项通过、全372项4.408秒通过；西单03:00–03:01真实进程中断/续采1+2份成功、0失败未知，快照DB2保持，见E0096/E0097。最终安装/实际公开/CI随后单独记；正常客户端自动更新和全天无人值守尚未实现/验收，原各版本成绩保留历史。
+
 工作流为 [.github/workflows/checks.yml](../.github/workflows/checks.yml)，本机安装包检查入口为 [scripts/check_installed_package.py](../scripts/check_installed_package.py)。每次 main 推送、针对 main 的普通 pull_request，以及显式 workflow_dispatch 运行离线检查；没有定时采集、业务操作、部署或凭证更新任务。
 
 Ubuntu 24.04 的 Python 3.11、3.12、3.13 三组分别执行完整检查，Node 22 执行既有适配器场景。每组再构建 wheel、安装到临时虚拟环境，在 checkout 外用 `-I` 运行安装验证：核对版本与实际导入位置、CLI 帮助、合成回放及只读报告；rc2另核对合成结果校验/私有追加/汇总，真实性/标签资格仍为未验证。回放/报告及结果路径将 socket 调用设为失败，数据库只在临时目录；CLI 帮助子进程单独核对退出状态。它不访问寿司郎，不读 HAR、微信数据或本机凭证，也不把合成测试算作 live 验收。

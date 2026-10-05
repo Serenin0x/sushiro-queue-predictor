@@ -29,6 +29,7 @@ _FILE_ERRORS = frozenset({
     "credentials_file_invalid", "credentials_profile_mismatch",
     "credentials_revision_rollback", "credentials_revision_conflict",
     "credentials_invalid",
+    "credentials_refresh_required",
 })
 
 

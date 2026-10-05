@@ -17,7 +17,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/92b0a238e878b9e3-dark.svg"><img src="assets/readme-labels/92b0a238e878b9e3-light.svg" alt="读到真实叫号数据" width="130" height="20"></picture></strong>：从官方微信小程序确认实际查询地址，电脑已独立读取中关村、西单、成都世豪的堂食、预约展示队列。用户退出小程序后，后续电脑查询仍成功；完整保留号码、顺序和后缀。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bb36ec0d24eb180b-dark.svg"><img src="assets/readme-labels/bb36ec0d24eb180b-light.svg" alt="找到试点门店，再用电脑采集" width="210" height="20"></picture></strong>：目录接口已通过电脑查询，返回 147 条门店记录。保留三店 60 秒和 30 秒的短窗结果，保留 30 秒各 67 轮、主库 219 份成功快照的历史结果；最新新凭证三店独立验证成功，另库西单持续采集进行中。全天稳定访问与全国完整覆盖仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bb36ec0d24eb180b-dark.svg"><img src="assets/readme-labels/bb36ec0d24eb180b-light.svg" alt="找到试点门店，再用电脑采集" width="210" height="20"></picture></strong>：目录接口已通过电脑查询，返回 147 条门店记录。保留三店 60 秒和 30 秒的短窗结果，保留 30 秒各 67 轮、主库 219 份成功快照的历史结果；最新新凭证三店独立验证成功，另库西单 120 次成功及一次跨到期恢复已完成，又实测保存任务进度后跨进程续采。全天稳定访问与全国完整覆盖仍待验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/9660e24eddc316c0-dark.svg"><img src="assets/readme-labels/9660e24eddc316c0-light.svg" alt="查看查询凭证的到期声明" width="178" height="20"></picture></strong>：直接检查本机私有配置的到期声明、剩余时长与更新版本，显示是否触发到期前保护；不输出凭证内容。已观察到正常初始化返回新凭证，独立自动更新仍在验证中。
 
@@ -25,11 +25,11 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与真实同进程恢复已通过一次；重复可靠性和长期自动更新继续验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。长期无人值守与服务器独立更新仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。长期无人值守与服务器独立更新仍待验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bf4fbb34b32ed56d-dark.svg"><img src="assets/readme-labels/bf4fbb34b32ed56d-light.svg" alt="看清采集是否可靠" width="130" height="20"></picture></strong>：报告区分请求失败、字段处理失败与本机停采，统计实际请求间隔、展示号码变化和字段状态。明确统计窗口，帮助发现异常；相同数据不会被当成刚更新的数据。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bf4fbb34b32ed56d-dark.svg"><img src="assets/readme-labels/bf4fbb34b32ed56d-light.svg" alt="看清采集是否可靠" width="130" height="20"></picture></strong>：报告区分请求失败、字段处理失败与本机停采，统计实际请求间隔、展示号码变化和字段状态。明确统计窗口，帮助发现异常；相同数据不会被当成刚更新的数据；可离线查看私有任务的成功、失败与未知槽位，不读取凭证或查询门店。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/fce6b943bcea13b8-dark.svg"><img src="assets/readme-labels/fce6b943bcea13b8-light.svg" alt="比较最近的展示号变化" width="162" height="20"></picture></strong>：按指定历史时刻分析两分钟或更长窗口，比较前后两段展示集合的变化速率；遇到失败、缺口和时间逆序会断开比较，资料不足会明确显示。为异常检测准备可观察指标，尚不判断真实过号人数或触发提醒。
 
@@ -69,7 +69,7 @@
 
 ## 技术手段
 
-当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)。
+当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)。
 
 字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc6 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。345 项本机检查通过，安装与 GitHub 实际结果见验收报告。三店各 67 次查询及到期保护保留历史；最新正常目录新凭证已独立查询三店成功，另库西单连续采集进行中。最新已走通接入工具和一次真实跨到期恢复，长周期正常提供方与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
+当前代码为 **v0.2.0rc7 接入与数据准备候选版，正式 v0.2.0 尚未完成验收**。新增持久有界任务，27 项专项和 372 项完整本机检查通过，安装与 GitHub 实际结果见验收报告。三店各 67 次查询及到期保护保留历史；西单 120 次成功与一次真实跨到期恢复已经完成，另一次真实任务中断后跨进程续采得到 1+2 份成功快照。常驻凭证提供方、长期可靠性与服务器独立供应继续验证；真实标签、预测与后续产品按阶段推进。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/7610b7cb350cfbcb-dark.svg"><img src="assets/readme-labels/7610b7cb350cfbcb-light.svg" alt="2026-10-06 · v0.2.0rc7" width="171" height="20"></picture></strong>：新增私有有界任务进度、显式重启恢复和离线任务状态；已提交快照按同次尝试对账，未知缺口单列，跨重启拒绝旧版本或冲突凭证。27 项专项和 372 项完整检查通过，西单真实中断后续采 1+2 份成功快照；持续推进正常更新控制器。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/c6802dfe9e84937c-dark.svg"><img src="assets/readme-labels/c6802dfe9e84937c-light.svg" alt="2026-10-06 · v0.2.0rc6" width="171" height="20"></picture></strong>：新增有界本机正常目录摘要接入，整组新上下文私有保存；按真实摘要修正记录数与完成时间格式，21 项专项与 345 项完整本机检查通过。正常目录新凭证、三店独立查询及一次无需重启的跨到期恢复已实测，继续长期可靠性验证。
 

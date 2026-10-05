@@ -29,7 +29,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -41,6 +41,10 @@ def check() -> None:
         capture_output=True, text=True, timeout=10, check=True)
     if any(option not in surge_help.stdout for option in ("--credentials-file", "--revision", "--seconds")):
         raise SystemExit("installed_surge_intake_missing")
+    collect_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "collect", "--help"],
+        capture_output=True, text=True, timeout=10, check=True)
+    if any(option not in collect_help.stdout for option in ("--task-file", "--resume-task")):
+        raise SystemExit("installed_collection_task_options_missing")
     with tempfile.TemporaryDirectory() as directory:
         database = str(Path(directory).resolve() / "synthetic.sqlite3")
         # Fail immediately if the replay/report smoke path tries any socket I/O.
@@ -54,6 +58,20 @@ def check() -> None:
                 if main(["report", "--db", database]) != 0:
                     raise SystemExit("installed_report_failed")
             group = json.loads(output.getvalue())["groups"][0]
+            from datetime import datetime, timezone
+            from sushiwait.tasks import CollectionTask
+            from sushiwait.storage import SnapshotStore
+            task_path = str(Path(directory).resolve() / "collection.json")
+            config = {"db": database, "api_profile": group["api_profile"], "store_ids": [group["store_id"]],
+                      "interval": 60, "samples": 1, "wait_for_credentials": 0}
+            with CollectionTask(task_path, config=config, resume=False, now=datetime.now(timezone.utc)) as task:
+                task.prepare_database()
+                with SnapshotStore(database) as db:
+                    task.bind(db, now=datetime.now(timezone.utc))
+            task_output = io.StringIO()
+            with contextlib.redirect_stdout(task_output):
+                if main(["task-status", "--task-file", task_path]) != 0:
+                    raise SystemExit("installed_task_status_failed")
             signal_output = io.StringIO()
             with contextlib.redirect_stdout(signal_output):
                 if main(["signal-report", "--db", database, "--store-id", group["store_id"],
@@ -92,13 +110,18 @@ def check() -> None:
                 or signal_summary["eta_available"] or signal_summary["true_no_show_rate"] is not None
                 or signal_summary["network_performed"]):
             raise SystemExit("installed_signals_semantics_mismatch")
+        task_summary = json.loads(task_output.getvalue())
+        if (task_summary["task_schema_version"] != 1 or task_summary["completed_slots"] != 0
+                or task_summary["network_performed"] or task_summary["eta_available"]):
+            raise SystemExit("installed_task_status_semantics_mismatch")
     print(json.dumps({"installed_version": expected, "import_outside_checkout": True,
         "cli_help_ok": True, "bridge_diagnostic_option_ok": True, "surge_intake_help_ok": True,
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
         "calendar_package_data_ok": True, "calendar_socket_calls": 0,
-        "readonly_signal_report_ok": True, "signal_socket_calls": 0}))
+        "readonly_signal_report_ok": True, "signal_socket_calls": 0,
+        "collection_task_options_ok": True, "private_task_status_ok": True, "task_status_socket_calls": 0}))
 
 
 if __name__ == "__main__":
