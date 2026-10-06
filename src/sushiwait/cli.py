@@ -38,6 +38,7 @@ from .window import WindowError, run_window
 from .evaluation import EvaluationError, evaluate_document, read_evaluation_document
 from .cohort import CohortError, cohort_report, reconstruct_claims
 from .intake import IntakeError, OutcomeIntakeStore
+from .reviews import ReviewError, OutcomeReviewStore, read_review, draft_review
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -627,6 +628,23 @@ def build_parser() -> argparse.ArgumentParser:
     intake_cohort.add_argument("--data-origin", choices=("synthetic", "self_reported"), required=True)
     intake_cohort.add_argument("--api-profile", choices=API_PROFILES, required=True)
     intake_cohort.add_argument("--max-revisions", type=int, default=10000)
+    review_draft = commands.add_parser("outcome-review-draft", help="为已接收的本人结果生成私有未批准审核草稿；不验证事件")
+    review_draft.add_argument("--source-db", required=True)
+    review_inputs = review_draft.add_mutually_exclusive_group(required=True)
+    review_inputs.add_argument("--input")
+    review_inputs.add_argument("--synthetic-fixture")
+    review_draft.add_argument("--output", required=True)
+    review_receive = commands.add_parser("outcome-review-receive", help="保存人工审核声明与首次接收时间；不认证身份或训练标签")
+    review_receive.add_argument("--source-db", required=True)
+    review_receive.add_argument("--db", required=True)
+    review_receive.add_argument("--input", required=True)
+    review_cohort = commands.add_parser("outcome-reviewed-cohort", help="只读按结果和审核首次接收回放审核结论；不导出个人数据")
+    review_cohort.add_argument("--source-db", required=True)
+    review_cohort.add_argument("--db", required=True)
+    review_cohort.add_argument("--as-of", required=True)
+    review_cohort.add_argument("--data-origin", choices=("self_reported", "synthetic"), required=True)
+    review_cohort.add_argument("--api-profile", choices=API_PROFILES, required=True)
+    review_cohort.add_argument("--max-revisions", type=int, default=10000)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -905,6 +923,32 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command in ("outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort"):
+            try:
+                if args.command == "outcome-review-draft":
+                    episode = read_episode(args.synthetic_fixture or args.input,
+                                           synthetic=bool(args.synthetic_fixture))
+                    with OutcomeIntakeStore(args.source_db, read_only=True) as source:
+                        result = draft_review(source, episode, args.output)
+                elif args.command == "outcome-review-receive":
+                    review = read_review(args.input)
+                    with OutcomeIntakeStore(args.source_db, read_only=True) as source, OutcomeReviewStore(args.db) as store:
+                        result = store.append(review, source=source)
+                else:
+                    if not 1 <= args.max_revisions <= 10000:
+                        raise ReviewError("review_invalid_scope_or_bounds")
+                    with OutcomeIntakeStore(args.source_db, read_only=True) as source, OutcomeReviewStore(args.db, read_only=True) as store:
+                        result = store.cohort(source=source, as_of=args.as_of, data_origin=args.data_origin,
+                            api_profile=args.api_profile, max_revisions=args.max_revisions)
+                durable = result.get("durability_confirmed", True)
+                emit({"ok": durable, **result,
+                      **({} if durable else {"error_code": "review_durability_unconfirmed"})})
+                return 0 if durable else 1
+            except (ReviewError, IntakeError, OutcomeError) as error:
+                emit({"ok": False, "error_code": error.error_code,
+                    "commit_status": getattr(error, "commit_status", "not_started"),
+                    "network_performed": False, "authenticity_verified": False, "verified_training_labels": 0})
                 return 1
         if args.command == "outcome-received-cohort":
             try:

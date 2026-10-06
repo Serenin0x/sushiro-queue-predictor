@@ -1,6 +1,6 @@
 # Linux 采集与号码服务部署
 
-候选 0.2.0rc36 提供 Docker 构建和 Compose 配置，将匿名采集、持久窗口和只读 HTTP 展示一起部署。软件检查、实际 Linux 容器、真实上游查询和云服务器是不同证据，实测追加于[交接记录](PROJECT_HANDOVER.md)。目前仍是最多三店、最多 72 小时的有界窗口，不称全国、无限守护或微信小程序已经上线。
+候选 0.2.0rc37 提供 Docker 构建和 Compose 配置，将匿名采集、持久窗口和只读 HTTP 展示一起部署。软件检查、实际 Linux 容器、真实上游查询和云服务器是不同证据，实测追加于[交接记录](PROJECT_HANDOVER.md)。目前仍是最多三店、最多 72 小时的有界窗口，不称全国、无限守护或微信小程序已经上线。
 
 ## 构建与运行
 
@@ -34,7 +34,7 @@ docker compose -f deploy/compose.yaml up -d
 ## 检查与云端验收
 
 ```sh
-python3 scripts/check_container.py --image sushiwait:0.2.0rc36
+python3 scripts/check_container.py --image sushiwait:0.2.0rc37
 ```
 
 检查真正启动 Linux 容器、通过宿主 HTTP 读取、停止并重建三次。上游传输明确合成：虚构门店 900001，两对/四次假请求，官方请求零；它不是实际门店或预测验证。核对私有权限、回环绑定、共享读取、恢复周期、原期限/预算、终态无查询与文件不变，最后只清理自己的测试容器与卷。合成启动脚本不进入部署镜像，不改变正常采集程序。

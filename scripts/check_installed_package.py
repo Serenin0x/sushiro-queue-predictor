@@ -36,7 +36,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -788,6 +788,42 @@ def check() -> None:
                            or r["historical_availability_verified"] or r["training_eligible"]
                            or r["verified_training_labels"] != 0 for r in intake_reports)):
                 raise SystemExit("installed_outcome_intake_semantics_mismatch")
+            review_directory = Path(directory).resolve() / 'private-reviews'
+            review_directory.mkdir(mode=0o700)
+            review_file, review_db = review_directory/'draft.json', review_directory/'reviews.sqlite3'
+            review_output = io.StringIO()
+            with patch('socket.socket', side_effect=AssertionError('unexpected_review_network')) as review_socket, \
+                    patch('sushiwait.cli.read_credentials_file', side_effect=AssertionError('unexpected_review_auth')) as review_auth, \
+                    patch('sushiwait.cli.client_for', side_effect=AssertionError('unexpected_review_client')) as review_client, \
+                    contextlib.redirect_stdout(review_output):
+                if main(['outcome-review-draft','--source-db',intake_database,'--synthetic-fixture',str(args.outcome_fixture),
+                         '--output',str(review_file)]) != 0:
+                    raise SystemExit('installed_review_draft_failed')
+                review = json.loads(review_file.read_text())
+                if review['decision'] != 'insufficient_evidence' or review['called_time_bounds_checked']:
+                    raise SystemExit('installed_review_draft_approved')
+                review.update(decision='accept', reason_code='confirmed_call_interval', issued_time_bounds_checked=True,
+                              called_time_bounds_checked=True, store_and_queue_checked=True)
+                review_file.write_text(json.dumps(review))
+                if main(['outcome-review-receive','--source-db',intake_database,'--db',str(review_db),'--input',str(review_file)]) != 0:
+                    raise SystemExit('installed_review_receive_failed')
+                review_before = review_db.read_bytes()
+                for at in ('2020-10-01T11:30:00+08:00',datetime.now(timezone.utc).isoformat()):
+                    if main(['outcome-reviewed-cohort','--source-db',intake_database,'--db',str(review_db),'--as-of',at,
+                             '--data-origin','synthetic','--api-profile','miniapp_gateway']) != 0:
+                        raise SystemExit('installed_review_cohort_failed')
+            review_reports = [json.loads(v) for v in review_output.getvalue().splitlines()]
+            if (review_socket.call_count or review_auth.call_count or review_client.call_count
+                    or review_before != review_db.read_bytes()
+                    or intake_before != hashlib.sha256(Path(intake_database).read_bytes()).digest()
+                    or [r['accepted_synthetic_call_intervals'] for r in review_reports[2:]] != [0,1]
+                    or any(r['authenticity_verified'] or r['verified_training_labels'] for r in review_reports)
+                    or any(review[key] in review_output.getvalue() for key in
+                           ('review_id','reviewer_id','episode_id','episode_receipt_sha256'))):
+                raise SystemExit('installed_review_semantics_failed')
+            print(json.dumps({'installed_outcome_reviews_ok':True,'synthetic_review_cutoff_counts':[0,1],
+                'source_and_review_files_unchanged':True,'review_socket_calls':0,'review_credentials_accessed':False,
+                'real_labels_admitted':0,'authenticity_verified':False,'is_live_acceptance':False}))
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["outcome-check", "--synthetic-fixture", str(args.outcome_fixture)]) != 0:
                     raise SystemExit("installed_outcome_check_failed")
