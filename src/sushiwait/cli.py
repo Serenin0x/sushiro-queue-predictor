@@ -440,6 +440,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="sushiwait", description="SUSHIWAIT 数据接入与结果记录工具")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    for name in ("remote-snapshot", "remote-collect", "remote-report"):
+        command = commands.add_parser(name, help="独立匿名CRM排队来源；不使用微信凭证，不提供预测")
+        command.add_argument("--db", required=True, help="独立私有库；父目录已存在且0700，不使用既有快照库")
+        command.add_argument("--store-id", required=True, **({"action": "append"} if name == "remote-collect" else {}))
+        if name == "remote-collect":
+            command.add_argument("--interval", type=int, default=60)
+            command.add_argument("--samples", type=int, default=1)
+        if name == "remote-report":
+            command.add_argument("--limit", type=int, default=1000)
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
                            ("outcome-import", "校验并追加私有结果修订，不验证真实性"),
                            ("outcome-receive", "将新结果修订接入独立私有首次接收库；不认证训练标签")):
@@ -638,6 +647,32 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in ("remote-snapshot", "remote-collect", "remote-report"):
+        from .remote import RemoteClient, RemoteStore, collect_remote
+        try:
+            ids = list(dict.fromkeys(canonical_store_id(s) for s in args.store_id)) if args.command == "remote-collect" else [canonical_store_id(args.store_id)]
+            if args.command == "remote-collect" and (not 1 <= len(ids) <= 3 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= 120):
+                raise ValueError("invalid_sampling_bounds")
+            if args.command == "remote-report" and not 1 <= args.limit <= 10000:
+                raise ValueError("invalid_report_bounds")
+            with RemoteStore(args.db, read_only=args.command == "remote-report") as database:
+                if args.command == "remote-report":
+                    emit(database.report(ids[0], limit=args.limit))
+                    return 0
+                client = RemoteClient()
+                if args.command == "remote-snapshot":
+                    record = client.snapshot(ids[0])
+                    emit({"id": database.append(record), "record": record})
+                    return 0 if record["ok"] else 1
+                summary = collect_remote(client, database, ids, interval=args.interval, samples=args.samples, emit=emit)
+                emit({"collection_summary": summary})
+                return 0 if summary["ok"] else 1
+        except KeyboardInterrupt:
+            emit({"ok": False, "source": "crm_remote_v1_1", "error_code": "interrupted"})
+            return 130
+        except (OSError, ValueError, TypeError, KeyError, OverflowError, sqlite3.Error):
+            emit({"ok": False, "source": "crm_remote_v1_1", "error_code": "remote_input_or_storage_error"})
+            return 2
     if args.command in ("snapshot", "collect", "context-bridge", "signal-report", "store-view", "monitor-collect"):
         try:
             if args.command in ("snapshot", "signal-report", "store-view"):

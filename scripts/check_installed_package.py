@@ -35,7 +35,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
+            ("remote-snapshot", "remote-collect", "remote-report", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -67,6 +67,41 @@ def check() -> None:
         # Fail immediately if the replay/report smoke path tries any socket I/O.
         with patch("socket.socket", side_effect=AssertionError("unexpected_network")), \
                 patch("socket.create_connection", side_effect=AssertionError("unexpected_network")):
+            from sushiwait.remote import RemoteClient, QUEUE_NAMES
+            class RemoteFakeResponse:
+                def __init__(self, request):
+                    self.url = request.full_url
+                    self.headers = {}
+                def getcode(self): return 200
+                def geturl(self): return self.url
+                def close(self): pass
+                def read(self, size):
+                    value = ({name: (["12", "12", "13-1"] if name == "storeQueue" else [])
+                              for name in QUEUE_NAMES} if "/groupqueues?" in self.url else 0)
+                    return json.dumps(value).encode()[:size]
+            class RemoteFakeOpener:
+                def open(self, request, *, timeout): return RemoteFakeResponse(request)
+            remote_db = Path(directory).resolve() / "synthetic-remote.sqlite3"
+            remote_output = io.StringIO()
+            with patch("sushiwait.remote.RemoteClient", return_value=RemoteClient(opener=RemoteFakeOpener())), \
+                    patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as remote_auth, \
+                    contextlib.redirect_stdout(remote_output):
+                if main(["remote-snapshot", "--db", str(remote_db), "--store-id", "3014"]) != 0:
+                    raise SystemExit("installed_remote_snapshot_failed")
+                before = remote_db.read_bytes()
+                if main(["remote-report", "--db", str(remote_db), "--store-id", "3014"]) != 0:
+                    raise SystemExit("installed_remote_report_failed")
+            remote_values = [json.loads(line) for line in remote_output.getvalue().splitlines()]
+            if (remote_auth.call_count or remote_db.read_bytes() != before
+                    or remote_values[1]["successful_pairs"] != 1
+                    or remote_values[1]["latest_record"]["queries"]["storequeuecount"]["payload"] != {"raw_count": 0, "unit": "unknown"}
+                    or remote_values[1]["latest_record"]["queries"]["groupqueues"]["payload"]["queues"]["storeQueue"] != ["12", "12", "13-1"]
+                    or remote_values[1]["latest_record"]["atomic_snapshot"]
+                    or remote_values[1]["eta_available"]):
+                raise SystemExit("installed_remote_semantics_failed")
+            print(json.dumps({"installed_remote_snapshot_and_report_ok": True,
+                "remote_is_live_acceptance": False, "remote_socket_calls": 0,
+                "remote_query_credentials_accessed": False, "remote_report_database_unchanged": True}))
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
                         or _recovery_poll_target(30, 2, 30) != 36

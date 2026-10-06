@@ -9,13 +9,13 @@
 
 想吃寿司，却不知道该几点取号、还要等多久、会不会突然过号？SUSHIWAIT 希望把这些不确定，变成有依据的用餐计划：结合寿司郎小程序的实时排队数据、历史规律和日期差异，帮助你安排取号与到店时间，把时间留给自己喜欢的事。
 
-这是面向中国大陆寿司郎门店的独立开源项目。**目前处于实时接入验收阶段：电脑已走通正常客户端取得新凭证、退出小程序后独立查询三店的链路，无需手机抓包或导出 HAR。最新营业时段三店每 30 秒、每店 30 次，共 90 次查询全部成功，同一进程跨到期恢复；该轮更新中断约 102 秒；午间长采集继续，另一次更新中断约 143 秒，长期无感更新仍需改进。新增本机门店展示出口，把堂食与预约号码、响应年龄和最后刷新结果汇在一起；可关联同库任务，让多店暂停、结束和状态过时一并可见，为后续小程序页面准备数据。预测模型、用户页面和自动排队按真实数据与验收条件推进。**
+这是面向中国大陆寿司郎门店的独立开源项目。**实时接入有了新进展：除已走通的正常微信凭证查询链路，电脑还在三家试点取得了无需微信凭证的匿名排队数据。新工具把五类展示号码、原始数量和每次查询时间分别留住；三店每30秒、各30轮，共90份成对观测、180次请求全部成功，号码确实出现变化。原午间长采样已完成三店共360次成功，凭证更新缺口约143与127秒如实保留。现有本机展示出口可汇总号码、刷新结果与任务状态；预测模型、用户页面和自动排队继续按真实数据与验收条件推进。**
 
 ## 产品与模型功能
 
 ### 当前可以做什么
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5adc969d27a36489-dark.svg"><img src="assets/readme-labels/5adc969d27a36489-light.svg" alt="读到真实展示号码" width="130" height="20"></picture></strong>：从官方微信小程序确认实际查询地址，电脑已独立读取中关村、西单、成都世豪的堂食、预约展示队列。用户退出小程序后，后续电脑查询仍成功；完整保留号码、顺序和后缀。 新增[门店展示出口](docs/STORE_VIEW.md)，一并查看堂食与预约号码、最近成功响应时间和刷新结果；旧信息、失败、缺失分别显示，后台进程存活状态保留未知。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5adc969d27a36489-dark.svg"><img src="assets/readme-labels/5adc969d27a36489-light.svg" alt="读到真实展示号码" width="130" height="20"></picture></strong>：从官方微信小程序确认实际查询地址，电脑已独立读取中关村、西单、成都世豪的堂食、预约展示队列。用户退出小程序后，后续电脑查询仍成功；完整保留号码、顺序和后缀。 新增[匿名排队来源](docs/ANONYMOUS_QUEUES.md)，电脑直接查询五类展示数组和原始数量，保留顺序与失败，三店30秒/30轮、180次请求全成功；长期稳定性继续验证。 新增[门店展示出口](docs/STORE_VIEW.md)，一并查看堂食与预约号码、最近成功响应时间和刷新结果；旧信息、失败、缺失分别显示，后台进程存活状态保留未知。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bb36ec0d24eb180b-dark.svg"><img src="assets/readme-labels/bb36ec0d24eb180b-light.svg" alt="找到试点门店，再用电脑采集" width="210" height="20"></picture></strong>：目录接口已通过电脑查询，返回 147 条门店记录。保留三店 60 秒和 30 秒的短窗结果，保留 30 秒各 67 轮、主库 219 份成功快照的历史结果；最新新凭证三店独立验证成功，另库西单 120 次成功及一次跨到期恢复已完成，又实测保存任务进度后跨进程续采；最新另一个三店任务跨正常更新后各完成 120 次。全天稳定访问与全国完整覆盖仍待验证。
 
@@ -39,7 +39,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证，提醒与长期调度继续推进。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、768 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、793 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -69,7 +69,7 @@
 
 ## 技术手段
 
-当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，单店恢复节奏见 [恢复周期说明](docs/RECOVERY_CADENCE.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。 普通采集的[有限临时错误处理](docs/TRANSIENT_SAMPLING.md)可保留部分失败并继续后续槽位，默认首错停止，鉴权失败仍立即停采。
+当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；新增独立匿名CRM采集与报告，和微信凭证来源隔离，见[匿名来源说明](docs/ANONYMOUS_QUEUES.md)。保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，单店恢复节奏见 [恢复周期说明](docs/RECOVERY_CADENCE.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。 普通采集的[有限临时错误处理](docs/TRANSIENT_SAMPLING.md)可保留部分失败并继续后续槽位，默认首错停止，鉴权失败仍立即停采。
 
 字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录；本机公共字段导出、分页和保存状态见[导出说明](docs/PUBLIC_PACKETS.md)，接收格式校验与本机去重/冲突规则见[归档说明](docs/PACKET_ARCHIVE.md)，持久待确认目录与容量/故障规则见[保存说明](docs/PENDING_PACKETS.md)，本机接收与确认协议见[服务说明](docs/PACKET_RECEIVER.md)，本机投递与签名确认保存见[投递说明](docs/PACKET_DELIVERY.md)。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)，独立首次接收库与按本机接收时间回放见[接收说明](docs/OUTCOME_INTAKE.md)。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc26 结果接收候选版，正式 v0.2.0 尚未完成验收**。新增独立私有首次接收账本和只读回放，区分自己填写的记录时刻与程序收到资料的时刻；重复提交保留首次接收，后来的纠错不会提前覆盖历史版本。20 项新增、66 项专项与 768 项完整检查通过；安装、公开和实际采样另见交接记录。上一多店状态版已通过三个 Python 版本各 748 项 GitHub 检查与独立安装。已完成的营业三店 30 秒试点 90 次全部成功、更新中断约 102 秒；午间较长采集另库继续，另一次更新中断约 143 秒。当前没有远程部署、真实训练标签或已验收预测。
+当前开发候选为 **v0.2.0rc27**，新增独立匿名排队采集、数据库与报告；25项新增、793项完整检查及初安装通过，三试点30秒/30轮、180次请求全成功；更长稳定性与最终公开检查按交接记录更新。正式v0.2.0和v1.0.0尚未验收；当前没有远程部署、真实训练标签或已验收预测。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/605bf8bc4d75ea54-dark.svg"><img src="assets/readme-labels/605bf8bc4d75ea54-light.svg" alt="2026-10-06 · v0.2.0rc27" width="179" height="20"></picture></strong>：找到无需微信凭证的独立排队查询路线，并实现单次采集、有界批量采样和只读报告。完整保留五类展示数组，将原始数量与等待分钟分开，两次查询的时间分别记录；失败停止、不密集重试。25项新增、793项完整检查及初安装通过；三店30秒/30轮实测180次请求全部成功，实际间隔约29.79–30.21秒；源延迟、长期与服务器验收继续推进。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/329e2453b2c0fe7e-dark.svg"><img src="assets/readme-labels/329e2453b2c0fe7e-light.svg" alt="2026-10-06 · v0.2.0rc26" width="179" height="20"></picture></strong>：新增独立结果首次接收库与只读回放，按本机实际接收顺序选择修订，防止补录的旧经历提前进入历史资料；保留不确定提交状态和私人输出，尚不认证真实性或训练资格。20 项新增、66 项专项及 768 项完整检查通过；午间实际更新缺口约 143 秒，继续改进自动恢复。
 
