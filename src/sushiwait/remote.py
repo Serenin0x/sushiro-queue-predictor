@@ -252,16 +252,20 @@ def validate_record(value):
 
 class RemoteStore:
     """Independent private schema; authenticated snapshot databases are rejected."""
-    def __init__(self, path, *, read_only=False):
+    def __init__(self, path, *, read_only=False, exclusive_create=False):
+        if type(exclusive_create) is not bool or exclusive_create and read_only:
+            raise ValueError('remote_database_invalid_create_mode')
         self.path = Path(os.path.abspath(path))
         self.db = self.parent_fd = None
         self.read_only = read_only
+        self.exclusive_create = exclusive_create
         self.run_id = str(uuid4())
         try:
             import fcntl
             self.parent_fd, self.name = _open_parent(self.path, private=True)
             fcntl.flock(self.parent_fd, (fcntl.LOCK_SH if read_only else fcntl.LOCK_EX) | fcntl.LOCK_NB)
-            fd = os.open(self.name, (os.O_RDONLY if read_only else os.O_RDWR | os.O_CREAT) | os.O_NOFOLLOW,
+            fd = os.open(self.name, (os.O_RDONLY if read_only else os.O_RDWR | os.O_CREAT)
+                         | (os.O_EXCL if exclusive_create else 0) | os.O_NOFOLLOW,
                          0o600, dir_fd=self.parent_fd)
             try:
                 info = os.fstat(fd)

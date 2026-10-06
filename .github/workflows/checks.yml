@@ -46,3 +46,14 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           "$RUNNER_TEMP/sushiwait-package/bin/python" -I "$GITHUB_WORKSPACE/scripts/check_installed_package.py" --source-root "$GITHUB_WORKSPACE" --version-file "$GITHUB_WORKSPACE/VERSION" --fixture "$GITHUB_WORKSPACE/examples/fixtures/store-detail-01.synthetic.json" --outcome-fixture "$GITHUB_WORKSPACE/examples/fixtures/outcome-01.synthetic.json"
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build Linux deployment image
+        run: docker build -f deploy/Dockerfile -t sushiwait:check .
+      - name: Check container HTTP and restart with synthetic upstream
+        run: python3 scripts/check_container.py --image sushiwait:check

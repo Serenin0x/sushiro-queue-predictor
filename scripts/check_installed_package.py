@@ -43,6 +43,10 @@ def check() -> None:
         capture_output=True, text=True, timeout=10, check=True)
     if "--diagnostics" not in bridge_help.stdout:
         raise SystemExit("installed_bridge_diagnostics_missing")
+    window_help=subprocess.run([sys.executable,"-I","-m","sushiwait","remote-window-serve","--help"],
+                               capture_output=True,text=True,timeout=10,check=True)
+    if any(flag not in window_help.stdout for flag in ("--resume-if-present","--listen-host")):
+        raise SystemExit("installed_container_options_missing")
     surge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                  "context-surge", "--help"],
         capture_output=True, text=True, timeout=10, check=True)

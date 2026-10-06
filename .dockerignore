@@ -1,0 +1,15 @@
+# Explicit build allowlist. Private data, HARs, .git and design studies never enter the context.
+**
+!pyproject.toml
+!README.md
+!LICENSE
+!VERSION
+!src/
+!src/sushiwait/
+!src/sushiwait/*.py
+!src/sushiwait/data/
+!src/sushiwait/data/*.json
+!deploy/
+!deploy/Dockerfile
+!deploy/requirements-build.txt
+!deploy/requirements-server.txt

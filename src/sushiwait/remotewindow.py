@@ -131,13 +131,13 @@ class RemoteWindowTask(RemoteTask):
             deadline_at=_now(_at(_now(now))+timedelta(seconds=config['duration_seconds'])),end_reason=None,starts={})
         return value
 
-    def __init__(self,path,*,config,resume,now):
+    def __init__(self,path,*,config,resume,now,resume_if_present=False):
         if config['plan_file'] in (os.path.abspath(path),os.path.abspath(str(path)+'.lock'),config['db']):
             raise RemoteTaskError('remote_window_path_conflict')
         self.document=_plans(config['plan_file'],config['store_ids'],config['base_interval'],now)
         if _digest(self.document)!=config['plan_digest']:raise RemoteTaskError('remote_window_plan_changed')
         self.fingerprint=None;self.data_version=None
-        super().__init__(path,config=config,resume=resume,now=now)
+        super().__init__(path,config=config,resume=resume,now=now,resume_if_present=resume_if_present)
 
     def _fingerprint(self):
         info=os.stat(self.db.path,follow_symlinks=False)
@@ -200,6 +200,8 @@ class RemoteWindowTask(RemoteTask):
         self._record(row);return [row]
 
     def bind(self,db,*,now):
+        if self.require_new_database and not db.exclusive_create:
+            raise RemoteTaskError('remote_task_new_database_required')
         self.db=db;at=_now(now)
         if str(db.path)!=self.value['config']['db']:raise RemoteTaskError('remote_task_config_conflict')
         if _at(at)<_at(self.value['updated_at']):raise RemoteTaskError('remote_window_clock_rollback')
@@ -309,11 +311,15 @@ def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,sh
 
 
 class RemoteWindowService(RemoteQueueService):
-    def __init__(self,*,plan_file,base_interval=300,duration_seconds=86400,max_pairs=8640,**kwargs):
+    def __init__(self,*,plan_file,base_interval=300,duration_seconds=86400,max_pairs=8640,resume_if_present=False,**kwargs):
+        if type(resume_if_present) is not bool or resume_if_present and kwargs.get('resume',False):
+            raise RemoteTaskError('remote_task_invalid_resume_mode')
+        self.resume_if_present=resume_if_present
         super().__init__(interval=base_interval,samples=1,**kwargs)
         self.config=window_config(kwargs['db'],plan_file,kwargs['store_ids'],base_interval,duration_seconds,max_pairs,now=self.wall_clock())
     def _make_task(self):
-        return RemoteWindowTask(self.task_file,config=self.config,resume=self.resume,now=self.wall_clock())
+        return RemoteWindowTask(self.task_file,config=self.config,resume=self.resume,now=self.wall_clock(),
+            resume_if_present=self.resume_if_present)
     @staticmethod
     def _task_status(task):return window_status(task.value)
     def _collect(self,task,client,sleep,emit):

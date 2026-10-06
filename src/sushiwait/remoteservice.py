@@ -139,7 +139,7 @@ class RemoteQueueService:
         try:
             with self._make_task() as task:
                 task.prepare_database()
-                with RemoteStore(self.config['db']) as database:
+                with RemoteStore(self.config['db'],exclusive_create=task.require_new_database) as database:
                     task.bind(database,now=self.wall_clock())
                     self._restore(database)
                     self._set('ready',task=self._task_status(task));self.ready.set()
@@ -253,13 +253,15 @@ class RemoteASGI:
         await send({'type':'http.response.body','body':body})
 
 
-def serve_local(service, *, port=8765):
+def serve_local(service, *, port=8765, listen_host='127.0.0.1'):
     if type(port) is not int or not 1024 <= port <= 65535:
         raise RemoteServiceError('remote_service_invalid_port')
+    if listen_host not in ('127.0.0.1','0.0.0.0'):
+        raise RemoteServiceError('remote_service_invalid_listen_host')
     try:import uvicorn
     except ImportError:raise RemoteServiceError('remote_service_install_server_extra') from None
     try:
-        uvicorn.run(RemoteASGI(service),host='127.0.0.1',port=port,workers=1,lifespan='on',
+        uvicorn.run(RemoteASGI(service),host=listen_host,port=port,workers=1,lifespan='on',
             loop='asyncio',http='h11',ws='none',proxy_headers=False,access_log=False,
             timeout_graceful_shutdown=40,limit_concurrency=32,timeout_keep_alive=5)
     finally:service.shutdown()

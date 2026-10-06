@@ -475,7 +475,9 @@ def build_parser() -> argparse.ArgumentParser:
     remote_serve.add_argument("--samples", type=int, default=120)
     remote_serve.add_argument("--resume-task", action="store_true")
     remote_serve.add_argument("--stale-after", type=int, help="本机成功响应年龄阈值30–7200秒；不是上游更新频率")
-    remote_serve.add_argument("--port", type=int, default=8765, help="仅127.0.0.1；1024–65535")
+    remote_serve.add_argument("--port", type=int, default=8765, help="1024–65535")
+    remote_serve.add_argument("--listen-host",choices=("127.0.0.1","0.0.0.0"),default="127.0.0.1",
+                              help="默认仅本机；容器桥接时显式0.0.0.0，并限制宿主发布地址")
     for name in ("remote-window-collect","remote-window-serve"):
         window = commands.add_parser(name,help="持久共享匿名采集窗口；最多72小时，原期限与预算跨重启保持")
         window.add_argument("--db",required=True)
@@ -485,8 +487,13 @@ def build_parser() -> argparse.ArgumentParser:
         window.add_argument("--base-interval",type=int,default=300)
         window.add_argument("--duration",type=int,default=86400)
         window.add_argument("--max-pairs",type=int,default=8640)
-        window.add_argument("--resume-task",action="store_true")
-        if name=="remote-window-serve":window.add_argument("--port",type=int,default=8765)
+        resume_mode=window.add_mutually_exclusive_group()
+        resume_mode.add_argument("--resume-task",action="store_true")
+        resume_mode.add_argument("--resume-if-present",action="store_true",
+                                help="有任务则恢复；任务和数据库均不存在才新建；丢失任务不重置预算")
+        if name=="remote-window-serve":
+            window.add_argument("--port",type=int,default=8765)
+            window.add_argument("--listen-host",choices=("127.0.0.1","0.0.0.0"),default="127.0.0.1")
     window_status = commands.add_parser("remote-window-status",help="只读保存窗口状态；不读计划、不联网、不检查存活")
     window_status.add_argument("--task-file",required=True)
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
@@ -712,13 +719,15 @@ def main(argv: list[str] | None = None) -> int:
             ids=[canonical_store_id(s) for s in args.store_id]
             if args.command=="remote-window-serve":
                 service=RemoteWindowService(db=args.db,task_file=args.task_file,plan_file=args.plan_file,store_ids=ids,
-                    base_interval=args.base_interval,duration_seconds=args.duration,max_pairs=args.max_pairs,resume=args.resume_task)
-                serve_local(service,port=args.port)
+                    base_interval=args.base_interval,duration_seconds=args.duration,max_pairs=args.max_pairs,
+                    resume=args.resume_task,resume_if_present=args.resume_if_present)
+                serve_local(service,port=args.port,listen_host=args.listen_host)
                 return 1 if service.status()['service_state']=='failed' else 0
             config=window_config(args.db,args.plan_file,ids,args.base_interval,args.duration,args.max_pairs,now=_utc_clock())
-            with RemoteWindowTask(args.task_file,config=config,resume=args.resume_task,now=_utc_clock()) as task:
+            with RemoteWindowTask(args.task_file,config=config,resume=args.resume_task,now=_utc_clock(),
+                                  resume_if_present=args.resume_if_present) as task:
                 task.prepare_database()
-                with RemoteStore(args.db) as database:
+                with RemoteStore(args.db,exclusive_create=task.require_new_database) as database:
                     task.bind(database,now=_utc_clock())
                     client=None if task.value['state'] in ('completed','failed') else RemoteClient()
                     summary=collect_remote_window(task,client,wall_clock=_utc_clock,
@@ -737,7 +746,7 @@ def main(argv: list[str] | None = None) -> int:
             service = RemoteQueueService(db=args.db,task_file=args.task_file,store_ids=ids,
                 interval=args.interval,samples=args.samples,resume=args.resume_task,
                 stale_after_seconds=args.stale_after)
-            serve_local(service,port=args.port)
+            serve_local(service,port=args.port,listen_host=args.listen_host)
             return 1 if service.status()['service_state']=='failed' else 0
         except KeyboardInterrupt:return 130
         except RemoteServiceError as error:

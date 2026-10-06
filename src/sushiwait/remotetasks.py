@@ -142,9 +142,12 @@ class RemoteTask:
             'failed':0,'uncertain':0,'recorded_http_attempts':0,'records_digest':_EMPTY,
             'pending':None,'last_attempt_at':None,'updated_at':_now(now),'state':'ready','last_gap':None}
 
-    def __init__(self,path,*,config,resume,now):
+    def __init__(self,path,*,config,resume,now,resume_if_present=False):
+        if type(resume) is not bool or type(resume_if_present) is not bool or resume and resume_if_present:
+            raise RemoteTaskError('remote_task_invalid_resume_mode')
         self.path=Path(os.path.abspath(path));self.parent_fd=self.lock_fd=None
         self.identity=None;self.loaded=False;self.db=None
+        self.require_new_database=False
         try:
             import fcntl
             self.parent_fd,self.name=_open_parent(self.path,private=True)
@@ -159,12 +162,13 @@ class RemoteTask:
             try:self.identity=self._named_identity()
             except FileNotFoundError:pass
             if self.identity is not None:
-                if not resume:raise RemoteTaskError('remote_task_exists_use_resume')
+                if not (resume or resume_if_present):raise RemoteTaskError('remote_task_exists_use_resume')
                 self.value=self.decode(_read_private_file(self.path))
                 if self.value['config']!=config:raise RemoteTaskError('remote_task_config_conflict')
                 self.loaded=True
             elif resume:raise RemoteTaskError('remote_task_missing')
             else:
+                self.require_new_database=resume_if_present
                 self.value=self.initial_value(config,now)
                 self.decode(json.dumps(self.value).encode())
             self._guard()
@@ -219,6 +223,7 @@ class RemoteTask:
             except FileNotFoundError:
                 if self.loaded:raise RemoteTaskError('remote_task_database_changed') from None
                 return
+            if self.require_new_database:raise RemoteTaskError('remote_task_missing_with_existing_database')
             if not _private_file(info) or stat.S_IMODE(info.st_mode)!=0o600:
                 raise RemoteTaskError('remote_task_database_unsafe')
             if self.loaded and [info.st_dev,info.st_ino]!=self.value['database_identity']:
@@ -250,6 +255,8 @@ class RemoteTask:
         return rows[count:]
 
     def bind(self,db,*,now):
+        if self.require_new_database and not db.exclusive_create:
+            raise RemoteTaskError('remote_task_new_database_required')
         self.db=db
         if str(db.path)!=self.value['config']['db']:raise RemoteTaskError('remote_task_config_conflict')
         at=_now(now)

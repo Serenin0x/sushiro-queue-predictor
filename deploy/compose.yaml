@@ -1,0 +1,24 @@
+services:
+  collector:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: sushiwait:0.2.0rc34
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    stop_grace_period: 45s
+    restart: "no"
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - queue_state:/state
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+volumes:
+  queue_state:
