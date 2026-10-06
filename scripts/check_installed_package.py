@@ -35,7 +35,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
+            ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -62,6 +62,10 @@ def check() -> None:
         capture_output=True, text=True, timeout=10, check=True)
     if any(option not in collect_help.stdout for option in ("--task-file", "--resume-task", "--transient-failure-budget")):
         raise SystemExit("installed_collection_task_options_missing")
+    remote_collect_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "remote-collect", "--help"],
+        capture_output=True, text=True, timeout=10, check=True)
+    if any(option not in remote_collect_help.stdout for option in ("--task-file", "--resume-task")):
+        raise SystemExit("installed_remote_task_options_missing")
     with tempfile.TemporaryDirectory() as directory:
         database = str(Path(directory).resolve() / "synthetic.sqlite3")
         # Fail immediately if the replay/report smoke path tries any socket I/O.
@@ -129,6 +133,48 @@ def check() -> None:
                 "remote_monitor_coalesced_pair_count": 1,
                 "remote_monitor_socket_calls": 0, "remote_monitor_query_credentials_accessed": False,
                 "remote_monitor_plan_file_unchanged": True, "remote_monitor_is_live_acceptance": False}))
+            from sushiwait.remotetasks import RemoteTask, remote_task_status
+            task_db = Path(directory).resolve() / "synthetic-remote-task.sqlite3"
+            task_file = Path(directory).resolve() / "synthetic-remote-task.json"
+            task_args = ["remote-collect", "--db", str(task_db), "--store-id", "3014",
+                "--task-file", str(task_file), "--samples", "3", "--interval", "30"]
+            task_clock = [0]
+            task_base = datetime(2026,10,6,tzinfo=timezone.utc)
+            original_reconcile = RemoteTask.reconcile
+            def interrupt_after_saved_pair(task, *, now, interrupted=False):
+                if not interrupted: raise KeyboardInterrupt
+                return original_reconcile(task, now=now, interrupted=interrupted)
+            task_output = io.StringIO()
+            with patch("sushiwait.remote.RemoteClient", return_value=RemoteClient(opener=RemoteFakeOpener())), \
+                    patch("sushiwait.cli._utc_clock", side_effect=lambda:task_base+timedelta(seconds=task_clock[0])), \
+                    patch("sushiwait.remote._utc", side_effect=lambda:(task_base+timedelta(seconds=task_clock[0])).isoformat()), \
+                    patch("sushiwait.cli.time.monotonic", side_effect=lambda:task_clock[0]), \
+                    patch("sushiwait.cli.time.sleep", side_effect=lambda seconds:task_clock.__setitem__(0,task_clock[0]+seconds)), \
+                    patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as task_auth, \
+                    contextlib.redirect_stdout(task_output):
+                with patch.object(RemoteTask, "reconcile", new=interrupt_after_saved_pair):
+                    if main(task_args) != 130:raise SystemExit("installed_remote_task_interrupt_failed")
+                if not remote_task_status(task_file)['pending_attempt']:
+                    raise SystemExit("installed_remote_task_checkpoint_missing")
+                task_clock[0] = 10
+                if main(task_args+["--resume-task"]) != 0:raise SystemExit("installed_remote_task_resume_failed")
+                before_task_db,before_task_file = task_db.read_bytes(),task_file.read_bytes()
+                if main(["remote-task-status", "--task-file", str(task_file)]) != 0:
+                    raise SystemExit("installed_remote_task_status_failed")
+                if main(task_args+["--resume-task"]) != 0:
+                    raise SystemExit("installed_remote_task_completed_resume_failed")
+            task_status = remote_task_status(task_file)
+            if (task_auth.call_count or task_status['successful_pairs'] != 3
+                    or task_status['recorded_http_attempts'] != 6 or task_status['uncertain_pair_slots']
+                    or not task_status['all_slots_successful'] or task_clock[0] != 70
+                    or task_db.read_bytes() != before_task_db or task_file.read_bytes() != before_task_file
+                    or str(task_db) in task_output.getvalue() or str(task_file) in task_output.getvalue()):
+                raise SystemExit("installed_remote_task_restart_semantics_failed")
+            print(json.dumps({"installed_remote_task_restart_ok": True,
+                "remote_task_successful_pairs": 3, "remote_task_recorded_http_attempts": 6,
+                "remote_task_saved_pair_not_requeried": True, "remote_task_socket_calls": 0,
+                "remote_task_query_credentials_accessed": False,
+                "remote_task_terminal_database_unchanged": True, "remote_task_is_live_acceptance": False}))
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
                         or _recovery_poll_target(30, 2, 30) != 36

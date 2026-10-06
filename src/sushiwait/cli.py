@@ -447,6 +447,8 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "remote-collect":
             command.add_argument("--interval", type=int, default=60)
             command.add_argument("--samples", type=int, default=1)
+            command.add_argument("--task-file", help="明确私有任务文件；保存匿名成对查询进度，不重发未知槽位")
+            command.add_argument("--resume-task", action="store_true", help="显式恢复相同有界任务；不恢复失败任务或补采缺口")
         if name == "remote-report":
             command.add_argument("--limit", type=int, default=1000)
         if name == "remote-monitor":
@@ -454,6 +456,8 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--base-interval", type=int, default=300, help="窗口外周期60–3600秒；30/15分钟前请求60/30秒")
             command.add_argument("--duration", type=int, default=3600, help="30–3600秒，限制新成对查询开始；在途两请求可随后完成")
             command.add_argument("--max-pairs", type=int, default=120, help="1–360成对查询，每对最多两次HTTP；首错停止")
+    remote_status = commands.add_parser("remote-task-status", help="只读匿名任务摘要；不联网、不检查进程存活")
+    remote_status.add_argument("--task-file", required=True)
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
                            ("outcome-import", "校验并追加私有结果修订，不验证真实性"),
                            ("outcome-receive", "将新结果修订接入独立私有首次接收库；不认证训练标签")):
@@ -652,12 +656,27 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor"):
+    if args.command in ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status"):
         from .remote import RemoteClient, RemoteStore, collect_remote, monitor_remote
+        from .remotetasks import RemoteTask, RemoteTaskError, collect_remote_task, remote_task_status, task_config
         try:
+            if args.command == "remote-task-status":
+                emit(remote_task_status(args.task_file))
+                return 0
             ids = list(dict.fromkeys(canonical_store_id(s) for s in args.store_id)) if args.command in ("remote-collect", "remote-monitor") else [canonical_store_id(args.store_id)]
             if args.command == "remote-collect" and (not 1 <= len(ids) <= 3 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= 120):
                 raise ValueError("invalid_sampling_bounds")
+            if args.command == "remote-collect" and args.resume_task and not args.task_file:
+                raise RemoteTaskError("remote_task_required_for_resume")
+            if args.command == "remote-collect" and args.task_file:
+                config = task_config(args.db, ids, args.interval, args.samples)
+                with RemoteTask(args.task_file, config=config, resume=args.resume_task, now=_utc_clock()) as task:
+                    task.prepare_database()
+                    with RemoteStore(args.db) as database:
+                        task.bind(database, now=_utc_clock())
+                        summary = collect_remote_task(task, RemoteClient(), wall_clock=_utc_clock,
+                            monotonic_clock=time.monotonic, sleep=time.sleep, emit=emit)
+                        return 0 if summary['ok'] else 1
             if args.command == "remote-report" and not 1 <= args.limit <= 10000:
                 raise ValueError("invalid_report_bounds")
             if args.command == "remote-monitor":
@@ -688,6 +707,9 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             emit({"ok": False, "source": "crm_remote_v1_1", "error_code": "interrupted"})
             return 130
+        except RemoteTaskError as error:
+            emit({"ok": False, "source": "crm_remote_v1_1", "error_code": str(error)})
+            return 2
         except (OSError, ValueError, TypeError, KeyError, OverflowError, sqlite3.Error):
             emit({"ok": False, "source": "crm_remote_v1_1", "error_code": "remote_input_or_storage_error"})
             return 2
