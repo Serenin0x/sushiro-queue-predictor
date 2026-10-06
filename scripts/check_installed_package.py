@@ -35,7 +35,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -473,6 +473,39 @@ def check() -> None:
                          "--as-of", group["last_received_at"]]) != 0:
                     raise SystemExit("installed_signals_failed")
             outcome_database = str(Path(directory).resolve() / "outcomes.sqlite3")
+            intake_database = str(Path(directory).resolve() / "received-outcomes.sqlite3")
+            intake_reports = []
+            with patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.cli.SnapshotStore", side_effect=AssertionError("unexpected_public_store")) as public_store, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child:
+                intake_output = io.StringIO()
+                with contextlib.redirect_stdout(intake_output):
+                    if main(["outcome-receive", "--synthetic-fixture", str(args.outcome_fixture), "--db", intake_database]) != 0:
+                        raise SystemExit("installed_outcome_receive_failed")
+                if not json.loads(intake_output.getvalue())["committed"]:
+                    raise SystemExit("installed_outcome_receive_not_committed")
+                intake_before = hashlib.sha256(Path(intake_database).read_bytes()).digest()
+                duplicate_output = io.StringIO()
+                with contextlib.redirect_stdout(duplicate_output):
+                    if main(["outcome-receive", "--synthetic-fixture", str(args.outcome_fixture), "--db", intake_database]) != 0:
+                        raise SystemExit("installed_outcome_receive_duplicate_failed")
+                if not json.loads(duplicate_output.getvalue())["idempotent"]:
+                    raise SystemExit("installed_outcome_receive_duplicate_rewritten")
+                for at in ("2020-10-01T11:30:00+08:00", datetime.now(timezone.utc).isoformat()):
+                    intake_output = io.StringIO()
+                    with contextlib.redirect_stdout(intake_output):
+                        if main(["outcome-received-cohort", "--db", intake_database, "--as-of", at,
+                            "--data-origin", "synthetic", "--api-profile", "miniapp_gateway"]) != 0:
+                            raise SystemExit("installed_received_cohort_failed")
+                    intake_reports.append(json.loads(intake_output.getvalue()))
+            if (auth.call_count or public_store.call_count or native.call_count or child.call_count
+                    or intake_before != hashlib.sha256(Path(intake_database).read_bytes()).digest()
+                    or [r["selected_episodes"] for r in intake_reports] != [0, 1]
+                    or any(r["availability_basis"] != "local_first_receipt_time"
+                           or r["historical_availability_verified"] or r["training_eligible"]
+                           or r["verified_training_labels"] != 0 for r in intake_reports)):
+                raise SystemExit("installed_outcome_intake_semantics_mismatch")
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["outcome-check", "--synthetic-fixture", str(args.outcome_fixture)]) != 0:
                     raise SystemExit("installed_outcome_check_failed")
@@ -567,6 +600,11 @@ def check() -> None:
         "synthetic_replay_ok": True, "readonly_report_ok": True,
         "replay_report_socket_calls": 0, "synthetic_outcomes_ok": True,
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
+        "outcome_intake_ok": True, "outcome_intake_synthetic_cli_calls": 4,
+        "outcome_intake_duplicate_and_projection_files_unchanged": True,
+        "outcome_intake_socket_calls": 0, "outcome_intake_query_credentials_accessed": False,
+        "outcome_intake_public_store_calls": 0, "outcome_intake_native_cli_calls": 0,
+        "outcome_intake_child_process_calls": 0, "outcome_intake_is_live_acceptance": False,
         "calendar_package_data_ok": True, "calendar_socket_calls": 0,
         "readonly_signal_report_ok": True, "signal_socket_calls": 0,
         "readonly_store_view_ok": True, "store_view_database_unchanged": True,

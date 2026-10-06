@@ -37,6 +37,7 @@ from .shared_monitoring import SharedMonitoringError, read_plan_file, shared_pol
 from .window import WindowError, run_window
 from .evaluation import EvaluationError, evaluate_document, read_evaluation_document
 from .cohort import CohortError, cohort_report, reconstruct_claims
+from .intake import IntakeError, OutcomeIntakeStore
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -440,12 +441,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
-                           ("outcome-import", "校验并追加私有结果修订，不验证真实性")):
+                           ("outcome-import", "校验并追加私有结果修订，不验证真实性"),
+                           ("outcome-receive", "将新结果修订接入独立私有首次接收库；不认证训练标签")):
         command = commands.add_parser(name, help=help_text)
         inputs = command.add_mutually_exclusive_group(required=True)
         inputs.add_argument("--input", help="本人明确指定的0600结果JSON，父目录0700")
         inputs.add_argument("--synthetic-fixture", help="只接受明确标记的合成结果，不算真实标签")
-        if name == "outcome-import":
+        if name in ("outcome-import", "outcome-receive"):
             command.add_argument("--db", required=True, help="独立私有结果库，不使用公共快照库")
     outcomes = commands.add_parser("outcome-report", help="只读汇总私有结果，不输出号码、身份或行程时间")
     outcomes.add_argument("--db", required=True)
@@ -558,6 +560,12 @@ def build_parser() -> argparse.ArgumentParser:
     cohort.add_argument("--data-origin", choices=("synthetic", "self_reported"), required=True)
     cohort.add_argument("--api-profile", choices=API_PROFILES, required=True)
     cohort.add_argument("--max-revisions", type=int, default=10000)
+    intake_cohort = commands.add_parser("outcome-received-cohort", help="只读按本机首次接收时间回放结果修订；不认证标签或时钟")
+    intake_cohort.add_argument("--db", required=True)
+    intake_cohort.add_argument("--as-of", required=True, help="带时区和秒的回放时刻，不是调用者recorded_at声明")
+    intake_cohort.add_argument("--data-origin", choices=("synthetic", "self_reported"), required=True)
+    intake_cohort.add_argument("--api-profile", choices=API_PROFILES, required=True)
+    intake_cohort.add_argument("--max-revisions", type=int, default=10000)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -704,6 +712,18 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"ok": True, **result})
                 return 0
             except SharedMonitoringError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "outcome-received-cohort":
+            try:
+                if not 1 <= args.max_revisions <= 10000:
+                    raise IntakeError("outcome_intake_invalid_scope_or_bounds")
+                with OutcomeIntakeStore(args.db, read_only=True) as store:
+                    result = store.cohort(as_of=args.as_of, data_origin=args.data_origin,
+                        api_profile=args.api_profile, max_revisions=args.max_revisions)
+                emit({"ok": True, **result})
+                return 0
+            except IntakeError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
         if args.command == "outcome-cohort":
@@ -889,7 +909,7 @@ def main(argv: list[str] | None = None) -> int:
             except CalendarError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
-        if args.command in ("outcome-check", "outcome-import", "outcome-report"):
+        if args.command in ("outcome-check", "outcome-import", "outcome-report", "outcome-receive"):
             try:
                 if args.command == "outcome-report":
                     with OutcomeStore(args.db, read_only=True) as outcomes:
@@ -901,10 +921,16 @@ def main(argv: list[str] | None = None) -> int:
                     if args.command == "outcome-import":
                         with OutcomeStore(args.db) as outcomes:
                             result.update(outcomes.append(episode, now=_utc_clock()))
+                    elif args.command == "outcome-receive":
+                        with OutcomeIntakeStore(args.db) as outcomes:
+                            result.update(outcomes.append(episode))
+                        result.update(availability_basis="local_first_receipt_time",
+                                      independent_time_attestation=False)
                     emit({"ok": True, **result})
                 return 0
-            except OutcomeError as error:
-                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+            except (OutcomeError, IntakeError) as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False,
+                      **({"commit_status": error.commit_status} if isinstance(error, IntakeError) else {})})
                 return 1
             except (CaptureError, OSError, ImportError, sqlite3.Error):
                 emit({"ok": False, "error_code": "outcome_database_error", "network_performed": False})
