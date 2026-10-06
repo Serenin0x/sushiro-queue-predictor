@@ -69,7 +69,7 @@
 
 ## 技术手段
 
-当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，单店恢复节奏见 [恢复周期说明](docs/RECOVERY_CADENCE.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。
+当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，单店恢复节奏见 [恢复周期说明](docs/RECOVERY_CADENCE.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。 普通采集的[有限临时错误处理](docs/TRANSIENT_SAMPLING.md)可保留部分失败并继续后续槽位，默认首错停止，鉴权失败仍立即停采。
 
 字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录；本机公共字段导出、分页和保存状态见[导出说明](docs/PUBLIC_PACKETS.md)，接收格式校验与本机去重/冲突规则见[归档说明](docs/PACKET_ARCHIVE.md)，持久待确认目录与容量/故障规则见[保存说明](docs/PENDING_PACKETS.md)，本机接收与确认协议见[服务说明](docs/PACKET_RECEIVER.md)，本机投递与签名确认保存见[投递说明](docs/PACKET_DELIVERY.md)。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc23 门店展示候选版，正式 v0.2.0 尚未完成验收**。新增只读展示出口，保留号码与刷新结果，明确区分近期响应、旧信息、过时和不可用；19 项专项与 723 项完整本机检查通过，安装及真实库证据持续记入交接文档。已公开的恢复版通过三版本各 704 项 GitHub 检查；其真实营业试点每店 30 次、共 90 次查询全部成功并跨更新恢复。此前更长任务保留 269 次成功和最后一次成都 504 超时。最新更新中断约 102 秒，仍未达到临近叫号的持续监控要求。当前没有远程部署、真实训练标签或已验收预测。
+当前代码为 **v0.2.0rc24 采集容错候选版，正式 v0.2.0 尚未完成验收**。普通与持久采集可显式容忍有限的 502、503、504，保留失败并继续后续槽位，不立即重试同店；默认首错停止与鉴权失败停止保持。12 项新增、62 项专项与 735 项完整本机检查通过，安装及真实采样证据持续记入交接文档。上一展示版已通过三版本各 723 项 GitHub 检查及六份真实库展示；已完成的营业 30 秒三店试点 90 次全部成功，最新更新中断约 102 秒。午间较长采集另库继续，当前没有远程部署、真实训练标签或已验收预测。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d5120f5fb79a8573-dark.svg"><img src="assets/readme-labels/d5120f5fb79a8573-light.svg" alt="2026-10-06 · v0.2.0rc24" width="179" height="20"></picture></strong>：为普通与持久采集增加可选的有限 502、503、504 容忍额度，失败照常保存，后续查询守住时间间隔；重启不重置额度，401 与非法上下文仍停止。12 项新增、62 项专项及 735 项完整检查通过；当前午间实测仍用上一安装版，未人为制造上游错误。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/646fc283e14e430d-dark.svg"><img src="assets/readme-labels/646fc283e14e430d-light.svg" alt="2026-10-06 · v0.2.0rc23" width="179" height="20"></picture></strong>：新增门店展示出口，同看堂食和预约有限号码、响应年龄与刷新结果；数据过时、采集停检和查询失败明确保留旧信息。19 项专项及 723 项完整检查通过；上一恢复版营业三店 30 秒采集完成 90 次成功，正常更新缺口约 102 秒。用户页面、预测和长期自动更新继续验收。
 

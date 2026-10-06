@@ -82,7 +82,8 @@ def _decode(body: bytes) -> dict:
         if not isinstance(value, dict) or set(value) != _KEYS or type(value["schema_version"]) is not int or value["schema_version"] != 1:
             raise ValueError
         c = value["config"]
-        if (not isinstance(c, dict) or set(c) != {"db", "api_profile", "store_ids", "interval", "samples", "wait_for_credentials"}
+        config_keys = {"db", "api_profile", "store_ids", "interval", "samples", "wait_for_credentials"}
+        if (not isinstance(c, dict) or set(c) not in (config_keys, config_keys | {"transient_failure_budget"})
                 or not isinstance(c["db"], str) or len(c["db"]) > 4096 or not Path(c["db"]).is_absolute()
                 or c["api_profile"] not in ("legacy", "miniapp_gateway")
                 or not isinstance(c["store_ids"], list) or not 1 <= len(c["store_ids"]) <= 3
@@ -90,7 +91,8 @@ def _decode(body: bytes) -> dict:
                 or not all(isinstance(s, str) and s.isascii() and s.isdecimal() and str(int(s)) == s
                            and 0 < int(s) <= 2**63-1 for s in c["store_ids"])
                 or not _integer(c["interval"], 30, 3600) or not _integer(c["samples"], 1, 120)
-                or not _integer(c["wait_for_credentials"], 0, 600)):
+                or not _integer(c["wait_for_credentials"], 0, 600)
+                or "transient_failure_budget" in c and not _integer(c["transient_failure_budget"], 1, 10)):
             raise ValueError
         total = len(c["store_ids"]) * c["samples"]
         if (not all(_integer(value[k], 0, total) for k in ("cursor", "successful", "failed", "uncertain"))
@@ -153,6 +155,7 @@ def public_task(value: dict) -> dict:
             "completed_slots": value["cursor"], "successful_slots": value["successful"],
             "failed_slots": value["failed"], "uncertain_slots": value["uncertain"],
             "interval_seconds": c["interval"], "stop_reason": value["stop_reason"],
+            "transient_failure_budget": c.get("transient_failure_budget", 0),
             "pending_attempt": value["pending"] is not None,
             "credential_revision": value["credential"]["revision"] if value["credential"] else None,
             "refresh_required": bool(value["credential"] and value["credential"]["blocked_authorization_digest"]),
@@ -417,6 +420,34 @@ class CollectionTask:
         value["state"] = "stopped"
         value["stop_reason"] = _safe_error(code)
         value["updated_at"] = _time(now)
+        self._commit(value)
+
+    def continue_after_transient_failure(self, *, now: datetime):
+        """Keep the committed failure and cursor; clear only the stop state."""
+        budget = self.value["config"].get("transient_failure_budget", 0)
+        if (not 1 <= self.value["failed"] <= budget or self.value["pending"] is not None
+                or self.value["last_sample"] is None or self.value["stop_reason"] != "http_error"
+                or self.value["state"] not in ("stopped", "completed")):
+            raise TaskError("collection_task_invalid")
+        if _text_time(_time(now)) < _text_time(self.value["updated_at"]):
+            raise TaskError("collection_task_clock_rollback")
+        self._guard_database()
+        row = self.db.db.execute("SELECT id,run_id,store_id,data_origin,api_profile,ok,"
+            "CASE WHEN length(CAST(payload_json AS BLOB))<=65536 THEN payload_json ELSE NULL END "
+            "FROM samples WHERE id=?", (self.value["last_sample"]["id"],)).fetchone()
+        payload = _report_payload(row[6]) if row is not None else None
+        expected = self.value["config"]["store_ids"][(self.value["cursor"] - 1)
+                                                     % len(self.value["config"]["store_ids"])]
+        if (row is None or _digest(row) != self.value["last_sample"]["digest"] or row[5] != 0
+                or row[2:5] != (expected, "live", self.value["config"]["api_profile"])
+                or payload is None or payload.get("failure_phase") != "request"
+                or payload.get("error_code") != "http_error" or type(payload.get("http_status")) is not int
+                or payload["http_status"] not in (502, 503, 504)):
+            raise TaskError("collection_task_result_conflict")
+        if self.value["state"] == "completed":
+            return
+        value = deepcopy(self.value)
+        value.update(state="ready", stop_reason=None, updated_at=_time(now))
         self._commit(value)
 
     def close(self):

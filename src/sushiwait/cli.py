@@ -21,7 +21,7 @@ from .credentials import CredentialError, CredentialSource, QueryCredentials, re
 from .observations import compute_change, normalize_directory, normalize_snapshot
 from .outcomes import OutcomeError, OutcomeStore, public_summary, read_episode
 from .localpaths import local_data_directory
-from .storage import SnapshotStore
+from .storage import SnapshotStore, _report_payload
 from .signals import SignalError, signal_report
 from .storeview import StoreViewError, store_view, validate_view_scope
 from .packets import PacketError, export_packet
@@ -323,6 +323,8 @@ def _persistent_collect(args: argparse.Namespace) -> int:
     config = {"db": os.path.abspath(args.db), "api_profile": args.api_profile,
               "store_ids": args.store_id, "interval": args.interval, "samples": args.samples,
               "wait_for_credentials": args.wait_for_credentials}
+    if args.transient_failure_budget:
+        config["transient_failure_budget"] = args.transient_failure_budget
     with CollectionTask(args.task_file, config=config, resume=args.resume_task, now=_utc_clock()) as task:
         task.prepare_database()
         with SnapshotStore(args.db, read_only=task.value["state"] == "completed") as db:
@@ -333,6 +335,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                 return 0 if task.value["failed"] == task.value["uncertain"] == 0 else 1
             session = _QuerySession(args, on_context=task.check_context)
             last_completed = None
+            round_transient_failure = False
 
             def wait(deadline: float) -> bool:
                 try:
@@ -363,6 +366,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
             while task.value["cursor"] < count * args.samples:
                 if task.value["cursor"] % count == 0:
                     started = time.monotonic()
+                    round_transient_failure = False
                 store_id = args.store_id[task.value["cursor"] % count]
                 before_recovery = session.recovery_count
                 client = _collect_client(session, db, store_id)
@@ -376,16 +380,45 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                     emit({"event": "collection_task_stopped", **public_task(task.value)})
                     return 1
                 task.begin(now=_utc_clock())
+                before_id = task.value["pending"]["after_sample_id"]
                 ok = observe(client, store_id, db, api_profile=args.api_profile)
                 last_completed = time.monotonic()
                 task.reconcile(now=_utc_clock())
-                emit({"event": "collection_task_checkpoint", **public_task(task.value)})
                 if not ok:
-                    return 1
+                    if (not args.transient_failure_budget
+                            or task.value["failed"] > args.transient_failure_budget
+                            or not _transient_failure_after(db, store_id, args.api_profile, before_id)):
+                        emit({"event": "collection_task_checkpoint", **public_task(task.value)})
+                        return 1
+                    round_transient_failure = True
+                    task.continue_after_transient_failure(now=_utc_clock())
+                    emit({"event": "transient_query_failure_recorded", "store_id": store_id,
+                          "failed_slots": task.value["failed"],
+                          "transient_failure_budget": args.transient_failure_budget,
+                          "failed_slot_retried": False})
+                emit({"event": "collection_task_checkpoint", **public_task(task.value)})
                 if task.value["cursor"] < count * args.samples and task.value["cursor"] % count == 0:
-                    if not wait(started + args.interval):
+                    deadline = started + args.interval
+                    if round_transient_failure:
+                        deadline = max(deadline, last_completed + args.interval)
+                    if not wait(deadline):
                         return 1
             return 0 if task.value["failed"] == task.value["uncertain"] == 0 else 1
+
+
+def _transient_failure_after(db: SnapshotStore, store_id: str, profile: str, after_id: int) -> bool:
+    """Recognize only this exact failed attempt, never an older saved failure."""
+    rows = db.db.execute(
+        "SELECT ok,CASE WHEN length(CAST(payload_json AS BLOB))<=65536 THEN payload_json ELSE NULL END "
+        "FROM samples WHERE id>? AND run_id=? AND store_id=? AND data_origin='live' "
+        "AND api_profile=? ORDER BY id LIMIT 2", (after_id, db.run_id, store_id, profile)).fetchall()
+    if len(rows) != 1 or rows[0][0] != 0:
+        return False
+    value = _report_payload(rows[0][1])
+    return bool(value and value.get("store_id") == store_id and value.get("api_profile") == profile
+        and value.get("data_origin") == "live" and value.get("failure_phase") == "request"
+        and value.get("error_code") == "http_error" and type(value.get("http_status")) is int
+        and value["http_status"] in (502, 503, 504))
 
 
 def load_fixture(path: str) -> dict:
@@ -496,7 +529,7 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot_auth = snapshot.add_mutually_exclusive_group()
     snapshot_auth.add_argument("--anonymous", action="store_true")
     snapshot_auth.add_argument("--credentials-file", help="完整私有查询上下文；不与环境凭证混用")
-    collect = commands.add_parser("collect", help="少量门店有界采样；首个查询失败即停止")
+    collect = commands.add_parser("collect", help="少量门店有界采样；默认首错停止，可显式容忍有限5xx")
     collect.add_argument("--api-profile", choices=API_PROFILES, default="legacy")
     collect.add_argument("--store-id", action="append", required=True)
     collect.add_argument("--interval", type=int, default=60)
@@ -506,6 +539,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="私有文件模式到期后暂停等正常新上下文，0–600秒；默认停止")
     collect.add_argument("--task-file", help="私有有界任务进度；保存槽位/对账并跨重启检查凭证版本")
     collect.add_argument("--resume-task", action="store_true", help="显式恢复已有task-file；不重发未知或失败槽位")
+    collect.add_argument("--transient-failure-budget", type=int, default=0,
+                        help="可选1–10次502/503/504失败后继续后续槽位；0保持首错停止，不重试失败槽位")
     collect_auth = collect.add_mutually_exclusive_group()
     collect_auth.add_argument("--anonymous", action="store_true")
     collect_auth.add_argument("--credentials-file", help="每次查询前重读完整私有上下文；整组原子更新")
@@ -612,6 +647,10 @@ def main(argv: list[str] | None = None) -> int:
         if (not 0 <= args.wait_for_credentials <= 600
                 or args.wait_for_credentials and args.credentials_file is None):
             emit({"ok": False, "error_code": "invalid_credential_wait_bounds"})
+            return 2
+        if (not 0 <= args.transient_failure_budget <= 10
+                or args.transient_failure_budget and args.credentials_file is None):
+            emit({"ok": False, "error_code": "invalid_transient_failure_budget"})
             return 2
         if (args.resume_task and not args.task_file or args.task_file and not args.credentials_file):
             emit({"ok": False, "error_code": "invalid_collection_task_options"})
@@ -965,8 +1004,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "collect":
                 session = _QuerySession(args)
                 last_completed = None
+                failed = 0
                 for i in range(args.samples):
                     started = time.monotonic()
+                    round_transient_failure = False
                     for store_index, store_id in enumerate(ids):
                         before_recovery = session.recovery_count
                         client = _collect_client(session, db, store_id)
@@ -977,22 +1018,37 @@ def main(argv: list[str] | None = None) -> int:
                             started = time.monotonic()
                         if client is None:
                             return 1
-                        if not observe(client, store_id, db, api_profile=args.api_profile):
-                            return 1
+                        before_id = (db.db.execute("SELECT COALESCE(MAX(id),0) FROM samples").fetchone()[0]
+                                     if args.transient_failure_budget else None)
+                        ok = observe(client, store_id, db, api_profile=args.api_profile)
                         last_completed = time.monotonic()
+                        if not ok:
+                            failed += 1
+                            if (not args.transient_failure_budget
+                                    or failed > args.transient_failure_budget
+                                    or not _transient_failure_after(db, store_id, args.api_profile, before_id)):
+                                return 1
+                            round_transient_failure = True
+                            emit({"event": "transient_query_failure_recorded", "store_id": store_id,
+                                  "failed_slots": failed,
+                                  "transient_failure_budget": args.transient_failure_budget,
+                                  "failed_slot_retried": False})
                     if i + 1 < args.samples:
+                        deadline = started + args.interval
+                        if round_transient_failure:
+                            deadline = max(deadline, last_completed + args.interval)
                         try:
-                            session.wait_until(started + args.interval)
+                            session.wait_until(deadline)
                         except _PreflightStop as stop:
                             _record_preflight_stop(db, ids[0], args.api_profile, stop)
                             if not _await_credentials(session, stop):
                                 return 1
                             try:
-                                session.wait_until(_recovery_poll_target(started + args.interval, len(ids), args.interval, last_completed))
+                                session.wait_until(_recovery_poll_target(deadline, len(ids), args.interval, last_completed))
                             except _PreflightStop as stop:
                                 _record_preflight_stop(db, ids[0], args.api_profile, stop)
                                 return 1
-                return 0
+                return 1 if failed else 0
             if args.command == "replay":
                 # Prevalidate every input before the first database insertion.
                 fixtures = [load_fixture(path) for path in args.fixture]

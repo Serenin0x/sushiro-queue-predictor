@@ -60,7 +60,7 @@ def check() -> None:
         raise SystemExit("installed_promotion_missing")
     collect_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "collect", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
-    if any(option not in collect_help.stdout for option in ("--task-file", "--resume-task")):
+    if any(option not in collect_help.stdout for option in ("--task-file", "--resume-task", "--transient-failure-budget")):
         raise SystemExit("installed_collection_task_options_missing")
     with tempfile.TemporaryDirectory() as directory:
         database = str(Path(directory).resolve() / "synthetic.sqlite3")
@@ -205,6 +205,53 @@ def check() -> None:
                         or sum(row.get('event')=='credentials_resumed' for row in events)!=1):
                     raise SystemExit('installed_multistore_simulation_semantics_mismatch')
                 recovery_simulated_queries+=len(simulated_starts)
+            from sushiwait.storage import SnapshotStore
+            from sushiwait.tasks import task_status
+            transient_simulated_queries = 0
+            for persistent in (False, True):
+                simulated_time, simulated_starts = [0], []
+                context = synthetic_context(1, 3600)
+                def transient_fetch(store_id):
+                    number = len(simulated_starts)
+                    simulated_starts.append((store_id, simulated_time[0]))
+                    began = simulated_wall().isoformat()
+                    if number == 0:
+                        simulated_time[0] += 45
+                        return QueryResult(False, None, 'http_error', 504, began,
+                                           simulated_wall().isoformat(), 45000)
+                    return QueryResult(True, {'id': int(store_id), 'storeStatus': 'OPEN'}, None, 200,
+                                       began, began, 0)
+                policy_db = Path(directory).resolve()/f'synthetic-transient-{persistent}.sqlite3'
+                policy_task = Path(directory).resolve()/'synthetic-transient-task.json'
+                policy_args = ['collect', '--api-profile', 'miniapp_gateway', '--store-id', '900001',
+                    '--store-id', '900002', '--credentials-file', str(Path(directory).resolve()/'unused-policy-context'),
+                    '--db', str(policy_db), '--samples', '2', '--interval', '30', '--transient-failure-budget', '1']
+                if persistent: policy_args += ['--task-file', str(policy_task)]
+                policy_output = io.StringIO()
+                with patch('sushiwait.credentials.CredentialSource.current', return_value=context), \
+                        patch('sushiwait.cli.client_for', return_value=SimpleNamespace(fetch_store=transient_fetch)), \
+                        patch('sushiwait.cli.time.monotonic', side_effect=lambda: simulated_time[0]), \
+                        patch('sushiwait.cli.time.sleep', side_effect=simulated_sleep), \
+                        patch('sushiwait.cli._utc_clock', side_effect=simulated_wall), \
+                        patch('sushiwait.credentials.read_credentials_file', side_effect=AssertionError('unexpected_credentials')) as auth, \
+                        patch('sushiwait.surgeguard._command', side_effect=AssertionError('unexpected_native')) as native, \
+                        patch('subprocess.Popen', side_effect=AssertionError('unexpected_child')) as child, \
+                        contextlib.redirect_stdout(policy_output):
+                    if main(policy_args) != 1:
+                        raise SystemExit('installed_transient_failure_exit_lost')
+                events = [json.loads(line) for line in policy_output.getvalue().splitlines()]
+                with SnapshotStore(policy_db, read_only=True) as db:
+                    counts = db.db.execute('SELECT COUNT(*),SUM(ok) FROM samples').fetchone()
+                if (auth.call_count or native.call_count or child.call_count or counts != (4, 3)
+                        or simulated_starts != [('900001', 0), ('900002', 45), ('900001', 75), ('900002', 75)]
+                        or sum(row.get('event') == 'transient_query_failure_recorded' for row in events) != 1):
+                    raise SystemExit('installed_transient_policy_semantics_mismatch')
+                if persistent:
+                    state = task_status(policy_task)
+                    if (state['state'] != 'completed' or state['failed_slots'] != 1
+                            or state['transient_failure_budget'] != 1 or state['all_slots_successful']):
+                        raise SystemExit('installed_transient_task_failure_lost')
+                transient_simulated_queries += len(simulated_starts)
             adaptive_file = Path(directory).resolve() / "adaptive-plans.json"
             adaptive_database = str(Path(directory).resolve() / "adaptive.sqlite3")
             adaptive_file.write_text(json.dumps({"schema_version":1,"plans":[
@@ -483,6 +530,11 @@ def check() -> None:
         "multistore_recovery_query_credentials_accessed": False,
         "multistore_recovery_native_cli_calls": 0, "multistore_recovery_child_process_calls": 0,
         "recovery_target_socket_calls": 0,
+        "transient_query_policy_simulation_ok": True,
+        "transient_query_policy_simulated_queries": transient_simulated_queries,
+        "transient_query_policy_transport_stubbed": True, "transient_query_policy_is_live_acceptance": False,
+        "transient_query_policy_socket_calls": 0, "transient_query_policy_query_credentials_accessed": False,
+        "transient_query_policy_native_cli_calls": 0, "transient_query_policy_child_process_calls": 0,
         "interval_evaluation_ok": True, "evaluation_socket_calls": 0,
         "evaluation_native_cli_calls": 0, "evaluation_child_process_calls": 0,
         "evaluation_query_credentials_accessed": False,
