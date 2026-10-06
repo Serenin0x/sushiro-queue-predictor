@@ -252,6 +252,28 @@ def check() -> None:
                             or state['transient_failure_budget'] != 1 or state['all_slots_successful']):
                         raise SystemExit('installed_transient_task_failure_lost')
                 transient_simulated_queries += len(simulated_starts)
+            linked_before = [hashlib.sha256(p.read_bytes()).digest() for p in (policy_db, policy_task)]
+            linked_reports = []
+            with patch('sushiwait.cli.read_credentials_file', side_effect=AssertionError('unexpected_credentials')) as auth, \
+                    patch('sushiwait.surgeguard._command', side_effect=AssertionError('unexpected_native')) as native, \
+                    patch('subprocess.Popen', side_effect=AssertionError('unexpected_child')) as child, \
+                    patch('fcntl.flock', side_effect=AssertionError('unexpected_worker_lock')):
+                for sid in ('900001', '900002'):
+                    linked_output = io.StringIO()
+                    with contextlib.redirect_stdout(linked_output):
+                        if main(['store-view', '--db', str(policy_db), '--store-id', sid,
+                            '--api-profile', 'miniapp_gateway', '--data-origin', 'live',
+                            '--as-of', simulated_wall().isoformat(), '--task-file', str(policy_task)]) != 0:
+                            raise SystemExit('installed_linked_store_view_failed')
+                    linked_reports.append(json.loads(linked_output.getvalue()))
+            if (auth.call_count or native.call_count or child.call_count
+                    or linked_before != [hashlib.sha256(p.read_bytes()).digest() for p in (policy_db, policy_task)]
+                    or any(v['availability'] != 'last_known_only' or not v['collector_state_available']
+                        or v['collector_checkpoint']['state'] != 'completed'
+                        or v['collector_checkpoint']['failed_slots'] != 1
+                        or v['collector_checkpoint']['all_slots_successful']
+                        or v['collector_liveness'] != 'unknown' for v in linked_reports)):
+                raise SystemExit('installed_linked_store_view_semantics_mismatch')
             adaptive_file = Path(directory).resolve() / "adaptive-plans.json"
             adaptive_database = str(Path(directory).resolve() / "adaptive.sqlite3")
             adaptive_file.write_text(json.dumps({"schema_version":1,"plans":[
@@ -551,6 +573,11 @@ def check() -> None:
         "store_view_socket_calls": 0, "store_view_native_cli_calls": 0,
         "store_view_child_process_calls": 0, "store_view_query_credentials_accessed": False,
         "store_view_is_live_acceptance": False,
+        "linked_store_views_ok": True, "linked_store_views_simulated_count": 2,
+        "linked_store_views_files_unchanged": True, "linked_store_views_socket_calls": 0,
+        "linked_store_views_query_credentials_accessed": False,
+        "linked_store_views_native_cli_calls": 0, "linked_store_views_child_process_calls": 0,
+        "linked_store_views_worker_lock_calls": 0, "linked_store_views_is_live_acceptance": False,
         "public_field_packet_export_ok": True, "packet_database_unchanged": True,
         "packet_socket_calls": 0, "packet_native_cli_calls": 0,
         "packet_child_process_calls": 0, "packet_query_credentials_accessed": False,

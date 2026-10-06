@@ -579,6 +579,7 @@ def build_parser() -> argparse.ArgumentParser:
     view.add_argument("--as-of", required=True, help="展示当时，含秒和显式时区")
     view.add_argument("--max-age-seconds", type=int, default=90, help="1–3600秒；只是本机响应年龄阈值")
     view.add_argument("--sample-limit", type=int, default=1000, help="最近1–10000条同范围记录")
+    view.add_argument("--task-file", help="可选同库私有任务；联合展示多店已保存停采状态，不检查进程存活")
     packet = commands.add_parser("packet-export", help="只读导出门店公共字段到私有文件；不上传或读取凭证")
     packet.add_argument("--db", required=True, help="明确的私有DB2，文件0600或0400/父目录0700")
     packet.add_argument("--output", required=True, help="新的0600文件，已有0700目录；拒绝覆盖")
@@ -859,9 +860,9 @@ def main(argv: list[str] | None = None) -> int:
                     emit({"ok": True, **store_view(db, args.store_id,
                         data_origin=args.data_origin, api_profile=args.api_profile,
                         as_of=args.as_of, max_age_seconds=args.max_age_seconds,
-                        sample_limit=args.sample_limit)})
+                        sample_limit=args.sample_limit, task_file=args.task_file)})
                 return 0
-            except StoreViewError as error:
+            except (StoreViewError, TaskError) as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
             except (OSError, ValueError, sqlite3.Error):

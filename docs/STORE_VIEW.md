@@ -1,6 +1,6 @@
 # 门店展示与刷新状态
 
-`store-view` 是 rc23 的本机只读展示出口，为未来小程序的“叫号一处掌握”准备数据。它读取采集器已有的 SQLite schema 2，输出某一家门店的堂食/预约有限展示数组、已保存聚合字段，以及本机采集状态。它不会发起刷新请求、取得新凭证、发送提醒或查询个人号单；用户页面尚未实现。
+`store-view` 是 rc23 的本机只读展示出口，为未来小程序的“叫号一处掌握”准备数据。它读取采集器已有的 SQLite schema 2，输出某一家门店的堂食/预约有限展示数组、已保存聚合字段，以及最近查询结果；rc25可显式关联同库私有任务的已保存状态。它不会发起刷新请求、取得新凭证、发送提醒或查询个人号单；用户页面尚未实现。
 
 ```sh
 sushiwait store-view --db /path/to/private/samples.sqlite3 \
@@ -24,7 +24,7 @@ sushiwait store-view --db /path/to/private/samples.sqlite3 \
 
 `display_is_last_known` 在旧信息仍被返回时必须一并展示。`refresh_state` 区分 `response_received`、`query_failed`、`preflight_stopped`、`invalid_record` 和 `no_observations`，与数据过时状态分别解释。查询失败不改变旧号码，也不创造成功响应时间。
 
-这里的刷新状态是该店最近所选记录的结果，不是采集进程的当前运行状态。多店任务可能只在首店记录一次凭证保护，不能据其他店最近成功记录认定后台仍在采集。`collector_state_available=false`、`collector_liveness=unknown` 明确保留这个区别；私有任务状态见 [COLLECTION_TASKS](COLLECTION_TASKS.md)，永久服务需单独接入任务状态和进程健康检查。
+这里的刷新状态是该店最近所选记录的结果，不是采集进程的当前运行状态。多店任务可能只在首店记录一次凭证保护，不能据其他店最近成功记录认定后台仍在采集。未传任务时 `collector_state_available=false`、`collector_checkpoint=null`；无论是否传任务，`collector_liveness=unknown`，永久服务仍需独立进程健康检查。私有任务状态见 [COLLECTION_TASKS](COLLECTION_TASKS.md)。
 
 `last_response_age_seconds` 只度量展示时刻距离本机成功接收的时间，边界等于阈值仍算近期响应；它不是上游新鲜度。`latest_observation` 描述最近可验证观测：成功的 HTTP 响应、本机预检时间，或失败尝试结束。无HTTP响应的网络失败不能称服务器已响应。无效尾记录的安全详情为null。
 
@@ -37,3 +37,17 @@ sushiwait store-view --db /path/to/private/samples.sqlite3 \
 本机19项专项覆盖两类队列、顺序/重复/前导零、CLOSED下非空展示、存在性差异、90秒边界、失败/保护恢复、未来数据、跨范围隔离、损坏/过大/逆序、安全投影和数据库不变。完整723项已通过；独立安装和真实库验证另记 [PROJECT_HANDOVER](PROJECT_HANDOVER.md)。软件检查不认证真实叫号、过号率、源刷新或模型误差。
 
 2026-10-06，rc23已完成31模块独立安装和两次合成CLI近期/过时检查；同一安装包对两份既有真实三店库作六次历史投影成功，数组与最近成功记录逐项一致，旧成都尾失败保留、两库SHA不变、上游请求0。历史时刻11:28:31.442524由实际记录取得，不以此认证当前服务在线；原文只在本人私有目录，详见交接E0193。
+
+
+## 同库任务与多店停采
+
+rc25可增加 `--task-file /path/to/private/collection.json`。只关联显式提供的同一schema2私有库、同接口且涵盖所选门店的live有界任务；不扫描目录或寻找最新任务。任务须通过既有16KiB严格私有文件校验，核对绝对数据库路径、私有父目录、数据库身份以及最后保存行的范围、内容摘要和记录时间。不取得采集器锁，不恢复游标，不读查询凭证或修改任务/数据库。缺失、损坏、跨库、跨来源、跨店或跨接口关联均明确报错，不静默退回无任务的近期展示。
+
+`collector_checkpoint` 仅返回保存状态、暂停原因、查询是否挂起、更新是否必需、槽位计数、周期、更新时间与年龄，排除路径、身份、摘要、run ID和凭证revision。`database_link_validated=true`只表示上述本机关联检查通过，不验证上游真实性或活跃进程。`is_live_process_health_check=false`、`process_liveness=unknown`保持。并发更新时两份文件不构成跨文件原子快照；当前数据库读事务中的关联若不能确认，会报错，下一次普通只读展示可重新核对。
+
+任务已保存为stopped/completed，或其更新时间超过同一个显式年龄阈值时，近期成功响应也降为`last_known_only`并保留原号码、响应年龄与该店`refresh_state`。例如首店只有一条auth_expiring预检，而其他店最近是成功响应，其他店仍能显示全任务的暂停原因；不再因单店近期记录暗示后台持续更新。ready/running只表示已保存工作状态，不能证明采集器存活。
+
+历史回放若早于任务的最后更新时间，明确拒绝使用未来任务状态；不会拿当前任务状态改写过去。闭店与零等待、真实叫号、个人号单、源新鲜度和ETA仍遵循原边界。新增13项/含既有共66专项0.670秒OK；独立安装、真实库和公开检查另记交接历史。
+
+
+2026-10-06，最终rc25的31模块包独立安装通过，两次合成CLI双店同任务完成状态检查/文件不变/副作用0。此安装包另外读取前述两份已结束真实三店库及各自任务，六次历史关联成功：新库虽响应近期，但已完成任务使展示全部last_known_only；旧库stale，并在全部店铺显示同一269成功/1失败任务，成都query_failed保持。原展示数组逐项一致，两库和两任务字节均不改、额外上游请求0，不以此认证当前服务存活。详见交接E0199。

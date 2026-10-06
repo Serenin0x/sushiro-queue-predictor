@@ -11,6 +11,7 @@ from collections import Counter
 from .packets import PacketError, public_record
 from .signals import _text, _time
 from .storage import SnapshotStore
+from .tasks import linked_task_status
 
 
 class StoreViewError(ValueError):
@@ -38,7 +39,7 @@ def validate_view_scope(store_id: str, *, data_origin: str, api_profile: str,
 
 def store_view(store: SnapshotStore, store_id: str, *, data_origin: str,
                api_profile: str, as_of: str, max_age_seconds: int = 90,
-               sample_limit: int = 1000) -> dict:
+               sample_limit: int = 1000, task_file: str | None = None) -> dict:
     """Read one scoped tail in a consistent transaction without creating records.
 
     Corrupt or non-increasing observations block a recent-display claim. A
@@ -66,6 +67,9 @@ def store_view(store: SnapshotStore, store_id: str, *, data_origin: str,
             "FROM samples WHERE store_id=? AND data_origin=? AND api_profile=? "
             "ORDER BY id DESC LIMIT ?",
             (store_id, data_origin, api_profile, sample_limit + 1)).fetchall()
+        checkpoint = (linked_task_status(store, task_file, store_id=store_id,
+            api_profile=api_profile, data_origin=data_origin, as_of=at,
+            max_age_seconds=max_age_seconds) if task_file is not None else None)
         truncated = len(rows) > sample_limit
         for local_id, run, ok, recorded, payload in reversed(rows[:sample_limit]):
             counts["scanned_rows"] += 1
@@ -128,6 +132,10 @@ def store_view(store: SnapshotStore, store_id: str, *, data_origin: str,
         availability = "last_known_only"
     else:
         availability = "recent_response"
+    if (availability == "recent_response" and checkpoint is not None
+            and (checkpoint["state"] in {"stopped", "completed"}
+                 or checkpoint["checkpoint_age_status"] == "stale")):
+        availability = "last_known_only"
     return {"view_schema_version": 1, "store_id": store_id, "api_profile": api_profile,
             "data_origin": data_origin, "as_of": _text(at), "availability": availability,
             "refresh_state": last_kind, "max_age_seconds": max_age_seconds,
@@ -137,6 +145,7 @@ def store_view(store: SnapshotStore, store_id: str, *, data_origin: str,
             "scan": {"sample_limit": sample_limit, "truncated": truncated, **counts},
             "source_freshness": "unknown", "source_updated_at": None,
             "complete_queue_available": False, "personal_ticket_status_available": False,
-            "collector_state_available": False, "collector_liveness": "unknown",
+            "collector_state_available": checkpoint is not None,
+            "collector_checkpoint": checkpoint, "collector_liveness": "unknown",
             "eta_available": False, "network_performed": False,
             "output_requires_private_handling": True}

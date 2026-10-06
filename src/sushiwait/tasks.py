@@ -171,6 +171,66 @@ def task_status(path: str | Path) -> dict:
         raise TaskError("collection_task_unavailable_or_unsafe") from None
 
 
+def linked_task_status(db, path: str | Path, *, store_id: str, api_profile: str,
+                       data_origin: str, as_of: datetime, max_age_seconds: int) -> dict:
+    """Project an explicit private checkpoint in the caller's read transaction.
+
+    A checkpoint describes saved work, never a live process. The database link
+    is checked against its private path, inode, scope and last committed row.
+    No worker lock is acquired and no checkpoint is reconciled or modified.
+    """
+    parent_fd = None
+    try:
+        value = _decode(_read_private_file(path))
+        config = value["config"]
+        absolute = Path(os.path.abspath(db.path))
+        if (data_origin != "live" or store_id not in config["store_ids"]
+                or api_profile != config["api_profile"]
+                or absolute != Path(config["db"])):
+            raise TaskError("collection_task_view_scope_conflict")
+        if db._schema_version != 2 or not db.db.in_transaction:
+            raise TaskError("collection_task_view_requires_transaction")
+        parent_fd, name = _open_parent(absolute, private=True)
+        info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if not _private_file(info) or [info.st_dev, info.st_ino] != value["database_identity"]:
+            raise TaskError("collection_task_database_changed")
+        at = _text_time(_time(as_of))
+        updated = _text_time(value["updated_at"])
+        if updated > at:
+            raise TaskError("collection_task_view_future_checkpoint")
+        last = value["last_sample"]
+        if last is not None:
+            row = db.db.execute("SELECT id,run_id,store_id,data_origin,api_profile,ok,"
+                "CASE WHEN length(CAST(payload_json AS BLOB))<=2097152 THEN payload_json ELSE NULL END,"
+                "CASE WHEN length(received_at)<=40 THEN received_at ELSE NULL END "
+                "FROM samples WHERE id=?", (last["id"],)).fetchone()
+            if (row is None or row[2] not in config["store_ids"]
+                    or row[3:5] != ("live", api_profile) or _digest(row[:7]) != last["digest"]):
+                raise TaskError("collection_task_database_changed")
+            if row[7] is None or _text_time(row[7]) > updated:
+                raise TaskError("collection_task_database_changed")
+        _check_parent(absolute, parent_fd, private=True)
+        after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if not _private_file(after) or [after.st_dev, after.st_ino] != value["database_identity"]:
+            raise TaskError("collection_task_database_changed")
+        age = (at - updated).total_seconds()
+        summary = public_task(value)
+        # Do not return private paths, digests, inode values or current revision.
+        return {key: summary[key] for key in (
+            "state", "stop_reason", "pending_attempt", "refresh_required",
+            "target_slots", "completed_slots", "successful_slots", "failed_slots",
+            "uncertain_slots", "interval_seconds", "all_slots_successful", "updated_at")
+        } | {"checkpoint_age_seconds": round(age, 6),
+             "checkpoint_age_status": "stale" if age > max_age_seconds else "recent",
+             "database_link_validated": True, "process_liveness": "unknown",
+             "is_live_process_health_check": False}
+    except (CredentialError, CaptureError, OSError):
+        raise TaskError("collection_task_unavailable_or_unsafe") from None
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
+
+
 class CollectionTask:
     """Exclusive cooperating worker; atomic 0600 checkpoint and bounded input."""
 
