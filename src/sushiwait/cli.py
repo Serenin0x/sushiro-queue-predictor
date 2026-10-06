@@ -23,6 +23,7 @@ from .outcomes import OutcomeError, OutcomeStore, public_summary, read_episode
 from .localpaths import local_data_directory
 from .storage import SnapshotStore
 from .signals import SignalError, signal_report
+from .storeview import StoreViewError, store_view, validate_view_scope
 from .packets import PacketError, export_packet
 from .receipts import ReceiptError, read_packet, packet_summary, archive_packet
 from .pending import PendingError, enqueue_packet, pending_status
@@ -535,6 +536,14 @@ def build_parser() -> argparse.ArgumentParser:
     signals.add_argument("--window-seconds", type=int, default=120)
     signals.add_argument("--max-gap-seconds", type=int, default=90)
     signals.add_argument("--sample-limit", type=int, default=10000)
+    view = commands.add_parser("store-view", help="只读本机门店展示号及刷新状态；不查询、预测或认定叫号")
+    view.add_argument("--db", required=True)
+    view.add_argument("--store-id", required=True)
+    view.add_argument("--api-profile", choices=API_PROFILES, required=True)
+    view.add_argument("--data-origin", choices=("live", "fixture", "synthetic"), required=True)
+    view.add_argument("--as-of", required=True, help="展示当时，含秒和显式时区")
+    view.add_argument("--max-age-seconds", type=int, default=90, help="1–3600秒；只是本机响应年龄阈值")
+    view.add_argument("--sample-limit", type=int, default=1000, help="最近1–10000条同范围记录")
     packet = commands.add_parser("packet-export", help="只读导出门店公共字段到私有文件；不上传或读取凭证")
     packet.add_argument("--db", required=True, help="明确的私有DB2，文件0600或0400/父目录0700")
     packet.add_argument("--output", required=True, help="新的0600文件，已有0700目录；拒绝覆盖")
@@ -585,9 +594,9 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in ("snapshot", "collect", "context-bridge", "signal-report", "monitor-collect"):
+    if args.command in ("snapshot", "collect", "context-bridge", "signal-report", "store-view", "monitor-collect"):
         try:
-            if args.command in ("snapshot", "signal-report"):
+            if args.command in ("snapshot", "signal-report", "store-view"):
                 args.store_id = canonical_store_id(args.store_id)
             else:
                 args.store_id = list(dict.fromkeys(canonical_store_id(s) for s in args.store_id))
@@ -801,6 +810,23 @@ def main(argv: list[str] | None = None) -> int:
             except (TaskError, CaptureError) as error:
                 emit({"ok": False, "error_code": error.error_code if isinstance(error, TaskError)
                       else "collection_task_unavailable_or_unsafe"})
+                return 1
+        if args.command == "store-view":
+            try:
+                validate_view_scope(args.store_id, data_origin=args.data_origin,
+                    api_profile=args.api_profile, as_of=args.as_of,
+                    max_age_seconds=args.max_age_seconds, sample_limit=args.sample_limit)
+                with SnapshotStore(args.db, read_only=True) as db:
+                    emit({"ok": True, **store_view(db, args.store_id,
+                        data_origin=args.data_origin, api_profile=args.api_profile,
+                        as_of=args.as_of, max_age_seconds=args.max_age_seconds,
+                        sample_limit=args.sample_limit)})
+                return 0
+            except StoreViewError as error:
+                emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+            except (OSError, ValueError, sqlite3.Error):
+                emit({"ok": False, "error_code": "store_view_database_error", "network_performed": False})
                 return 1
         if args.command == "signal-report":
             try:

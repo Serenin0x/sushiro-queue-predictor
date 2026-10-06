@@ -35,7 +35,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -253,6 +253,28 @@ def check() -> None:
                 if main(["report", "--db", database]) != 0:
                     raise SystemExit("installed_report_failed")
             group = json.loads(output.getvalue())["groups"][0]
+            view_before = hashlib.sha256(Path(database).read_bytes()).digest()
+            view_reports = []
+            view_at = datetime.fromisoformat(group["last_received_at"].replace("Z", "+00:00"))
+            with patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child:
+                for second in (0, 91):
+                    view_output = io.StringIO()
+                    with contextlib.redirect_stdout(view_output):
+                        if main(["store-view", "--db", database, "--store-id", group["store_id"],
+                            "--api-profile", group["api_profile"], "--data-origin", "synthetic",
+                            "--as-of", (view_at + timedelta(seconds=second)).isoformat()]) != 0:
+                            raise SystemExit("installed_store_view_failed")
+                    view_reports.append(json.loads(view_output.getvalue()))
+            if (auth.call_count or native.call_count or child.call_count
+                    or view_before != hashlib.sha256(Path(database).read_bytes()).digest()
+                    or [v["availability"] for v in view_reports] != ["recent_response", "stale"]
+                    or [v["display_is_last_known"] for v in view_reports] != [False, True]
+                    or view_reports[0]["last_response"]["display"] != view_reports[1]["last_response"]["display"]
+                    or any(v["network_performed"] or v["eta_available"]
+                           or v["source_freshness"] != "unknown" for v in view_reports)):
+                raise SystemExit("installed_store_view_semantics_mismatch")
             packet_file = Path(directory).resolve() / "public-fields.json"
             packet_before = hashlib.sha256(Path(database).read_bytes()).digest()
             packet_output = io.StringIO()
@@ -473,6 +495,10 @@ def check() -> None:
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
         "calendar_package_data_ok": True, "calendar_socket_calls": 0,
         "readonly_signal_report_ok": True, "signal_socket_calls": 0,
+        "readonly_store_view_ok": True, "store_view_database_unchanged": True,
+        "store_view_socket_calls": 0, "store_view_native_cli_calls": 0,
+        "store_view_child_process_calls": 0, "store_view_query_credentials_accessed": False,
+        "store_view_is_live_acceptance": False,
         "public_field_packet_export_ok": True, "packet_database_unchanged": True,
         "packet_socket_calls": 0, "packet_native_cli_calls": 0,
         "packet_child_process_calls": 0, "packet_query_credentials_accessed": False,
