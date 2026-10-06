@@ -12,6 +12,7 @@ from .remotetasks import RemoteTask,RemoteTaskError,_at,_now,_json,_integer,_EMP
 from .credentials import _read_private_file
 from .shared_monitoring import read_plan_file,shared_polling_policy
 from .remoteservice import RemoteQueueService
+from .planupdates import read_update,check_successor,PlanUpdateError,MAX_REVISION
 
 MAX_PAIRS=25920
 MAX_DURATION=72*3600
@@ -32,22 +33,49 @@ def _plans(path,stores,base,now):
     return value
 
 
-def window_config(db,plan_file,store_ids,base_interval,duration_seconds,max_pairs,*,now):
+def window_config(db,plan_file,store_ids,base_interval,duration_seconds,max_pairs,*,now,plan_updates_file=None):
     if (type(store_ids) is not list or not 1<=len(store_ids)<=3 or len(set(store_ids))!=len(store_ids)
             or not _integer(base_interval,60,3600) or not _integer(duration_seconds,30,MAX_DURATION)
             or not _integer(max_pairs,1,MAX_PAIRS)):
         raise RemoteTaskError('remote_window_invalid_config')
     for store in store_ids:_id(store)
     document=_plans(plan_file,store_ids,base_interval,now)
-    return {'db':os.path.abspath(db),'plan_file':os.path.abspath(plan_file),
+    config={'db':os.path.abspath(db),'plan_file':os.path.abspath(plan_file),
         'plan_digest':_digest(document),'store_ids':list(store_ids),'base_interval':base_interval,
         'duration_seconds':duration_seconds,'max_pairs':max_pairs}
+    if plan_updates_file is not None:
+        path=os.path.abspath(plan_updates_file)
+        if path==config['plan_file'] or Path(path).parent==Path(config['db']).parent:
+            raise RemoteTaskError('remote_window_updates_path_conflict')
+        read_update(path,stores=store_ids,base_interval=base_interval,now=now)
+        config['plan_updates_file']=path
+    return config
 
 
 def _decode_window(body):
     try:
         if len(body)>16*1024:raise ValueError
         v=_json(body);c=v['config']
+        if type(v.get('schema_version')) is int and v['schema_version']==3:
+            if (set(v)!=_KEYS|{'plan_context'} or type(c) is not dict
+                    or set(c)!={'db','plan_file','plan_digest','store_ids','base_interval','duration_seconds','max_pairs','plan_updates_file'}):raise ValueError
+            path=c['plan_updates_file'];p=v['plan_context']
+            if (type(path) is not str or len(path)>4096 or not Path(path).is_absolute()
+                    or path==c['plan_file'] or Path(path).parent==Path(c['db']).parent
+                    or type(p) is not dict or set(p)!={'series_id','revision','document_digest','declared_at','applied_at','unobserved_revisions'}
+                    or type(p['series_id']) is not str or str(UUID(p['series_id']))!=p['series_id'] or UUID(p['series_id']).version!=4
+                    or not _integer(p['revision'],1,MAX_REVISION)
+                    or not _integer(p['unobserved_revisions'],0,p['revision']-1)
+                    or type(p['document_digest']) is not str or len(p['document_digest'])!=64
+                    or any(x not in '0123456789abcdef' for x in p['document_digest'])
+                    or not _at(v['created_at'])<=_at(p['applied_at'])<=_at(v['updated_at'])
+                    # Task times are millisecond floors; retain the full
+                    # declaration in its digest and rollback checks, but compare
+                    # chronology at the checkpoint's stored resolution.
+                    or _at(p['declared_at']).replace(microsecond=(_at(p['declared_at']).microsecond//1000)*1000)>_at(p['applied_at'])):raise ValueError
+            base=deepcopy(v);base['schema_version']=2;base.pop('plan_context');base['config'].pop('plan_updates_file')
+            _decode_window(json.dumps(base,separators=(',',':')).encode())
+            return v
         if (type(v) is not dict or set(v)!=_KEYS or type(v['schema_version']) is not int or v['schema_version']!=2
                 or v['source']!=SOURCE or type(c) is not dict
                 or set(c)!={'db','plan_file','plan_digest','store_ids','base_interval','duration_seconds','max_pairs'}):raise ValueError
@@ -99,13 +127,13 @@ def _decode_window(body):
                     or gap['reason'] not in ('restart','uncertain_attempt')
                     or not created<=_at(gap['from'])<=_at(gap['to'])<=updated):raise ValueError
         return v
-    except (ValueError,TypeError,KeyError,OverflowError,RecursionError,UnicodeError):
+    except (ValueError,TypeError,KeyError,AttributeError,OverflowError,RecursionError,UnicodeError):
         raise RemoteTaskError('remote_window_invalid') from None
 
 
 def window_status(v):
     c=v['config']
-    return {'task_schema_version':2,'source':SOURCE,'mode':'persistent_shared_window','state':v['state'],
+    result={'task_schema_version':v['schema_version'],'source':SOURCE,'mode':'persistent_shared_window','state':v['state'],
         'store_ids':list(c['store_ids']),'base_interval_seconds':c['base_interval'],
         'duration_seconds':c['duration_seconds'],'deadline_at':v['deadline_at'],'end_reason':v['end_reason'],
         'maximum_pair_budget':c['max_pairs'],'maximum_request_budget':2*c['max_pairs'],
@@ -115,6 +143,10 @@ def window_status(v):
         'pending_attempt':v['pending'] is not None,'updated_at':v['updated_at'],'last_gap':deepcopy(v['last_gap']),
         'catch_up_requests':0,'process_liveness':'unknown','source_freshness':'unknown',
         'eta_available':False,'verified_training_labels':0}
+    if v['schema_version']==3:
+        result.update(plan_updates_enabled=True,accepted_plan_revision=v['plan_context']['revision'],
+            unobserved_plan_revisions=v['plan_context']['unobserved_revisions'],complete_plan_history_verified=False)
+    return result
 
 
 def remote_window_status(path):
@@ -129,15 +161,46 @@ class RemoteWindowTask(RemoteTask):
         value=RemoteTask.initial_value(config,now)
         value.update(schema_version=2,created_at=_now(now),
             deadline_at=_now(_at(_now(now))+timedelta(seconds=config['duration_seconds'])),end_reason=None,starts={})
+        if 'plan_updates_file' in config:
+            update=read_update(config['plan_updates_file'],stores=config['store_ids'],base_interval=config['base_interval'],now=now)
+            value.update(schema_version=3,plan_context={'series_id':update['series_id'],'revision':update['revision'],
+                'document_digest':_digest(update),'declared_at':update['declared_at'],'applied_at':_now(now),
+                'unobserved_revisions':update['revision']-1})
         return value
 
     def __init__(self,path,*,config,resume,now,resume_if_present=False):
         if config['plan_file'] in (os.path.abspath(path),os.path.abspath(str(path)+'.lock'),config['db']):
             raise RemoteTaskError('remote_window_path_conflict')
+        if 'plan_updates_file' in config and Path(config['plan_updates_file']).parent==Path(os.path.abspath(path)).parent:
+            raise RemoteTaskError('remote_window_updates_path_conflict')
         self.document=_plans(config['plan_file'],config['store_ids'],config['base_interval'],now)
         if _digest(self.document)!=config['plan_digest']:raise RemoteTaskError('remote_window_plan_changed')
         self.fingerprint=None;self.data_version=None
         super().__init__(path,config=config,resume=resume,now=now,resume_if_present=resume_if_present)
+        try:
+            if self.value['schema_version']==3 and self.value['state'] not in ('completed','failed'):
+                self.document=self._checked_update(now=now)['document']
+        except Exception:
+            self.close();raise
+
+    def _checked_update(self,*,now=None):
+        config=self.value['config'];context=self.value['plan_context']
+        update=read_update(config['plan_updates_file'],stores=config['store_ids'],base_interval=config['base_interval'],now=now)
+        check_successor(context,update,old_digest=context['document_digest'])
+        return update
+
+    def refresh_plans(self,*,now):
+        """Apply only between pairs; task deadline, budget, starts and cursor remain."""
+        if self.value['schema_version']!=3 or self.value['state']!='ready':return
+        if _at(_now(now))<_at(self.value['updated_at']):raise RemoteTaskError('remote_window_clock_rollback')
+        update=self._checked_update(now=now);context=self.value['plan_context']
+        if update['revision']>context['revision']:
+            self._tail();value=deepcopy(self.value)
+            value['plan_context']={'series_id':update['series_id'],'revision':update['revision'],
+                'document_digest':_digest(update),'declared_at':update['declared_at'],'applied_at':_now(now),
+                'unobserved_revisions':context['unobserved_revisions']+update['revision']-context['revision']-1}
+            value['updated_at']=_now(now);self._commit(value)
+        self.document=deepcopy(update['document'])
 
     def _fingerprint(self):
         info=os.stat(self.db.path,follow_symlinks=False)
@@ -153,6 +216,8 @@ class RemoteWindowTask(RemoteTask):
         except ValueError:raise RemoteTaskError('remote_window_plan_unavailable') from None
         if _digest(document)!=self.value['config']['plan_digest']:
             raise RemoteTaskError('remote_window_plan_changed')
+        if self.value['schema_version']==3 and self.value['state'] not in ('completed','failed'):
+            self._checked_update()
         if list(self.db.identity)!=self.value['database_identity']:
             raise RemoteTaskError('remote_window_database_changed')
         if self.data_version is not None and self.db.db.execute('PRAGMA data_version').fetchone()[0]!=self.data_version:
@@ -270,6 +335,7 @@ class PersistentWindowSchedule:
         at,mono=self.clock(wall,monotonic);value=self.task.value;c=value['config']
         if self.task.finish_if_due(now=wall,monotonic_expired=mono>=self.deadline_mono):
             return {'done':True,'due_stores':[],'wake_monotonic':None}
+        self.task.refresh_plans(now=wall);value=self.task.value
         doc=deepcopy(self.task.document);plan_stores={p['store_id'] for p in doc['plans']}
         doc['last_poll_started_at']={s:t for s,t in value['starts'].items() if s in plan_stores}
         policy=shared_polling_policy(doc,as_of=_now(wall),base_interval=c['base_interval'])
@@ -299,7 +365,8 @@ def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,sh
         decision=schedule.decision(wall=wall_clock(),monotonic=monotonic_clock())
         if decision['done']:break
         if not decision['due_stores']:
-            sleep(max(0,decision['wake_monotonic']-monotonic_clock()));continue
+            delay=max(0,decision['wake_monotonic']-monotonic_clock())
+            sleep(min(1,delay) if task.value['schema_version']==3 else delay);continue
         store=decision['due_stores'][0]
         schedule.mark(store,wall=wall_clock(),monotonic=monotonic_clock())
         record=client.snapshot(store);identifier=task.db.append(record);task.reconcile(now=wall_clock())
@@ -311,12 +378,13 @@ def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,sh
 
 
 class RemoteWindowService(RemoteQueueService):
-    def __init__(self,*,plan_file,base_interval=300,duration_seconds=86400,max_pairs=8640,resume_if_present=False,**kwargs):
+    def __init__(self,*,plan_file,base_interval=300,duration_seconds=86400,max_pairs=8640,resume_if_present=False,plan_updates_file=None,**kwargs):
         if type(resume_if_present) is not bool or resume_if_present and kwargs.get('resume',False):
             raise RemoteTaskError('remote_task_invalid_resume_mode')
         self.resume_if_present=resume_if_present
         super().__init__(interval=base_interval,samples=1,**kwargs)
-        self.config=window_config(kwargs['db'],plan_file,kwargs['store_ids'],base_interval,duration_seconds,max_pairs,now=self.wall_clock())
+        self.config=window_config(kwargs['db'],plan_file,kwargs['store_ids'],base_interval,duration_seconds,max_pairs,
+            now=self.wall_clock(),plan_updates_file=plan_updates_file)
     def _make_task(self):
         return RemoteWindowTask(self.task_file,config=self.config,resume=self.resume,now=self.wall_clock(),
             resume_if_present=self.resume_if_present)

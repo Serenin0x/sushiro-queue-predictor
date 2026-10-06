@@ -486,6 +486,7 @@ def build_parser() -> argparse.ArgumentParser:
         window.add_argument("--db",required=True)
         window.add_argument("--task-file",required=True)
         window.add_argument("--plan-file",required=True,help="明确私有不可变计划；空plans也持续采集背景数据")
+        window.add_argument("--plan-updates-file",help="显式私有版本化计划更新；独立0700目录，不能与数据库/任务共用父目录")
         window.add_argument("--store-id",action="append",required=True)
         window.add_argument("--base-interval",type=int,default=300)
         window.add_argument("--duration",type=int,default=86400)
@@ -499,6 +500,11 @@ def build_parser() -> argparse.ArgumentParser:
             window.add_argument("--listen-host",choices=("127.0.0.1","0.0.0.0"),default="127.0.0.1")
     window_status = commands.add_parser("remote-window-status",help="只读保存窗口状态；不读计划、不联网、不检查存活")
     window_status.add_argument("--task-file",required=True)
+    plans_publish=commands.add_parser("monitor-plans-publish",help="私有计划修订原子发布；不查询、不取号、不发送提醒")
+    plans_publish.add_argument("--input",required=True)
+    plans_publish.add_argument("--output",required=True)
+    plans_publish.add_argument("--store-id",action="append",required=True)
+    plans_publish.add_argument("--base-interval",type=int,default=300)
     window_quality = commands.add_parser("remote-window-quality",help="只读终态窗口的完整结果链、间隔缺口与日期分布；不认证源新鲜度")
     window_quality.add_argument("--db",required=True)
     window_quality.add_argument("--task-file",required=True)
@@ -760,22 +766,34 @@ def main(argv: list[str] | None = None) -> int:
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':error.error_code});return 2
         except (OSError,ValueError,TypeError,KeyError,OverflowError,sqlite3.Error):
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':'remote_signal_input_or_storage_error'});return 2
+    if args.command=="monitor-plans-publish":
+        from .planupdates import publish_update,PlanUpdateError
+        try:
+            result=publish_update(args.input,args.output,stores=[canonical_store_id(s) for s in args.store_id],
+                base_interval=args.base_interval,clock=_utc_clock)
+            emit(result);return 0 if result['ok'] else 1
+        except PlanUpdateError as error:
+            emit({'ok':False,'committed':error.committed,'error_code':str(error)});return 2
+        except (OSError,ValueError,TypeError,KeyError,OverflowError):
+            emit({'ok':False,'committed':False,'error_code':'plan_update_input_or_storage_error'});return 2
     if args.command in ("remote-window-collect","remote-window-serve","remote-window-status"):
         from .remotewindow import (RemoteWindowTask,RemoteWindowService,collect_remote_window,
             remote_window_status,window_config)
         from .remoteservice import serve_local,RemoteServiceError
         from .remote import RemoteClient,RemoteStore
         from .remotetasks import RemoteTaskError
+        from .planupdates import PlanUpdateError
         try:
             if args.command=="remote-window-status":emit(remote_window_status(args.task_file));return 0
             ids=[canonical_store_id(s) for s in args.store_id]
             if args.command=="remote-window-serve":
                 service=RemoteWindowService(db=args.db,task_file=args.task_file,plan_file=args.plan_file,store_ids=ids,
                     base_interval=args.base_interval,duration_seconds=args.duration,max_pairs=args.max_pairs,
-                    resume=args.resume_task,resume_if_present=args.resume_if_present)
+                    resume=args.resume_task,resume_if_present=args.resume_if_present,plan_updates_file=args.plan_updates_file)
                 serve_local(service,port=args.port,listen_host=args.listen_host)
                 return 1 if service.status()['service_state']=='failed' else 0
-            config=window_config(args.db,args.plan_file,ids,args.base_interval,args.duration,args.max_pairs,now=_utc_clock())
+            config=window_config(args.db,args.plan_file,ids,args.base_interval,args.duration,args.max_pairs,now=_utc_clock(),
+                plan_updates_file=args.plan_updates_file)
             with RemoteWindowTask(args.task_file,config=config,resume=args.resume_task,now=_utc_clock(),
                                   resume_if_present=args.resume_if_present) as task:
                 task.prepare_database()
@@ -787,7 +805,7 @@ def main(argv: list[str] | None = None) -> int:
                     return 0 if summary['ok'] else 1
         except KeyboardInterrupt:
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':'interrupted'});return 130
-        except (RemoteTaskError,RemoteServiceError) as error:
+        except (RemoteTaskError,RemoteServiceError,PlanUpdateError) as error:
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':str(error)});return 2
         except (OSError,ValueError,TypeError,KeyError,OverflowError,sqlite3.Error):
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':'remote_window_input_or_storage_error'});return 2

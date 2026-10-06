@@ -37,9 +37,9 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史；新增只读历史回放，核对整条修订链并按声明的历史时刻选择结果，避免后来纠错覆盖早先版本。人工记录与合成样例分别统计；新增私有区间误差计算，可核对已记录预测与叫号区间的误差范围、覆盖情况，保留不确定性。新增[首次接收账本](docs/OUTCOME_INTAKE.md)，由程序单独记录收到每份修订的时刻，补录的旧经历不会被提前算入历史回放；重复提交保留原接收时间。新增[人工审核记录](docs/OUTCOME_REVIEWS.md)，为具体结果生成未批准草稿，保存人工结论及其接收时间；结果改过后须重新审核，晚到审核不会倒灌历史，冲突保持未确认。新增[历史区间研究基线](docs/HISTORY_BASELINE.md)，按同店、队列和日期匹配经历，计算新取号等待、已排队剩余等待和理想时间候选；保留上下界，资料不足明确缺失。新增[时间顺序检验](docs/BASELINE_BACKTEST.md)，每个历史时刻的训练只用此前已接收的资料，核对之后叫号区间的误差范围；保留冷启动和不同提前量。人工确认与事件真实性认证分开，回放不是当时真实预测日志，模型还需真实结果校准。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证；新匿名来源已实际验证同店共享的60／30秒策略，四份成对查询/八次请求成功；固定周期采集新增[任务保存与恢复](docs/ANONYMOUS_TASKS.md)，未知槽位不重发，原预算不重置。新增[持久共享窗口](docs/ANONYMOUS_WINDOWS.md)，将背景采集与同店60／30秒计划一并保存，重启保持原期限和预算，未知结果留为缺口；长期实际稳定性与提醒继续验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证；新匿名来源已实际验证同店共享的60／30秒策略，四份成对查询/八次请求成功；固定周期采集新增[任务保存与恢复](docs/ANONYMOUS_TASKS.md)，未知槽位不重发，原预算不重置。新增[持久共享窗口](docs/ANONYMOUS_WINDOWS.md)，将背景采集与同店60／30秒计划一并保存，重启保持原期限和预算，未知结果留为缺口；长期实际稳定性与提醒继续验证。 新增[运行中计划更新](docs/MONITORING_PLAN_UPDATES.md)，用户计划可通过显式私有入口整组调整；后台重新合并同店60／30秒需求，原期限和预算保持，旧任务不升级；多用户入口与提醒继续开发。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、1040 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、1069 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前开发候选为 **v0.2.0rc39**，新增[时间顺序的历史基线检验](docs/BASELINE_BACKTEST.md)：训练只用每个预测时刻已接收的资料，比较后续叫号区间，保留误差上下界、缺失原因和不同提前量。20项专项与1040项完整软件检查通过，独立安装与实际发布分别核对；历史回放不认证当年预测日志，真实模型误差尚未校准。原三店24小时任务继续运行，全天与生产部署仍待验，正式v0.2.0和v1.0.0尚未完成。
+当前开发候选为 **v0.2.0rc40**，新增[运行中的计划更新](docs/MONITORING_PLAN_UPDATES.md)：后台可接受整组新用餐计划，调整共享60／30秒节奏，保存已接受版本并保留原截止时间和预算。29项专项与1069项完整软件检查通过，独立安装与公开提交分别核对；监控调度不代表真实叫号预测或防过号提醒。原三店24小时任务继续保持原配置，全天与生产部署仍待验，正式v0.2.0和v1.0.0尚未完成。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/886bdfa11b63c899-dark.svg"><img src="assets/readme-labels/886bdfa11b63c899-light.svg" alt="2026-10-07 · v0.2.0rc40" width="179" height="20"></picture></strong>：计划变了，监控跟着调整：新增显式计划更新入口，让运行中的后台接受新时间和关注状态，同店共用查询，临近用餐切换60／30秒节奏。新版本有据可查，原截止和请求预算保持；实际预测与提醒继续验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/05f144782e048efa-dark.svg"><img src="assets/readme-labels/05f144782e048efa-light.svg" alt="2026-10-07 · v0.2.0rc39" width="179" height="20"></picture></strong>：检验历史，也尊重当时的信息：每个取号或已等待时刻重新筛选已收到的经历和审核，再计算后续叫号误差；后来补录不提前训练，资料不足也留下记录。按不同提前量分别统计，回放与真实模型成绩分开。
 

@@ -38,6 +38,8 @@ def check() -> None:
     if any(command not in help_result.stdout for command in
             ("baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
+    if 'monitor-plans-publish' not in help_result.stdout:
+        raise SystemExit('installed_plan_updates_command_missing')
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
@@ -45,7 +47,7 @@ def check() -> None:
         raise SystemExit("installed_bridge_diagnostics_missing")
     window_help=subprocess.run([sys.executable,"-I","-m","sushiwait","remote-window-serve","--help"],
                                capture_output=True,text=True,timeout=10,check=True)
-    if any(flag not in window_help.stdout for flag in ("--resume-if-present","--listen-host")):
+    if any(flag not in window_help.stdout for flag in ("--resume-if-present","--listen-host","--plan-updates-file")):
         raise SystemExit("installed_container_options_missing")
     surge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                  "context-surge", "--help"],
@@ -349,6 +351,60 @@ def check() -> None:
                 'quality_rows_examined':5,'quality_recorded_synthetic_http_attempts':10,
                 'quality_run_boundary_preserved':True,'quality_database_and_task_unchanged':True,
                 'quality_socket_calls':0,'quality_credentials_accessed':False,'quality_is_live_acceptance':False}))
+            # Actual installed CLI + collector, wholly synthetic transport/time.
+            plans_root=Path(directory).resolve()/'private-live-plans';plans_root.mkdir(mode=0o700)
+            live_feed=plans_root/'accepted.json';live_input=Path(directory).resolve()/'next-plans.json'
+            live_seed=Path(directory).resolve()/'live-seed.json'
+            live_db=Path(directory).resolve()/'live-window.sqlite3';live_task=Path(directory).resolve()/'live-window-task.json'
+            live_clock=[0];live_starts=[];live_series='14c3094e-64bd-4c15-8d7c-7ea3ca54fba3'
+            live_seed.write_text(json.dumps({'schema_version':1,'plans':[]}));live_seed.chmod(0o600)
+            def publish_live(revision,plans):
+                value={'schema_version':1,'series_id':live_series,'revision':revision,
+                    'declared_at':(task_base+timedelta(seconds=live_clock[0])).isoformat(),
+                    'document':{'schema_version':1,'plans':plans}}
+                live_input.write_text(json.dumps(value));live_input.chmod(0o600)
+                if main(['monitor-plans-publish','--input',str(live_input),'--output',str(live_feed),'--store-id','3014'])!=0:
+                    raise SystemExit('installed_live_plan_publish_failed')
+            def live_plan(seconds,**extra):
+                return {'store_id':'3014','desired_arrival_at':(task_base+timedelta(seconds=seconds)).isoformat(),**extra}
+            def live_sleep(seconds):
+                live_clock[0]+=seconds
+                if live_clock[0]==10:publish_live(2,[live_plan(1200)]*2)
+                if live_clock[0]==70:publish_live(3,[live_plan(600)])
+                if live_clock[0]==100:publish_live(4,[live_plan(600,plan_status='called')])
+            class LivePlansOpener(RemoteFakeOpener):
+                def open(self,request,*,timeout):
+                    if '/groupqueues?' in request.full_url:live_starts.append(live_clock[0])
+                    return super().open(request,timeout=timeout)
+            live_args=['remote-window-collect','--db',str(live_db),'--task-file',str(live_task),
+                '--plan-file',str(live_seed),'--plan-updates-file',str(live_feed),'--store-id','3014',
+                '--duration','121','--max-pairs','10']
+            live_output=io.StringIO()
+            with patch('sushiwait.remote.RemoteClient',return_value=RemoteClient(opener=LivePlansOpener())), \
+                    patch('sushiwait.cli._utc_clock',side_effect=lambda:task_base+timedelta(seconds=live_clock[0])), \
+                    patch('sushiwait.remote._utc',side_effect=lambda:(task_base+timedelta(seconds=live_clock[0])).isoformat()), \
+                    patch('sushiwait.cli.time.monotonic',side_effect=lambda:live_clock[0]), \
+                    patch('sushiwait.cli.time.sleep',side_effect=live_sleep), \
+                    patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('live_plan_auth')) as live_auth, \
+                    contextlib.redirect_stdout(live_output):
+                publish_live(1,[])
+                if main(live_args)!=0:raise SystemExit('installed_live_plan_collect_failed')
+                before_live=live_db.read_bytes(),live_task.read_bytes()
+                publish_live(5,[live_plan(600)])
+                with patch('sushiwait.remote.RemoteClient',side_effect=AssertionError('live_plan_terminal_client')):
+                    if main(live_args+['--resume-task'])!=0:raise SystemExit('installed_live_plan_terminal_failed')
+            live_status=remote_window_status(live_task)
+            if (live_starts!=[0,60,90] or live_clock[0]!=121 or live_auth.call_count
+                    or live_status['accepted_plan_revision']!=4 or live_status['unobserved_plan_revisions']
+                    or live_status['successful_pairs']!=3 or live_status['recorded_http_attempts']!=6
+                    or live_status['maximum_pair_budget']!=10 or live_status['end_reason']!='deadline'
+                    or before_live!=(live_db.read_bytes(),live_task.read_bytes()) or live_status['eta_available']
+                    or any(secret in live_output.getvalue() for secret in (live_series,str(live_feed),str(live_db)))):
+                raise SystemExit('installed_live_plan_semantics_failed')
+            print(json.dumps({'installed_live_plan_updates_ok':True,'accepted_plan_revision':4,
+                'synthetic_saved_pairs':3,'synthetic_http_attempts':6,'shared_60_then_30_then_background':True,
+                'original_deadline_and_budget_preserved':True,'terminal_files_unchanged':True,
+                'socket_calls':0,'credentials_accessed':False,'eta_available':False,'is_live_acceptance':False}))
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
                         or _recovery_poll_target(30, 2, 30) != 36
