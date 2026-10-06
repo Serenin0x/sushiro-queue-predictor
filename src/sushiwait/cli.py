@@ -458,6 +458,15 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--max-pairs", type=int, default=120, help="1–360成对查询，每对最多两次HTTP；首错停止")
     remote_status = commands.add_parser("remote-task-status", help="只读匿名任务摘要；不联网、不检查进程存活")
     remote_status.add_argument("--task-file", required=True)
+    remote_serve = commands.add_parser("remote-serve", help="本机只读号码服务与一份持久匿名任务；固定预算，不提供预测")
+    remote_serve.add_argument("--db", required=True)
+    remote_serve.add_argument("--task-file", required=True)
+    remote_serve.add_argument("--store-id", action="append", required=True)
+    remote_serve.add_argument("--interval", type=int, default=60)
+    remote_serve.add_argument("--samples", type=int, default=120)
+    remote_serve.add_argument("--resume-task", action="store_true")
+    remote_serve.add_argument("--stale-after", type=int, help="本机成功响应年龄阈值30–7200秒；不是上游更新频率")
+    remote_serve.add_argument("--port", type=int, default=8765, help="仅127.0.0.1；1024–65535")
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
                            ("outcome-import", "校验并追加私有结果修订，不验证真实性"),
                            ("outcome-receive", "将新结果修订接入独立私有首次接收库；不认证训练标签")):
@@ -656,6 +665,20 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "remote-serve":
+        from .remoteservice import RemoteQueueService, RemoteServiceError, serve_local
+        try:
+            ids = [canonical_store_id(s) for s in args.store_id]
+            service = RemoteQueueService(db=args.db,task_file=args.task_file,store_ids=ids,
+                interval=args.interval,samples=args.samples,resume=args.resume_task,
+                stale_after_seconds=args.stale_after)
+            serve_local(service,port=args.port)
+            return 1 if service.status()['service_state']=='failed' else 0
+        except KeyboardInterrupt:return 130
+        except RemoteServiceError as error:
+            emit({"ok":False,"source":"crm_remote_v1_1","error_code":str(error)});return 2
+        except (OSError,ValueError,TypeError,KeyError,OverflowError,sqlite3.Error):
+            emit({"ok":False,"source":"crm_remote_v1_1","error_code":"remote_service_input_or_storage_error"});return 2
     if args.command in ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status"):
         from .remote import RemoteClient, RemoteStore, collect_remote, monitor_remote
         from .remotetasks import RemoteTask, RemoteTaskError, collect_remote_task, remote_task_status, task_config

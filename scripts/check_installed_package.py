@@ -1,6 +1,7 @@
 """Check a wheel install outside the checkout, using only a synthetic fixture."""
 
 import argparse
+import asyncio
 import base64
 import contextlib
 from datetime import datetime,timedelta,timezone
@@ -35,7 +36,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
+            ("remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -66,7 +67,8 @@ def check() -> None:
         capture_output=True, text=True, timeout=10, check=True)
     if any(option not in remote_collect_help.stdout for option in ("--task-file", "--resume-task")):
         raise SystemExit("installed_remote_task_options_missing")
-    with tempfile.TemporaryDirectory() as directory:
+    with tempfile.TemporaryDirectory() as directory, asyncio.Runner() as service_runner:
+        service_loop=service_runner.get_loop()
         database = str(Path(directory).resolve() / "synthetic.sqlite3")
         # Fail immediately if the replay/report smoke path tries any socket I/O.
         with patch("socket.socket", side_effect=AssertionError("unexpected_network")), \
@@ -175,6 +177,56 @@ def check() -> None:
                 "remote_task_saved_pair_not_requeried": True, "remote_task_socket_calls": 0,
                 "remote_task_query_credentials_accessed": False,
                 "remote_task_terminal_database_unchanged": True, "remote_task_is_live_acceptance": False}))
+            from sushiwait.remoteservice import RemoteQueueService, RemoteASGI
+            class ServiceOpener(RemoteFakeOpener):
+                def __init__(self):self.calls=0
+                def open(self,request,*,timeout):
+                    self.calls+=1
+                    return super().open(request,timeout=timeout)
+            service_opener=ServiceOpener()
+            service=RemoteQueueService(db=Path(directory).resolve()/"synthetic-service.sqlite3",
+                task_file=Path(directory).resolve()/"synthetic-service-task.json",store_ids=['3014'],
+                interval=30,samples=2,client_factory=lambda:RemoteClient(opener=service_opener))
+            app=RemoteASGI(service)
+            async def service_smoke():
+                inputs=asyncio.Queue();started=asyncio.Event();events=[]
+                async def receive_lifecycle():return await inputs.get()
+                async def send_lifecycle(event):
+                    events.append(event)
+                    if event['type']=='lifespan.startup.complete':started.set()
+                lifecycle=asyncio.create_task(app({'type':'lifespan'},receive_lifecycle,send_lifecycle))
+                await inputs.put({'type':'lifespan.startup'})
+                try:
+                    await asyncio.wait_for(started.wait(),3)
+                    async def saved():
+                        while service.status()['task']['completed_pair_slots']!=1:await asyncio.sleep(.001)
+                    await asyncio.wait_for(saved(),3)
+                    for unused in range(5):
+                        replies=[]
+                        async def receive_http():return {'type':'http.request','body':b'','more_body':False}
+                        async def send_http(event):replies.append(event)
+                        await app({'type':'http','method':'GET','path':'/api/v1/stores/3014/queue','query_string':b''},receive_http,send_http)
+                        view=json.loads(replies[1]['body'])
+                        if (replies[0]['status']!=200 or view['fields']['groupqueues']['state']!='recent_response'
+                                or view['fields']['groupqueues']['payload']['queues']['storeQueue']!=['12','12','13-1']
+                                or view['fields']['storequeuecount']['payload']!={'raw_count':0,'unit':'unknown'}
+                                or view['network_performed_by_read'] or view['eta_available']):
+                            raise SystemExit('installed_remote_service_view_failed')
+                finally:
+                    await inputs.put({'type':'lifespan.shutdown'})
+                    await asyncio.wait_for(lifecycle,3)
+                if [e['type'] for e in events]!=['lifespan.startup.complete','lifespan.shutdown.complete']:
+                    raise SystemExit('installed_remote_service_lifecycle_failed')
+            with patch("sushiwait.cli.read_credentials_file",side_effect=AssertionError('unexpected_credentials')) as service_auth:
+                # asyncio's own selector needs a local socket pair; use a loop
+                # created before the outer socket guard, then run no socket I/O.
+                service_loop.run_until_complete(service_smoke())
+            if (service_opener.calls!=2 or service_auth.call_count or service.status()['worker_alive']
+                    or service.status()['task']['completed_pair_slots']!=1):
+                raise SystemExit('installed_remote_service_ownership_failed')
+            print(json.dumps({'installed_remote_service_asgi_ok':True,'service_saved_pairs':1,
+                'service_synthetic_http_attempts':2,'service_display_reads':5,'service_extra_upstream_requests':0,
+                'service_socket_calls':0,'service_query_credentials_accessed':False,'service_is_live_acceptance':False}))
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
                         or _recovery_poll_target(30, 2, 30) != 36

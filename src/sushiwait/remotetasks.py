@@ -301,14 +301,16 @@ def _chain(digest,row):
     return hashlib.sha256(bytes.fromhex(digest)+body).hexdigest()
 
 
-def collect_remote_task(task,client,*,wall_clock,monotonic_clock,sleep,emit):
+def collect_remote_task(task,client,*,wall_clock,monotonic_clock,sleep,emit,should_stop=lambda:False):
     """Continue remaining bounded slots, waiting a full interval after restart."""
     value=task.value;c=value['config'];total=len(c['store_ids'])*c['samples']
     target=monotonic_clock()+(c['interval'] if task.loaded else 0);round_start=None
     while task.value['cursor']<total and task.value['state']!='failed':
+        if should_stop():break
         if round_start is None:
             delay=max(0,target-monotonic_clock())
             if delay>0:sleep(delay)
+            if should_stop():break
             round_start=monotonic_clock()
         task.begin(now=wall_clock())
         cursor=task.value['cursor'];store=c['store_ids'][cursor%len(c['store_ids'])]
@@ -321,5 +323,6 @@ def collect_remote_task(task,client,*,wall_clock,monotonic_clock,sleep,emit):
             round_start=None
     summary=public_status(task.value)
     summary['ok']=summary['all_slots_successful']
+    if should_stop():summary['stopped_by_request']=True
     emit({'remote_task_summary':summary})
     return summary

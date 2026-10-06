@@ -4,13 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sushiwait"
-version = "0.2.0rc29"
+version = "0.2.0rc30"
 description = "Mainland Sushiro read-only data and private outcome tools"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = []
+
+[project.optional-dependencies]
+server = ["uvicorn==0.53.0"]
 
 [project.scripts]
 sushiwait = "sushiwait.cli:main"
