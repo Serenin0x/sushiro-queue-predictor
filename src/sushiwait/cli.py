@@ -25,6 +25,7 @@ from .storage import SnapshotStore
 from .signals import SignalError, signal_report
 from .packets import PacketError, export_packet
 from .receipts import ReceiptError, read_packet, packet_summary, archive_packet
+from .pending import PendingError, enqueue_packet, pending_status
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
@@ -521,6 +522,12 @@ def build_parser() -> argparse.ArgumentParser:
         receipt.add_argument("--input", required=True, help="明确私有0600或0400 JSON/0700目录，最多4MiB")
         if name == "packet-archive":
             receipt.add_argument("--db", required=True, help="独立私有归档库schema1，不能用快照/个人结果库")
+    for name, description in (("packet-enqueue", "保存公共字段包到有界私有待确认目录；不上传或删除"),
+                              ("pending-status", "只读校验私有待确认目录并输出聚合数量；不上传")):
+        pending = commands.add_parser(name, help=description)
+        pending.add_argument("--directory", required=True, help="本人已有0700专用目录，最多128包")
+        if name == "packet-enqueue":
+            pending.add_argument("--input", required=True, help="明确私有公共字段包，不读取查询凭证")
     return parser
 
 
@@ -672,6 +679,19 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except TaskError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command in ("packet-enqueue", "pending-status"):
+            try:
+                at = _utc_clock().isoformat()
+                result = (enqueue_packet(args.input,args.directory,as_of=at)
+                          if args.command == "packet-enqueue"
+                          else pending_status(args.directory,as_of=at))
+                emit({"ok":result.get("durability_confirmed",True), **result})
+                return 0 if result.get("durability_confirmed",True) else 1
+            except PendingError as error:
+                emit({"ok":False,"error_code":error.error_code,"committed":error.committed,
+                      "durability_confirmed":False,"server_received":False,
+                      "network_performed":False,"credentials_accessed":False})
                 return 1
         if args.command in ("packet-check", "packet-archive"):
             try:

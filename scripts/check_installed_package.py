@@ -33,7 +33,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -244,6 +244,28 @@ def check() -> None:
                     or any(s["server_received"] or s["source_claims_verified"] for s in archive_summaries)
                     or packet_before != hashlib.sha256(Path(database).read_bytes()).digest()):
                 raise SystemExit("installed_packet_archive_semantics_mismatch")
+            pending_directory = Path(directory).resolve() / "pending-packets"
+            pending_directory.mkdir(mode=0o700)
+            pending_summaries = []
+            with patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child, \
+                    patch("sushiwait.cli._utc_clock",return_value=datetime.fromisoformat(group["last_received_at"].replace("Z","+00:00"))):
+                for command in (["packet-enqueue","--input",str(packet_file),"--directory",str(pending_directory)],
+                                ["packet-enqueue","--input",str(packet_file),"--directory",str(pending_directory)],
+                                ["pending-status","--directory",str(pending_directory)]):
+                    pending_output = io.StringIO()
+                    with contextlib.redirect_stdout(pending_output):
+                        if main(command) != 0:
+                            raise SystemExit("installed_pending_packet_failed")
+                    pending_summaries.append(json.loads(pending_output.getvalue()))
+            if (auth.call_count or native.call_count or child.call_count
+                    or pending_summaries[0]["already_queued"] or not pending_summaries[1]["already_queued"]
+                    or pending_summaries[2]["pending_packets"] != 1
+                    or pending_summaries[2]["pending_record_occurrences"] != 1
+                    or any(s["server_received"] or s["source_claims_verified"] for s in pending_summaries)
+                    or packet_before != hashlib.sha256(Path(database).read_bytes()).digest()):
+                raise SystemExit("installed_pending_packet_semantics_mismatch")
             from sushiwait.tasks import CollectionTask
             from sushiwait.storage import SnapshotStore
             task_path = str(Path(directory).resolve() / "collection.json")
@@ -358,6 +380,10 @@ def check() -> None:
         "packet_archive_socket_calls": 0, "packet_archive_native_cli_calls": 0,
         "packet_archive_child_process_calls": 0, "packet_archive_credentials_accessed": False,
         "packet_archive_source_claims_verified": False, "packet_archive_server_received": False,
+        "persistent_pending_packets_ok": True, "pending_packet_count": 1,
+        "pending_socket_calls": 0, "pending_native_cli_calls": 0,
+        "pending_child_process_calls": 0, "pending_credentials_accessed": False,
+        "pending_server_received": False,
         "collection_task_options_ok": True, "private_task_status_ok": True, "task_status_socket_calls": 0}))
 
 

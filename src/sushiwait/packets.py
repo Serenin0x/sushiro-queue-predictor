@@ -222,7 +222,7 @@ def select_packet(database, *, as_of, store_ids, api_profile, data_origin,
                 os.close(descriptor)
 
 
-def _write_packet(body, destination):
+def _write_packet(body, destination, *, before_publish=None):
     """Publish a complete new 0600 file without replacing an existing name.
 
     A hard link provides atomic no-overwrite publication; the temporary link is
@@ -242,6 +242,8 @@ def _write_packet(body, destination):
         else:
             raise PacketError('packet_output_exists')
         os.fsync(parent_fd)
+        if before_publish is not None:
+            before_publish(parent_fd)
         temporary = '.sushiwait-packet-' + secrets.token_hex(16) + '.tmp'
         file_fd = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                           0o600, dir_fd=parent_fd)
