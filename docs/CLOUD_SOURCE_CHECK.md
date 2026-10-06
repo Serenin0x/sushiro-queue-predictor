@@ -33,3 +33,9 @@ response_store_identity_verified=false、count_unit=unknown、source_freshness=u
 后续仍按 [Linux 部署](LINUX_DEPLOYMENT.md)、[接入验收](V0_2_ACCEPTANCE.md) 完成明确主机、24/72 小时与跨日期质量、字段与页面近时对照、HTTPS/访问控制、实际结果标签与预测误差。微信前端在 R18 实时数据条件满足后开发，不要求整个 v1.0 先完成，但本检查单独通过不解除该条件。
 
 依据：[GitHub 手动工作流](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)。工作流须存在于默认分支，并由有相应仓库权限的操作者正常触发；本项目不修改账号权限或保存账号凭据。
+
+## 已核对的实际运行
+
+2026-10-07 00:16（Asia/Shanghai），正常手动触发 [37494387506](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37494387506)，完整提交 1b7e3d2058546e1f21f30d3ff9bda4885ef61e58，job112375047668。真实聚合：Linux/rc35、三店各一对成功、6次GET全部200、15.046秒、retries0、request_accounting_complete=true/unrecorded0，workflow_dispatch completed/success。公开日志没有原始号码或数量，artifact为空。
+
+同一源码的普通检查 [37494041847](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/37494041847) 三种Python各940项/构建/独立安装成功，容器检查64.882秒通过；该容器检查的上游是合成、官方请求0。两次运行不能混合计数，也不代表指定生产主机或24小时连续数据。
