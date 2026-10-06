@@ -392,3 +392,52 @@ def collect_remote(client, database, store_ids, *, interval=60, samples=1, emit=
     return {"ok": True, "stopped_on_failure": False, "successful_pairs": counts,
         "completed_rounds": samples, "target_rounds": samples,
         "maximum_request_budget": len(store_ids) * samples * 2, "retries": 0}
+
+
+def monitor_remote(schedule, client, database, *, wall_clock, monotonic_clock,
+                   sleep, emit=lambda value: None):
+    """Apply the existing shared schedule to anonymous pairs, without auth.
+
+    The deadline bounds new pair starts; an in-flight pair may finish later
+    (two separately bounded GETs). A schedule slot is a pair, not one HTTP.
+    Private plan details never enter output or the observation database.
+    """
+    requests, succeeded = 0, 0
+
+    def finish(ok):
+        result = {"ok": ok, "source": SOURCE, "pairs_started": schedule.count,
+            "successful_pairs": succeeded, "requests_attempted": requests,
+            "maximum_pair_budget": schedule.maximum,
+            "maximum_request_budget": 2 * schedule.maximum,
+            "stopped_on_failure": not ok, "retries": 0,
+            "scheduler_applied": True, "in_process_only": True,
+            "personal_plan_details_in_output": False,
+            "output_requires_private_handling": True,
+            "source_freshness": "unknown", "eta_available": False,
+            "notification_sent": False, "business_operation_performed": False,
+            "missed_call_prevention_guaranteed": False,
+            "upstream_frequency_verified": False, "verified_training_labels": 0}
+        emit({"remote_monitor_summary": result})
+        return result
+
+    while True:
+        decision = schedule.decision(wall=wall_clock().isoformat(), monotonic=monotonic_clock())
+        if decision['done']:
+            return finish(True)
+        if not decision['due_stores']:
+            sleep(max(0, decision['wake_monotonic'] - monotonic_clock()))
+            continue
+        store_id = decision['due_stores'][0]
+        # Recheck at the actual first-GET boundary, including duration/budget.
+        now, mono = wall_clock().isoformat(), monotonic_clock()
+        current = schedule.decision(wall=now, monotonic=mono)
+        if current['done'] or store_id not in current['due_stores']:
+            continue
+        schedule.mark_actual_start(store_id, wall=now, monotonic=mono)
+        record = client.snapshot(store_id)
+        identifier = database.append(record)
+        requests += sum(query['attempted'] for query in record['queries'].values())
+        emit({"id": identifier, "pair": schedule.count, "record": record})
+        if not record['ok']:
+            return finish(False)
+        succeeded += 1

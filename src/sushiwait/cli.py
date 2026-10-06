@@ -440,15 +440,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="sushiwait", description="SUSHIWAIT 数据接入与结果记录工具")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("remote-snapshot", "remote-collect", "remote-report"):
+    for name in ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor"):
         command = commands.add_parser(name, help="独立匿名CRM排队来源；不使用微信凭证，不提供预测")
         command.add_argument("--db", required=True, help="独立私有库；父目录已存在且0700，不使用既有快照库")
-        command.add_argument("--store-id", required=True, **({"action": "append"} if name == "remote-collect" else {}))
+        command.add_argument("--store-id", required=True, **({"action": "append"} if name in ("remote-collect", "remote-monitor") else {}))
         if name == "remote-collect":
             command.add_argument("--interval", type=int, default=60)
             command.add_argument("--samples", type=int, default=1)
         if name == "remote-report":
             command.add_argument("--limit", type=int, default=1000)
+        if name == "remote-monitor":
+            command.add_argument("--plan-file", required=True, help="明确0600私人计划文件，父目录0700；不输出个人时间")
+            command.add_argument("--base-interval", type=int, default=300, help="窗口外周期60–3600秒；30/15分钟前请求60/30秒")
+            command.add_argument("--duration", type=int, default=3600, help="30–3600秒，限制新成对查询开始；在途两请求可随后完成")
+            command.add_argument("--max-pairs", type=int, default=120, help="1–360成对查询，每对最多两次HTTP；首错停止")
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
                            ("outcome-import", "校验并追加私有结果修订，不验证真实性"),
                            ("outcome-receive", "将新结果修订接入独立私有首次接收库；不认证训练标签")):
@@ -647,14 +652,22 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in ("remote-snapshot", "remote-collect", "remote-report"):
-        from .remote import RemoteClient, RemoteStore, collect_remote
+    if args.command in ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor"):
+        from .remote import RemoteClient, RemoteStore, collect_remote, monitor_remote
         try:
-            ids = list(dict.fromkeys(canonical_store_id(s) for s in args.store_id)) if args.command == "remote-collect" else [canonical_store_id(args.store_id)]
+            ids = list(dict.fromkeys(canonical_store_id(s) for s in args.store_id)) if args.command in ("remote-collect", "remote-monitor") else [canonical_store_id(args.store_id)]
             if args.command == "remote-collect" and (not 1 <= len(ids) <= 3 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= 120):
                 raise ValueError("invalid_sampling_bounds")
             if args.command == "remote-report" and not 1 <= args.limit <= 10000:
                 raise ValueError("invalid_report_bounds")
+            if args.command == "remote-monitor":
+                if (not 1 <= len(ids) <= 3 or not 60 <= args.base_interval <= 3600
+                        or not 30 <= args.duration <= 3600 or not 1 <= args.max_pairs <= 360):
+                    raise ValueError("invalid_monitor_bounds")
+                schedule = schedule_from_file(args.plan_file, allowed_stores=ids,
+                    base_interval=args.base_interval, duration_seconds=args.duration,
+                    max_queries=args.max_pairs, wall=datetime.now(timezone.utc).isoformat(),
+                    monotonic=time.monotonic())
             with RemoteStore(args.db, read_only=args.command == "remote-report") as database:
                 if args.command == "remote-report":
                     emit(database.report(ids[0], limit=args.limit))
@@ -664,6 +677,11 @@ def main(argv: list[str] | None = None) -> int:
                     record = client.snapshot(ids[0])
                     emit({"id": database.append(record), "record": record})
                     return 0 if record["ok"] else 1
+                if args.command == "remote-monitor":
+                    summary = monitor_remote(schedule, client, database,
+                        wall_clock=lambda: datetime.now(timezone.utc), monotonic_clock=time.monotonic,
+                        sleep=time.sleep, emit=emit)
+                    return 0 if summary['ok'] else 1
                 summary = collect_remote(client, database, ids, interval=args.interval, samples=args.samples, emit=emit)
                 emit({"collection_summary": summary})
                 return 0 if summary["ok"] else 1

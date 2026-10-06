@@ -35,7 +35,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("remote-snapshot", "remote-collect", "remote-report", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
+            ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -102,6 +102,33 @@ def check() -> None:
             print(json.dumps({"installed_remote_snapshot_and_report_ok": True,
                 "remote_is_live_acceptance": False, "remote_socket_calls": 0,
                 "remote_query_credentials_accessed": False, "remote_report_database_unchanged": True}))
+            remote_plan = Path(directory).resolve() / "synthetic-remote-plan.json"
+            arrival = (datetime.now(timezone.utc) + timedelta(minutes=16)).isoformat()
+            remote_plan.write_text(json.dumps({"schema_version": 1, "plans": [
+                {"store_id": "3014", "desired_arrival_at": arrival}] * 2}))
+            remote_plan.chmod(0o600)
+            plan_before = remote_plan.read_bytes()
+            monitor_output = io.StringIO()
+            monitor_db = Path(directory).resolve() / "synthetic-remote-monitor.sqlite3"
+            with patch("sushiwait.remote.RemoteClient", return_value=RemoteClient(opener=RemoteFakeOpener())), \
+                    patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as monitor_auth, \
+                    contextlib.redirect_stdout(monitor_output):
+                if main(["remote-monitor", "--db", str(monitor_db), "--store-id", "3014",
+                         "--plan-file", str(remote_plan), "--max-pairs", "1"]) != 0:
+                    raise SystemExit("installed_remote_monitor_failed")
+            monitor_values = [json.loads(line) for line in monitor_output.getvalue().splitlines()]
+            summary = monitor_values[-1]["remote_monitor_summary"]
+            if (monitor_auth.call_count or remote_plan.read_bytes() != plan_before
+                    or len(monitor_values) != 2 or summary["pairs_started"] != 1
+                    or summary["successful_pairs"] != 1 or summary["requests_attempted"] != 2
+                    or summary["maximum_request_budget"] != 2 or not summary["scheduler_applied"]
+                    or summary["eta_available"] or summary["personal_plan_details_in_output"]
+                    or arrival in monitor_output.getvalue()):
+                raise SystemExit("installed_remote_monitor_semantics_failed")
+            print(json.dumps({"installed_remote_monitor_ok": True,
+                "remote_monitor_coalesced_pair_count": 1,
+                "remote_monitor_socket_calls": 0, "remote_monitor_query_credentials_accessed": False,
+                "remote_monitor_plan_file_unchanged": True, "remote_monitor_is_live_acceptance": False}))
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
                         or _recovery_poll_target(30, 2, 30) != 36

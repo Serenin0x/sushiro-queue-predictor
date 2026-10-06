@@ -41,6 +41,7 @@ Python3.11+，先安装本项目；使用已存在、权限0700的独立私有�
 sushiwait remote-snapshot --db /private/runtime/remote.sqlite3 --store-id 3014
 sushiwait remote-collect --db /private/runtime/remote.sqlite3 --store-id 3004 --store-id 3014 --store-id 2009 --interval 30 --samples 30
 sushiwait remote-report --db /private/runtime/remote.sqlite3 --store-id 3014
+sushiwait remote-monitor --db /private/runtime/remote.sqlite3 --store-id 3014 --plan-file /private/runtime/plan.json --base-interval 300 --duration 3600 --max-pairs 120
 ```
 
 `remote-snapshot` 先查号码；成功才查数量，分别保存结果。`remote-collect` 最多1–3店、30–3600秒周期、1–120轮；每店每轮最多两个请求，首个失败保存失败记录并结束，零自动重试、不追赶积压请求。慢轮错过下一目标会等待一个完整周期。当前是固定周期验证，不接私人计划、自动提醒或重排；用餐前30/15分钟的共享策略仍见 [ADAPTIVE_COLLECTION.md](ADAPTIVE_COLLECTION.md)，不能把它的实证套到本命令。
@@ -48,6 +49,14 @@ sushiwait remote-report --db /private/runtime/remote.sqlite3 --store-id 3014
 `remote-report` 只读、零上游查询，返回有界窗口、成功/失败、实际起始间隔、各队列展示变化次数与最后一次结果。报告不会自动将最后失败替换成旧成功。默认最多1000条，上限10000，窗口截断明确显示。
 
 新数据库表 `remote_samples`、schema1，与原快照schema2及个人结果库完全隔离；不迁移旧库。父目录独占写锁、只读共享锁、文件身份/权限复核、拒绝符号/硬链接及未知结构。没有实现持久恢复、全国调度、远程数据包或上游许可认证；停止后再次运行是新的有界任务，不自动补采缺口。报告包含实时门店号码，应按项目数据规则处理，不能拿测试合成记录充当真实训练数据。
+
+## rc28 同店共享的60/30秒匿名监控
+
+remote-monitor复用[同店共享策略](SHARED_MONITORING.md)与[自适应调度](ADAPTIVE_COLLECTION.md)的既有私人计划格式。明确1–3店及0600计划文件/0700父目录；最多128计划，同店合并一次成对查询，基准60–3600秒，前30/15分钟请求60/30秒并提前重算边界，实际第一GET开始锚定后续目标；睡眠漏掉的槽位不追补。叫号偏移沿用+10/-10语义，最早叫号/加速输入是外部提供值，不自动生成预测或真过号率。
+
+时长30–3600秒限制新成对查询的开始；已开始的一对可以在截止后完成，仍受两个各15秒HTTP上限。max-pairs为全部门店共享的1–360对预算，最多两倍HTTP，不能当每店360次或把一对当一个请求。号码查询失败不请求数量，数量失败保留部分队列；首错保存并停止、零重试。摘要保留实际成对次数/HTTP尝试次数及ETA/提醒/业务未验收标记，不输出个人计划时间、修改计划文件、读取微信凭证或自动回退到SAPI。
+
+本版本仍是进程内有界调度，无持久恢复/常驻守护/预测/提醒/自动排队，源单位和新鲜度标记保持未知；13项专项与806项完整软件检查通过，匿名真实调度及安装/公开证据在交接E0223起逐次记录。rc27两小时采样仍用原安装包和独立库，不因源码升级而借称rc28实测。
 
 ## 进入长期路线的条件
 
