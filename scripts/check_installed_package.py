@@ -33,7 +33,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -266,6 +266,25 @@ def check() -> None:
                     or any(s["server_received"] or s["source_claims_verified"] for s in pending_summaries)
                     or packet_before != hashlib.sha256(Path(database).read_bytes()).digest()):
                 raise SystemExit("installed_pending_packet_semantics_mismatch")
+            from sushiwait.receiver import receive_packet
+            receiver_database = Path(directory).resolve() / "receiver-archive.sqlite3"
+            with patch("sushiwait.cli.read_credentials_file",side_effect=AssertionError("unexpected_query_auth")) as auth, \
+                    patch("sushiwait.cli.read_receiver_token",side_effect=AssertionError("unexpected_receiver_auth")) as receiver_auth, \
+                    patch("subprocess.Popen",side_effect=AssertionError("unexpected_child")) as child, \
+                    patch("sushiwait.surgeguard._command",side_effect=AssertionError("unexpected_native_command")) as native:
+                at=datetime.fromisoformat(group["last_received_at"].replace("Z","+00:00"))
+                receipts=[receive_packet(packet_file.read_bytes(),receiver_database,now=at) for _ in range(2)]
+                invalid_receiver=io.StringIO()
+                with contextlib.redirect_stdout(invalid_receiver):
+                    if main(["packet-receiver","--db",str(receiver_database),
+                             "--receiver-token-file",str(Path(directory)/"absent.token"),"--seconds","0"])!=1:
+                        raise SystemExit("installed_receiver_invalid_limits_accepted")
+            if (auth.call_count or receiver_auth.call_count or child.call_count or native.call_count
+                    or [s["inserted_records"] for s in receipts]!=[1,0]
+                    or receipts[1]["duplicate_records"]!=1
+                    or any(s["remote_deployment_verified"] or s["source_claims_verified"] for s in receipts)
+                    or json.loads(invalid_receiver.getvalue())["error_code"]!="receiver_invalid_limits"):
+                raise SystemExit("installed_receiver_semantics_mismatch")
             from sushiwait.tasks import CollectionTask
             from sushiwait.storage import SnapshotStore
             task_path = str(Path(directory).resolve() / "collection.json")
@@ -384,6 +403,11 @@ def check() -> None:
         "pending_socket_calls": 0, "pending_native_cli_calls": 0,
         "pending_child_process_calls": 0, "pending_credentials_accessed": False,
         "pending_server_received": False,
+        "packet_receiver_core_ok": True, "receiver_invalid_limits_ok": True,
+        "receiver_socket_calls": 0, "receiver_query_credentials_accessed": False,
+        "receiver_invalid_limits_token_file_accessed": False,
+        "receiver_child_process_calls": 0, "receiver_native_cli_calls": 0,
+        "receiver_remote_deployment_verified": False,
         "collection_task_options_ok": True, "private_task_status_ok": True, "task_status_socket_calls": 0}))
 
 

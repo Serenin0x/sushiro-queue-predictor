@@ -26,6 +26,7 @@ from .signals import SignalError, signal_report
 from .packets import PacketError, export_packet
 from .receipts import ReceiptError, read_packet, packet_summary, archive_packet
 from .pending import PendingError, enqueue_packet, pending_status
+from .receiver import ReceiverError,read_receiver_token,run_receiver,validate_receiver_limits
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
@@ -528,6 +529,12 @@ def build_parser() -> argparse.ArgumentParser:
         pending.add_argument("--directory", required=True, help="本人已有0700专用目录，最多128包")
         if name == "packet-enqueue":
             pending.add_argument("--input", required=True, help="明确私有公共字段包，不读取查询凭证")
+    receiver = commands.add_parser("packet-receiver", help="有界本机回环接收服务；独立凭证、验证后归档，不部署远端")
+    receiver.add_argument("--db", required=True, help="本人0700目录中的独立归档库")
+    receiver.add_argument("--receiver-token-file", required=True, help="独立私有接收端口令文件，不能使用寿司郎凭证")
+    receiver.add_argument("--port", type=int, default=0, help="127.0.0.1端口；0为随机空闲端口")
+    receiver.add_argument("--seconds", type=int, default=30, help="1–60秒，独立截止关闭连接")
+    receiver.add_argument("--max-requests", type=int, default=10, help="最多1–100个连接，包含拒绝的连接")
     return parser
 
 
@@ -679,6 +686,21 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except TaskError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "packet-receiver":
+            try:
+                validate_receiver_limits(port=args.port,seconds=args.seconds,max_requests=args.max_requests)
+                if os.path.abspath(args.db)==os.path.abspath(args.receiver_token_file):
+                    raise ReceiverError("receiver_path_conflict")
+                token=read_receiver_token(args.receiver_token_file)
+                result=run_receiver(args.db,token,port=args.port,seconds=args.seconds,
+                                    max_requests=args.max_requests,on_ready=emit)
+                emit({"ok":True,**result})
+                return 0
+            except ReceiverError as error:
+                emit({"ok":False,"error_code":error.error_code,
+                      "query_credentials_accessed":False,"outbound_network_performed":False,
+                      "remote_deployment_verified":False})
                 return 1
         if args.command in ("packet-enqueue", "pending-status"):
             try:

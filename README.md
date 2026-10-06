@@ -27,7 +27,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。单店在同进程更新通过后保留原采样目标，避免再次等完整周期；最终包本轮跨更新间隔为 98.760 秒，恢复后约 30 秒；更新缺口和长期稳定性继续验证。长期无人值守与服务器独立更新仍待验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料。新增包格式校验与本机事务归档，重复不新增、同标识不同内容整批停止；新增有容量上限的持久待确认目录，重开后仍能校验已保存的包，相同包重复加入保持原文件；当前不上传或启动服务器。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料。新增包格式校验与本机事务归档，重复不新增、同标识不同内容整批停止；新增有容量上限的持久待确认目录，重开后仍能校验已保存的包，相同包重复加入保持原文件；新增有界本机接收服务，独立校验身份、验证整包并事务归档，成功后返回对应确认；远程上传与部署继续实现。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bf4fbb34b32ed56d-dark.svg"><img src="assets/readme-labels/bf4fbb34b32ed56d-light.svg" alt="看清采集是否可靠" width="130" height="20"></picture></strong>：报告区分请求失败、字段处理失败与本机停采，统计实际请求间隔、展示号码变化和字段状态。明确统计窗口，帮助发现异常；相同数据不会被当成刚更新的数据；可离线查看私有任务的成功、失败与未知槽位，不读取凭证或查询门店。
 
@@ -39,7 +39,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证，提醒与长期调度继续推进。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、654 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、678 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -71,7 +71,7 @@
 
 当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，单店恢复节奏见 [恢复周期说明](docs/RECOVERY_CADENCE.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。
 
-字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录；本机公共字段导出、分页和保存状态见[导出说明](docs/PUBLIC_PACKETS.md)，接收格式校验与本机去重/冲突规则见[归档说明](docs/PACKET_ARCHIVE.md)，持久待确认目录与容量/故障规则见[保存说明](docs/PENDING_PACKETS.md)。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)。
+字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录；本机公共字段导出、分页和保存状态见[导出说明](docs/PUBLIC_PACKETS.md)，接收格式校验与本机去重/冲突规则见[归档说明](docs/PACKET_ARCHIVE.md)，持久待确认目录与容量/故障规则见[保存说明](docs/PENDING_PACKETS.md)，本机接收与确认协议见[服务说明](docs/PACKET_RECEIVER.md)。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)。
 
 展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。用餐偏移与近时段刷新目标见[监控时间策略](docs/MONITORING_TARGETS.md)，离线工具保留；[同店共享策略](docs/SHARED_MONITORING.md)会合并请求目标，并在时间窗口切换前安排重新判断。[自适应采集](docs/ADAPTIVE_COLLECTION.md)将策略接入一个进程内的有界只读查询，遇到凭证保护或首个失败停止；尚无常驻调度或提醒。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc19 持久待确认候选版，正式 v0.2.0 尚未完成验收**。新增有容量上限的私有待确认目录，重复包保留原文件，重开后可校验内容与范围；14 项新增检查及 654 项完整本机检查通过，28 模块独立安装及真实两页持久保存/重复保留已验证，本次 GitHub 检查继续验证。上一归档版已完成真实 7 条归档、重复 7 条核对及三版本各 640 项检查；同进程跨更新已有五个不同任务的实证，最近缺口 98.760 秒。三店更长任务已跨下一正常更新恢复，完整成绩仍待结束。当前没有远程服务器接收、真实训练标签或已验收预测，闭店数据仍不能验证营业叫号与源新鲜度。
+当前代码为 **v0.2.0rc20 本机接收候选版，正式 v0.2.0 尚未完成验收**。新增独立身份的有界本机接收服务，整包校验、事务归档后返回确认，响应丢失后的同包重试保留重复语义；24 项新增检查与 678 项完整本机检查通过，29 模块独立安装及真实两页四次本机接收已验证，新增 7 条、原样重试识别重复 7 条；本次 GitHub 检查继续验证。上一持久保存版已完成真实两页入队/重复保留及三版本各 654 项检查。三店每店 60 次已完整结束，共 180 次成功，跨下一正常更新恢复；另一轮更长的营业阶段任务已开始；本次三店缺口约 183 秒，仍未达到临近叫号的持续监控要求。当前没有远程部署、真实训练标签或已验收预测。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/971ab87ab723c44b-dark.svg"><img src="assets/readme-labels/971ab87ab723c44b-light.svg" alt="2026-10-06 · v0.2.0rc20" width="179" height="20"></picture></strong>：新增有界本机接收服务，独立接收凭证、完整校验、事务归档及对应确认；24 项新增检查与 678 项完整本机检查通过。慢连接截止和已提交丢响应后的同包重试已验证，远程部署与持久确认仍在实现。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/1bda4b5e8096c31f-dark.svg"><img src="assets/readme-labels/1bda4b5e8096c31f-light.svg" alt="2026-10-06 · v0.2.0rc19" width="179" height="20"></picture></strong>：新增本机持久待确认目录，容量有界、相同包不重复保存、异常保留旧资料。提供只读状态核对，14 项新增检查及 654 项完整本机检查通过；上传与可信确认仍在实现。
 
