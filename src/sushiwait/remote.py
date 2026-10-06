@@ -315,10 +315,38 @@ class RemoteStore:
             raise ValueError("remote_database_read_only")
         self._guard()
         record = validate_record(record)
-        text = json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        if len(text.encode()) > MAX_RECORD:
-            raise ValueError("remote_record_too_large")
+        from . import remoteintake
         try:
+            self.db.execute('BEGIN IMMEDIATE')
+            now = remoteintake._clock()
+            receipt = remoteintake.make_receipt(record, self.run_id, now)
+            previous = self.db.execute('SELECT CASE WHEN length(run_id)<=36 THEN run_id END,CASE WHEN length(CAST(payload_json AS BLOB))<=? '
+                'THEN payload_json END FROM remote_samples ORDER BY id DESC LIMIT 1', (MAX_RECORD,)).fetchone()
+            if previous is not None:
+                stored = json.loads(previous[1], object_pairs_hook=_unique_json_object,
+                                    parse_constant=_reject_json_constant)
+                prior = remoteintake.read_receipt(stored, validate_record(stored), previous[0])
+                if prior is None:
+                    # A cooperating older writer can append a legacy row after
+                    # upgrade. Find the most recent envelope, without assigning
+                    # a receipt to any intervening legacy observation.
+                    known = self.db.execute('SELECT CASE WHEN length(run_id)<=36 THEN run_id END,'
+                        'CASE WHEN length(CAST(payload_json AS BLOB))<=? THEN payload_json END '
+                        'FROM remote_samples WHERE instr(payload_json,?)>0 ORDER BY id DESC LIMIT 1',
+                        (MAX_RECORD, '"local_intake"')).fetchone()
+                    if known is not None:
+                        stored = json.loads(known[1], object_pairs_hook=_unique_json_object,
+                                            parse_constant=_reject_json_constant)
+                        prior = remoteintake.read_receipt(stored, validate_record(stored), known[0])
+                        if prior is None:
+                            raise ValueError('remote_local_receipt_invalid')
+                if prior is not None and _time(receipt['received_at']) < prior:
+                    raise ValueError('remote_local_receipt_clock_order')
+            # validate_record strips caller metadata; this receipt is assigned
+            # afresh for this appended row, never backfilled from a claim.
+            text = remoteintake._canonical({**record, 'local_intake': receipt})
+            if len(text.encode()) > MAX_RECORD:
+                raise ValueError('remote_record_too_large')
             row = self.db.execute("INSERT INTO remote_samples(run_id,store_id,ok,payload_json) VALUES(?,?,?,?)",
                 (self.run_id, record["requested_store_id"], int(record["ok"]), text))
             self._guard()

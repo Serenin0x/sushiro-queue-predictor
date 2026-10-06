@@ -465,6 +465,8 @@ def build_parser() -> argparse.ArgumentParser:
     remote_signal.add_argument("--window", type=int, default=120)
     remote_signal.add_argument("--max-gap", type=int, default=90)
     remote_signal.add_argument("--limit", type=int, default=10000)
+    remote_signal.add_argument("--availability-basis", choices=("response-completion","local-first-receipt"),
+                               default="response-completion", help="响应时刻重建，或新数据的本机首次接收筛选")
     remote_serve = commands.add_parser("remote-serve", help="本机只读号码服务与一份持久匿名任务；固定预算，不提供预测")
     remote_serve.add_argument("--db", required=True)
     remote_serve.add_argument("--task-file", required=True)
@@ -693,7 +695,7 @@ def main(argv: list[str] | None = None) -> int:
             store_id=canonical_store_id(args.store_id)
             with RemoteStore(args.db,read_only=True) as database:
                 emit(remote_signal_report(database,store_id,as_of=args.as_of,window_seconds=args.window,
-                    max_gap_seconds=args.max_gap,sample_limit=args.limit))
+                    max_gap_seconds=args.max_gap,sample_limit=args.limit,availability_basis=args.availability_basis))
             return 0
         except RemoteSignalError as error:
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':error.error_code});return 2

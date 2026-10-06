@@ -129,6 +129,31 @@ def check() -> None:
                 'remote_signal_database_unchanged':True,'remote_signal_socket_calls':0,
                 'remote_signal_query_credentials_accessed':False,'remote_signal_clients_created':0,
                 'remote_signal_is_live_acceptance':False}))
+            from sushiwait.remote import RemoteStore
+            from sushiwait.remoteintake import read_receipt
+            from sushiwait.remote import validate_record
+            with RemoteStore(remote_db,read_only=True) as receipt_db:
+                intake_run,intake_body=receipt_db.db.execute('SELECT run_id,payload_json FROM remote_samples').fetchone()
+                intake_stored=json.loads(intake_body)
+                intake_at=read_receipt(intake_stored,validate_record(intake_stored),intake_run)
+            intake_output=io.StringIO()
+            with patch('sushiwait.remote.RemoteClient',side_effect=AssertionError('unexpected_client')) as intake_client, \
+                    patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('unexpected_credentials')) as intake_auth, \
+                    contextlib.redirect_stdout(intake_output):
+                for at in (intake_at-timedelta(microseconds=1),intake_at):
+                    if main(['remote-signal-report','--db',str(remote_db),'--store-id','3014',
+                             '--as-of',at.isoformat(),'--availability-basis','local-first-receipt'])!=0:
+                        raise SystemExit('installed_remote_intake_failed')
+            intake_values=[json.loads(v) for v in intake_output.getvalue().splitlines()]
+            if (intake_client.call_count or intake_auth.call_count or signal_before!=remote_db.read_bytes()
+                    or [v['scan'].get('admitted_pair_rows',0) for v in intake_values]!=[0,1]
+                    or any(v['availability_basis']!='local-first-receipt' or v['durable_availability_verified']
+                           or v['historical_availability_verified'] or v['independent_time_attestation']
+                           or v['eta_available'] for v in intake_values)):
+                raise SystemExit('installed_remote_intake_semantics_failed')
+            print(json.dumps({'installed_remote_intake_ok':True,'synthetic_first_receipt_cutoff_rows':[0,1],
+                'remote_intake_database_unchanged':True,'socket_calls':0,'credentials_accessed':False,
+                'clients_created':0,'is_live_acceptance':False}))
             remote_plan = Path(directory).resolve() / "synthetic-remote-plan.json"
             arrival = (datetime.now(timezone.utc) + timedelta(minutes=16)).isoformat()
             remote_plan.write_text(json.dumps({"schema_version": 1, "plans": [

@@ -10,6 +10,7 @@ from .calendar import date_features
 from .client import _unique_json_object, _reject_json_constant
 from .remote import SOURCE, QUEUE_NAMES, ENDPOINTS, MAX_RECORD, _id, validate_record
 from .signals import SignalError, _time, _text, _stats, _add, _finish, _comparison
+from .remoteintake import read_receipt
 
 
 class _Stream:
@@ -20,8 +21,8 @@ class _Stream:
         self.count_seconds=0.;self.cross=0
         self.queues={k:{'whole':_stats(),'previous':_stats(),'recent':_stats(),'cross':0} for k in QUEUE_NAMES}
 
-    def invalidate(self):
-        self.previous=None;self.kind='unknown';self.breaks['invalid_record']+=1
+    def invalidate(self, reason='invalid_record'):
+        self.previous=None;self.kind='unknown';self.breaks[reason]+=1
 
     def add(self, query, run, anchor):
         received=_time(query['received_at']) if query['attempted'] else anchor
@@ -80,7 +81,8 @@ class _Stream:
         return value
 
 
-def remote_signal_report(store, store_id, *, as_of, window_seconds=120, max_gap_seconds=90, sample_limit=10000):
+def remote_signal_report(store, store_id, *, as_of, window_seconds=120, max_gap_seconds=90, sample_limit=10000,
+                         availability_basis='response-completion'):
     """Read one private completed database; never contact endpoints or derive ETA."""
     try:_id(store_id)
     except ValueError:raise SignalError('invalid_remote_signal_store_id') from None
@@ -90,6 +92,8 @@ def remote_signal_report(store, store_id, *, as_of, window_seconds=120, max_gap_
         raise SignalError('invalid_remote_signal_bounds')
     at=_time(as_of)
     if at is None:raise SignalError('invalid_remote_signal_time')
+    if availability_basis not in ('response-completion','local-first-receipt'):
+        raise SignalError('invalid_remote_signal_availability_basis')
     try:start=at-timedelta(seconds=window_seconds)
     except OverflowError:raise SignalError('invalid_remote_signal_time') from None
     if not store.read_only or store.db.in_transaction:raise SignalError('remote_signal_requires_idle_read_only_connection')
@@ -105,34 +109,45 @@ def remote_signal_report(store, store_id, *, as_of, window_seconds=120, max_gap_
             counts['scanned_rows']+=1
             try:
                 if type(run) is not str or len(run)!=36 or str(UUID(run))!=run:raise ValueError
-                record=validate_record(json.loads(encoded,object_pairs_hook=_unique_json_object,
-                    parse_constant=_reject_json_constant))
+                stored=json.loads(encoded,object_pairs_hook=_unique_json_object,
+                    parse_constant=_reject_json_constant)
+                record=validate_record(stored)
                 if record['requested_store_id']!=store_id or type(ok) is not int or ok!=int(record['ok']):raise ValueError
                 queries=record['queries']
                 times=[_time(q['received_at']) for q in queries.values() if q['attempted']]
                 if not times or any(t is None for t in times):raise ValueError
-                # Admit the complete saved pair, including a count failure,
-                # only after both response times. SQLite first-seen is unknown.
                 completed=max(times)
+                receipt=read_receipt(stored,record,run) if availability_basis=='local-first-receipt' else None
             except (ValueError,TypeError,KeyError,OverflowError,RecursionError,UnicodeError):
                 counts['invalid_records']+=1
                 for stream in streams.values():stream.invalidate()
                 continue
             if completed>at:
                 counts['future_pair_rows_excluded']+=1;continue
+            if availability_basis=='local-first-receipt':
+                if receipt is None:
+                    counts['local_receipt_missing_rows']+=1
+                    for stream in streams.values():stream.invalidate('local_receipt_missing')
+                    continue
+                counts['local_receipt_rows_checked']+=1
+                if receipt>at:
+                    counts['future_local_receipts_excluded']+=1;continue
             counts['admitted_pair_rows']+=1
             for endpoint,stream in streams.items():stream.add(queries[endpoint],run,completed)
         store._guard()
     finally:store.db.rollback()
-    incomplete=total>sample_limit and counts['future_pair_rows_excluded']>0
+    incomplete=total>sample_limit and (counts['future_pair_rows_excluded']+counts['future_local_receipts_excluded'])>0
     return {'schema_version':1,'feature_policy':'remote-display-window-v1','source':SOURCE,
         'requested_store_id':store_id,'as_of':_text(at),'window_started_at':_text(start),
         'window_seconds':window_seconds,'max_gap_seconds':max_gap_seconds,
         'endpoints':{e:s.finish(window_seconds,incomplete) for e,s in streams.items()},
-        'scan':{'selection':'latest_store_ids_then_complete_pair_response_time_filter','sample_limit':sample_limit,
+        'scan':{'selection':'latest_store_ids_then_complete_pair_response_time_filter'
+            +('_and_local_first_receipt_filter' if availability_basis=='local-first-receipt' else ''),'sample_limit':sample_limit,
             'total_store_rows':total,'truncated':total>sample_limit,**dict(sorted(counts.items()))},
         'diagnostics_are_model_inputs':False,'historical_availability_verified':False,
-        'time_selection_semantics':'local_response_completion_reconstruction_not_persistence_first_seen',
+        'availability_basis':availability_basis,'independent_time_attestation':False,'durable_availability_verified':False,
+        'time_selection_semantics':'local_writer_receipt_before_commit_not_verified_durable_availability'
+            if availability_basis=='local-first-receipt' else 'local_response_completion_reconstruction_not_persistence_first_seen',
         'calendar_at_as_of':date_features(_text(at),as_of=_text(at)),
         'source_freshness':'unknown','response_store_identity_verified':False,'atomic_snapshot':False,
         'complete_queue_cursor_available':False,'eta_available':False,'true_no_show_rate':None,

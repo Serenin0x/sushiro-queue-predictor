@@ -28,6 +28,8 @@ sushiwait remote-signal-report --db /private/tmp/queue-observations/remote.sqlit
 
 时间选择基于本机记录的响应结束时刻重建。现有匿名库没有首次提交接收账本，所以`historical_availability_verified=false`；不能用响应时间证明数据库当时已经保存，不能把这份报告当已审核训练集。没有源更新时间、可核验门店身份或完整叫号游标，上游新鲜度一直unknown。
 
+rc33补充[本机首次接收](ANONYMOUS_INTAKE.md)：新写入的观测另存本机事务内接收时刻，`--availability-basis local-first-receipt`额外排除截止之后才收到的记录；旧行缺失接收时刻时保留未知并断链。默认仍是响应时刻重建。接收时刻读取于提交前，不能认证历史持久可用，因此上段的验证false保持；实际变化间隔继续使用两条响应各自的时钟。
+
 扫描先选该门店最近记录ID，再按成对响应时刻过滤。未来记录可能挤出较早历史；上限截断且出现未来行时，availability标`history_scan_incomplete`，禁止把比较称当前有效。总行数、未来/坏行计数及截断诊断都不是模型输入，部分覆盖仍只描述实际扫描子集，不保证完整历史。有效未来失败行不打断已经收到的历史；无法可信解析时刻的坏行保守断链。
 
 `calendar_at_as_of`沿用[日期模块](CALENDAR.md)：Asia/Shanghai星期、月份、日历季节、普通工作日/周末、2026节假日与调休，公告可用边界保持；未知年份保持unknown。这里的日期属于分析时刻，不是所有窗口内样本或门店营业状态的替代，也不建立全年统计规律。本版没有把日历或变化指标接到等待时间模型。
