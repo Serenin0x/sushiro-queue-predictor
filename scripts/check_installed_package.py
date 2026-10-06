@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+from datetime import datetime,timedelta,timezone
 import io
 import json
 import hashlib
@@ -32,7 +33,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -154,7 +155,6 @@ def check() -> None:
                     or shared_policy["scheduler_applied"] or shared_policy["eta_available"]
                     or not shared_policy["output_requires_private_handling"]):
                 raise SystemExit("installed_shared_monitoring_semantics_mismatch")
-            from datetime import datetime, timedelta, timezone
             from types import SimpleNamespace
             adaptive_file = Path(directory).resolve() / "adaptive-plans.json"
             adaptive_database = str(Path(directory).resolve() / "adaptive.sqlite3")
@@ -224,7 +224,26 @@ def check() -> None:
                     or packet["verified_training_labels"] != 0
                     or packet["records"][0]["display"]["groupQueues"]["groups"]["boothQueue"]["value"] != ["B001"]):
                 raise SystemExit("installed_packet_export_semantics_mismatch")
-            from datetime import datetime, timezone
+            archive_database = Path(directory).resolve() / "packet-archive.sqlite3"
+            archive_summaries = []
+            with patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child, \
+                    patch("sushiwait.cli._utc_clock",return_value=datetime.fromisoformat(group["last_received_at"].replace("Z","+00:00"))):
+                for command in (["packet-check","--input",str(packet_file)],
+                                ["packet-archive","--input",str(packet_file),"--db",str(archive_database)],
+                                ["packet-archive","--input",str(packet_file),"--db",str(archive_database)]):
+                    archive_output = io.StringIO()
+                    with contextlib.redirect_stdout(archive_output):
+                        if main(command) != 0:
+                            raise SystemExit("installed_packet_archive_failed")
+                    archive_summaries.append(json.loads(archive_output.getvalue()))
+            if (auth.call_count or native.call_count or child.call_count
+                    or [s.get("inserted_records") for s in archive_summaries] != [None,1,0]
+                    or archive_summaries[2]["duplicate_records"] != 1
+                    or any(s["server_received"] or s["source_claims_verified"] for s in archive_summaries)
+                    or packet_before != hashlib.sha256(Path(database).read_bytes()).digest()):
+                raise SystemExit("installed_packet_archive_semantics_mismatch")
             from sushiwait.tasks import CollectionTask
             from sushiwait.storage import SnapshotStore
             task_path = str(Path(directory).resolve() / "collection.json")
@@ -335,6 +354,10 @@ def check() -> None:
         "packet_socket_calls": 0, "packet_native_cli_calls": 0,
         "packet_child_process_calls": 0, "packet_query_credentials_accessed": False,
         "packet_server_received": False,
+        "local_packet_archive_ok": True, "packet_archive_duplicate_records": 1,
+        "packet_archive_socket_calls": 0, "packet_archive_native_cli_calls": 0,
+        "packet_archive_child_process_calls": 0, "packet_archive_credentials_accessed": False,
+        "packet_archive_source_claims_verified": False, "packet_archive_server_received": False,
         "collection_task_options_ok": True, "private_task_status_ok": True, "task_status_socket_calls": 0}))
 
 

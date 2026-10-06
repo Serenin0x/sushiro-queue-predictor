@@ -24,6 +24,7 @@ from .localpaths import local_data_directory
 from .storage import SnapshotStore
 from .signals import SignalError, signal_report
 from .packets import PacketError, export_packet
+from .receipts import ReceiptError, read_packet, packet_summary, archive_packet
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
@@ -514,6 +515,12 @@ def build_parser() -> argparse.ArgumentParser:
     packet.add_argument("--as-of", required=True, help="带秒与时区的资料截止时间；选中未来记录时整页拒绝")
     packet.add_argument("--after-id", type=int, default=0, help="本机同库同范围的已保存游标，不代表服务端确认")
     packet.add_argument("--limit", type=int, default=1000, help="本次按ID升序选择1–1000条")
+    for name, description in (("packet-check", "校验私有公共字段包的格式/校验值；不认证来源或联网"),
+                              ("packet-archive", "事务归档公共字段包，重复不新增、冲突整批停止；不启动服务器")):
+        receipt = commands.add_parser(name, help=description)
+        receipt.add_argument("--input", required=True, help="明确私有0600或0400 JSON/0700目录，最多4MiB")
+        if name == "packet-archive":
+            receipt.add_argument("--db", required=True, help="独立私有归档库schema1，不能用快照/个人结果库")
     return parser
 
 
@@ -665,6 +672,22 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except TaskError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command in ("packet-check", "packet-archive"):
+            try:
+                now = _utc_clock()
+                if args.command == "packet-check":
+                    result = packet_summary(read_packet(args.input, as_of=now.isoformat()))
+                    result["validation_only"] = True
+                else:
+                    result = archive_packet(args.input, args.db, now=now)
+                emit({"ok":True, **result})
+                return 0
+            except ReceiptError as error:
+                emit({"ok":False, "error_code":error.error_code,
+                      "local_archive_commit_status":error.commit_status,
+                      "durability_confirmed":False,"network_performed":False,
+                      "credentials_accessed":False,"server_received":False})
                 return 1
         if args.command == "packet-export":
             try:
