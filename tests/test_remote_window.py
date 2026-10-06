@@ -171,7 +171,14 @@ class RemoteWindowTests(unittest.TestCase):
         self.clock.seconds=1
         with self.assertRaisesRegex(RemoteTaskError,'result_conflict'):self.collect(config,resume=True)
     def test_database_file_replacement_is_not_recovered(self):
-        config=self.pending();original=self.db.read_bytes();self.db.unlink();self.db.write_bytes(original);self.db.chmod(0o600)
+        config=self.pending();original_info=self.db.stat();replacement=self.parent/'replacement.sqlite3'
+        replacement.write_bytes(self.db.read_bytes());replacement.chmod(0o600)
+        replacement_info=replacement.stat()
+        # Keep the original inode allocated until the replacement exists;
+        # unlink/recreate can reuse it on Linux and cannot test identity change.
+        self.assertNotEqual((original_info.st_dev,original_info.st_ino),
+            (replacement_info.st_dev,replacement_info.st_ino))
+        os.replace(replacement,self.db)
         self.clock.seconds=1
         with self.assertRaisesRegex(RemoteTaskError,'database_changed'):self.collect(config,resume=True)
     def test_status_has_no_plan_times_paths_or_hashes_and_does_not_query(self):
