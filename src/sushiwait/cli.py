@@ -496,6 +496,11 @@ def build_parser() -> argparse.ArgumentParser:
             window.add_argument("--listen-host",choices=("127.0.0.1","0.0.0.0"),default="127.0.0.1")
     window_status = commands.add_parser("remote-window-status",help="只读保存窗口状态；不读计划、不联网、不检查存活")
     window_status.add_argument("--task-file",required=True)
+    window_quality = commands.add_parser("remote-window-quality",help="只读终态窗口的完整结果链、间隔缺口与日期分布；不认证源新鲜度")
+    window_quality.add_argument("--db",required=True)
+    window_quality.add_argument("--task-file",required=True)
+    window_quality.add_argument("--as-of",required=True)
+    window_quality.add_argument("--max-gap",type=int,default=360,help="1–7200秒；明确的诊断阈值，不自动认定允许频率")
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
                            ("outcome-import", "校验并追加私有结果修订，不验证真实性"),
                            ("outcome-receive", "将新结果修订接入独立私有首次接收库；不认证训练标签")):
@@ -694,6 +699,21 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "remote-window-quality":
+        from .remote import RemoteStore
+        from .remotequality import terminal_checkpoint,window_quality_report
+        from .remotetasks import RemoteTaskError
+        try:
+            if not 1 <= args.max_gap <= 7200:
+                raise RemoteTaskError('remote_quality_invalid_gap_bound')
+            terminal_checkpoint(args.task_file,as_of=args.as_of)
+            with RemoteStore(args.db,read_only=True) as database:
+                emit(window_quality_report(database,args.task_file,as_of=args.as_of,max_gap_seconds=args.max_gap))
+            return 0
+        except RemoteTaskError as error:
+            emit({'ok':False,'source':'crm_remote_v1_1','error_code':str(error)});return 2
+        except (OSError,ValueError,TypeError,KeyError,OverflowError,sqlite3.Error):
+            emit({'ok':False,'source':'crm_remote_v1_1','error_code':'remote_quality_input_or_storage_error'});return 2
     if args.command == "remote-signal-report":
         from .remote import RemoteStore
         from .remotesignals import remote_signal_report

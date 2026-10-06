@@ -36,7 +36,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -316,6 +316,19 @@ def check() -> None:
                     if main(window_args+['--resume-task'])!=0:raise SystemExit('installed_window_terminal_failed')
                     if main(['remote-window-status','--task-file',str(window_task)])!=0:
                         raise SystemExit('installed_window_status_failed')
+                    window_quality_output=io.StringIO()
+                    with contextlib.redirect_stdout(window_quality_output):
+                        if main(['remote-window-quality','--db',str(window_db),'--task-file',str(window_task),
+                                '--as-of',(task_base+timedelta(seconds=window_clock[0])).isoformat(),
+                                '--max-gap','90'])!=0:
+                            raise SystemExit('installed_window_quality_failed')
+                    quality=json.loads(window_quality_output.getvalue())
+                    if (quality['rows_examined']!=5 or quality['recorded_http_attempts']!=10
+                            or not quality['checkpoint_chain_verified'] or quality['analysis_interval_seconds']!=151
+                            or quality['stores'][0]['run_boundaries']!=1 or quality['network_performed']
+                            or quality['continuous_collection_verified'] or quality['eta_available']
+                            or quality['verified_training_labels']):
+                        raise SystemExit('installed_window_quality_semantics_failed')
             window_status=remote_window_status(window_task)
             if (window_starts!=[0,60,90,120,150] or window_clock[0]!=151 or window_auth.call_count
                     or window_status['deadline_at']!=pending_status['deadline_at']
@@ -332,6 +345,10 @@ def check() -> None:
                 'window_shared_60_to_30_seconds_applied':True,'window_original_deadline_and_budget_preserved':True,
                 'window_plan_file_unchanged':True,'window_socket_calls':0,'window_query_credentials_accessed':False,
                 'window_terminal_database_unchanged':True,'window_is_live_acceptance':False}))
+            print(json.dumps({'installed_remote_window_quality_ok':True,
+                'quality_rows_examined':5,'quality_recorded_synthetic_http_attempts':10,
+                'quality_run_boundary_preserved':True,'quality_database_and_task_unchanged':True,
+                'quality_socket_calls':0,'quality_credentials_accessed':False,'quality_is_live_acceptance':False}))
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
                         or _recovery_poll_target(30, 2, 30) != 36
