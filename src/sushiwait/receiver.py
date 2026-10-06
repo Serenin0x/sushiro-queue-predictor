@@ -139,7 +139,9 @@ class _Handler(BaseHTTPRequestHandler):
             if len(body)!=length:
                 self._reply(400,{'ok':False,'error_code':'receiver_body_incomplete'});return
             result=receive_packet(body,self.server.database,now=self.server.clock())
-            self._reply(200,{'ok':True,**result})
+            reply={'ok':True,**result,'receipt_schema_version':2}
+            reply['receipt_hmac_sha256']=hmac.new(self.server.client_token.encode('ascii'),encoded(reply),hashlib.sha256).hexdigest()
+            self._reply(200,reply)
             self.server.successful_receipts+=1
         except ReceiptError as error:
             status=409 if error.error_code=='archive_observation_conflict' else (503 if error.error_code.startswith('archive_') or error.commit_status!='not_started' else 400)

@@ -6,6 +6,7 @@ from datetime import datetime,timedelta,timezone
 import io
 import json
 import hashlib
+import hmac
 from pathlib import Path
 import subprocess
 import sys
@@ -33,7 +34,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -285,6 +286,34 @@ def check() -> None:
                     or any(s["remote_deployment_verified"] or s["source_claims_verified"] for s in receipts)
                     or json.loads(invalid_receiver.getvalue())["error_code"]!="receiver_invalid_limits"):
                 raise SystemExit("installed_receiver_semantics_mismatch")
+            from sushiwait.packets import encoded
+            receiver_key="SYNTHETIC_INSTALLED_RECEIVER_KEY_0123456789"
+            receiver_key_file=Path(directory).resolve()/"synthetic-receiver.token"
+            receiver_key_file.write_text(receiver_key);receiver_key_file.chmod(0o600)
+            confirmation_file=Path(directory).resolve()/"confirmation.json"
+            signed_receipt={"ok":True,**receipts[1],"receipt_schema_version":2}
+            signed_receipt["receipt_hmac_sha256"]=hmac.new(receiver_key.encode(),encoded(signed_receipt),hashlib.sha256).hexdigest()
+            delivery_summaries=[]
+            with patch("sushiwait.delivery._exchange",return_value=signed_receipt) as exchange, \
+                    patch("sushiwait.cli._utc_clock",return_value=at), \
+                    patch("sushiwait.cli.read_credentials_file",side_effect=AssertionError("unexpected_query_auth")) as delivery_auth, \
+                    patch("subprocess.Popen",side_effect=AssertionError("unexpected_child")) as delivery_child, \
+                    patch("sushiwait.surgeguard._command",side_effect=AssertionError("unexpected_native_command")) as delivery_native:
+                for command in (["packet-deliver-local","--input",str(packet_file),"--receiver-token-file",str(receiver_key_file),
+                                 "--confirmation",str(confirmation_file),"--port","12345"],
+                                ["receipt-check","--input",str(packet_file),"--receiver-token-file",str(receiver_key_file),
+                                 "--confirmation",str(confirmation_file)]):
+                    delivery_output=io.StringIO()
+                    with contextlib.redirect_stdout(delivery_output):
+                        if main(command)!=0:raise SystemExit("installed_delivery_failed")
+                    delivery_summaries.append(json.loads(delivery_output.getvalue()))
+            if (exchange.call_count!=1 or delivery_auth.call_count or delivery_child.call_count or delivery_native.call_count
+                    or not delivery_summaries[0]["durability_confirmed"]
+                    or not all(s["receipt_hmac_verified"] and s["confirmed_record_count"]==1 for s in delivery_summaries)
+                    or not delivery_summaries[1]["historical_confirmation_only"]
+                    or delivery_summaries[1]["network_performed"]
+                    or any(s["source_claims_verified"] or s["remote_deployment_verified"] for s in delivery_summaries)):
+                raise SystemExit("installed_delivery_semantics_mismatch")
             from sushiwait.tasks import CollectionTask
             from sushiwait.storage import SnapshotStore
             task_path = str(Path(directory).resolve() / "collection.json")
@@ -408,6 +437,10 @@ def check() -> None:
         "receiver_invalid_limits_token_file_accessed": False,
         "receiver_child_process_calls": 0, "receiver_native_cli_calls": 0,
         "receiver_remote_deployment_verified": False,
+        "signed_receipt_save_and_reopen_ok": True, "delivery_exchange_stubbed": True,
+        "delivery_socket_calls": 0, "delivery_query_credentials_accessed": False,
+        "delivery_native_cli_calls": 0, "delivery_child_process_calls": 0,
+        "delivery_remote_deployment_verified": False,
         "collection_task_options_ok": True, "private_task_status_ok": True, "task_status_socket_calls": 0}))
 
 

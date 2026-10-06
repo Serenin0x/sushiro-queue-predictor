@@ -27,6 +27,7 @@ from .packets import PacketError, export_packet
 from .receipts import ReceiptError, read_packet, packet_summary, archive_packet
 from .pending import PendingError, enqueue_packet, pending_status
 from .receiver import ReceiverError,read_receiver_token,run_receiver,validate_receiver_limits
+from .delivery import DeliveryError,deliver_local,check_confirmation
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
@@ -535,6 +536,15 @@ def build_parser() -> argparse.ArgumentParser:
     receiver.add_argument("--port", type=int, default=0, help="127.0.0.1端口；0为随机空闲端口")
     receiver.add_argument("--seconds", type=int, default=30, help="1–60秒，独立截止关闭连接")
     receiver.add_argument("--max-requests", type=int, default=10, help="最多1–100个连接，包含拒绝的连接")
+    deliver = commands.add_parser("packet-deliver-local", help="仅投递127.0.0.1并保存核对过的签名回执；不删除原包")
+    deliver.add_argument("--input", required=True, help="明确的私有公共字段包")
+    deliver.add_argument("--receiver-token-file", required=True, help="独立私有接收端口令；不能使用查询凭证")
+    deliver.add_argument("--port", type=int, required=True, help="明确的127.0.0.1端口，1–65535")
+    deliver.add_argument("--confirmation", required=True, help="0700目录中的新0600确认文件，拒绝覆盖")
+    confirm = commands.add_parser("receipt-check", help="离线复核历史签名回执；不验证当前接收库或来源")
+    confirm.add_argument("--input", required=True, help="原私有公共字段包")
+    confirm.add_argument("--receiver-token-file", required=True, help="原独立私有接收端口令")
+    confirm.add_argument("--confirmation", required=True, help="私有历史确认文件")
     return parser
 
 
@@ -686,6 +696,20 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except TaskError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command in ("packet-deliver-local", "receipt-check"):
+            try:
+                result = (deliver_local(args.input,args.receiver_token_file,args.confirmation,port=args.port,clock=_utc_clock)
+                          if args.command == "packet-deliver-local"
+                          else check_confirmation(args.input,args.confirmation,args.receiver_token_file,as_of=_utc_clock().isoformat()))
+                durable = result.get("durability_confirmed",True)
+                emit({"ok":durable,**result})
+                return 0 if durable else 1
+            except DeliveryError as error:
+                emit({"ok":False,"error_code":error.error_code,
+                      "confirmation_committed":error.confirmation_committed,
+                      "durability_confirmed":False,"receiver_commit_status":error.receiver_commit_status,
+                      "query_credentials_accessed":False,"remote_deployment_verified":False})
                 return 1
         if args.command == "packet-receiver":
             try:

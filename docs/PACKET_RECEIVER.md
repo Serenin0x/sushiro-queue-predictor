@@ -22,8 +22,8 @@ sushiwait packet-receiver --db "$PRIVATE_INGEST/archive.sqlite3" \
 
 ## 确认及重试边界
 
-200确认包含规范整包SHA、每条观测ID与内容SHA、本机归档提交/持久性及新增/重复数量。只有整批持久化成功后返回；不包含查询头或个人号单。`receiver_context=loopback_development`及`remote_deployment_verified=false`明确当前上下文，来源新鲜度unknown/真实性未认证/真实标签0/ETA不可用。
+rc21的200确认使用schema2及独立接收口令HMAC-SHA256（规范JSON排除HMAC字段），包含规范整包SHA、每条观测ID与内容SHA、本机归档提交/持久性及新增/重复数量。只有整批持久化成功后返回；不包含查询头或个人号单。`receiver_context=loopback_development`及`remote_deployment_verified=false`明确当前上下文，来源新鲜度unknown/真实性未认证/真实标签0/ETA不可用。
 
-网络响应丢失时，资料可能已写入；调用方保留原包并原样重试，接收器依观测ID识别重复。一次200也不能替代调用方核对包与各观测校验值、可靠保存确认、可信目的地/TLS或上传游标。当前没有上传器、确认后的删除/保留策略、远程部署、长期服务、备份或生产限流验收。本机HTTP仅用于开发，远程传递须另行实现和验收安全传输。
+网络响应丢失时，资料可能已写入；调用方保留原包并原样重试，接收器依观测ID识别重复。一次200也不能替代调用方核对包与各观测校验值、可靠保存确认、可信目的地/TLS或上传游标。[本机投递工具](PACKET_DELIVERY.md)已实现对应校验、私有确认保存及离线重开；仍没有远程上传器、确认后的自动删除/保留策略、远程部署、长期服务、备份或生产限流验收。本机HTTP仅用于开发，远程传递须另行实现和验收安全传输。
 
 检查涵盖真实本机HTTP往返、身份/格式拒绝、冲突、提交不确定、已提交丢响应后的原样重试、空闲及部分头/正文截止。合成检查、独立安装与真实两页发送的证据分别记在[PROJECT_HANDOVER](PROJECT_HANDOVER.md)。
