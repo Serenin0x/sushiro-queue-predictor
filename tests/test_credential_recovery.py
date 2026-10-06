@@ -124,16 +124,33 @@ class CredentialRecoveryTests(unittest.TestCase):
         self.assertEqual(rows[-1]["http_status"],401)
         self.assertEqual(sum(r.get("event")=="credentials_paused" for r in rows),1)
 
-    def test_interval_expiry_resumes_then_waits_full_interval_without_catchup(self):
+    def test_interval_expiry_retains_original_single_store_target(self):
         self.replace(bundle(1,auth(NOW+timedelta(seconds=35),"short-synthetic-marker")))
         def update(t):
             if t==6:self.replace(self.fresh())
         clock=Clock(update)
         code,rows=self.run_collect(clock,samples=2,wall_clock=lambda:NOW+timedelta(seconds=clock.value))
         self.assertEqual(code,0)
-        self.assertEqual([t for t,_,_ in self.requests],[0,36])
+        self.assertEqual([t for t,_,_ in self.requests],[0,30])
         self.assertEqual([c.revision for _,c,_ in self.requests],[1,2])
         self.assertEqual(sum(r.get("event")=="credentials_resumed" for r in rows),1)
+
+    def test_late_single_store_recovery_queries_once_and_reanchors_next_period(self):
+        self.replace(bundle(1,auth(NOW+timedelta(seconds=35),"short-synthetic-marker")))
+        clock=Clock(lambda t:self.replace(self.fresh()) if t==45 else None)
+        code,rows=self.run_collect(clock,wait=60,samples=3,
+            wall_clock=lambda:NOW+timedelta(seconds=clock.value))
+        self.assertEqual(code,0)
+        self.assertEqual([t for t,_,_ in self.requests],[0,45,75])
+        self.assertEqual(sum(r.get("event")=="credentials_resumed" for r in rows),1)
+
+    def test_multiple_stores_keep_full_period_after_recovery(self):
+        self.replace(bundle(1,auth(NOW+timedelta(seconds=35),"short-synthetic-marker")))
+        clock=Clock(lambda t:self.replace(self.fresh()) if t==6 else None)
+        code,_=self.run_collect(clock,samples=2,extra=['--store-id','900002'],
+            wall_clock=lambda:NOW+timedelta(seconds=clock.value))
+        self.assertEqual(code,0)
+        self.assertEqual([t for t,_,_ in self.requests],[0,0,36,36])
 
     def test_invalid_wait_bounds_reject_before_opening_database(self):
         for seconds in (-1,601):

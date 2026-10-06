@@ -249,6 +249,13 @@ def _collect_client(session: _QuerySession, db: SnapshotStore, store_id: str) ->
         return None
 
 
+def _recovery_poll_target(deadline: float, store_count: int, interval: int) -> float:
+    # One store retains its already reserved target. If it is past, query the
+    # current state once and anchor subsequent periods to that new start.
+    # Multi-store rounds keep the existing full-period recovery policy.
+    return deadline if store_count == 1 else time.monotonic() + interval
+
+
 def observe(
     client: SushiroClient,
     store_id: str,
@@ -310,7 +317,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                         emit({"event": "collection_task_stopped", **public_task(task.value)})
                         return False
                 try:
-                    session.wait_until(time.monotonic() + args.interval)
+                    session.wait_until(_recovery_poll_target(deadline, len(args.store_id), args.interval))
                     return True
                 except _PreflightStop as stop:
                     _record_preflight_stop(db, args.store_id[0], args.api_profile, stop)
@@ -811,8 +818,7 @@ def main(argv: list[str] | None = None) -> int:
                             if not _await_credentials(session, stop):
                                 return 1
                             try:
-                                # No catch-up burst after a pause: a full interval.
-                                session.wait_until(time.monotonic() + args.interval)
+                                session.wait_until(_recovery_poll_target(started + args.interval, len(ids), args.interval))
                             except _PreflightStop as stop:
                                 _record_preflight_stop(db, ids[0], args.api_profile, stop)
                                 return 1

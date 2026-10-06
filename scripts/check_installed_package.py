@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import sushiwait
 from sushiwait.cli import main
+from sushiwait.cli import _recovery_poll_target
 
 
 def check() -> None:
@@ -63,6 +64,13 @@ def check() -> None:
         # Fail immediately if the replay/report smoke path tries any socket I/O.
         with patch("socket.socket", side_effect=AssertionError("unexpected_network")), \
                 patch("socket.create_connection", side_effect=AssertionError("unexpected_network")):
+            with patch("sushiwait.cli.time.monotonic", return_value=6):
+                if (_recovery_poll_target(30, 1, 30) != 30
+                        or _recovery_poll_target(30, 2, 30) != 36):
+                    raise SystemExit("installed_recovery_target_semantics_mismatch")
+            with patch("sushiwait.cli.time.monotonic", return_value=45):
+                if _recovery_poll_target(30, 1, 30) != 30:
+                    raise SystemExit("installed_late_recovery_target_reset")
             evaluation_input = Path(directory).resolve() / "synthetic-evaluation.json"
             evaluation_fixture = (args.evaluation_fixture or
                                   args.source_root / "examples/fixtures/evaluation-01.synthetic.json")
@@ -289,6 +297,8 @@ def check() -> None:
         "adaptive_simulation_socket_calls": 0, "adaptive_simulation_native_cli_calls": 0,
         "adaptive_simulation_child_process_calls": 0, "adaptive_simulation_credentials_accessed": False,
         "adaptive_plan_unchanged": True, "adaptive_simulation_is_live_acceptance": False,
+        "single_store_recovery_target_ok": True, "multistore_full_recovery_period_ok": True,
+        "recovery_target_socket_calls": 0,
         "interval_evaluation_ok": True, "evaluation_socket_calls": 0,
         "evaluation_native_cli_calls": 0, "evaluation_child_process_calls": 0,
         "evaluation_query_credentials_accessed": False,

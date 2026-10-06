@@ -78,7 +78,7 @@ PYTHONPATH=src python3 -m sushiwait collect   --api-profile miniapp_gateway --cr
 
 只有声明过期/临近到期才进入暂停：保存一次安全preflight事件、输出credentials_paused，随后逐秒只读取本机文件，不发查询、不写每秒失败记录。必须有严格更高revision、不同授权且当前保护通过；恢复输出credentials_resumed，用时再次检查。坏文件/权限/倒退/无效声明立即失败，等待超时输出credentials_wait_timeout。HTTP401、限流、TLS、网络/字段错误不进入等待、不自动重试。
 
-恢复后重置采样时间基准；若在周期等待中暂停，恢复后等待完整周期，避免补发追赶请求。它不产生新授权、不做守护进程或跨重启任务恢复；协作提供方必须及时写入实际正常完整新上下文。
+rc16单店在周期等待中暂停后，正常新上下文通过时继续等原目标；原目标已过只查一次当前状态，随后按新周期运行，不补发积压。多店仍等待完整新周期，显式重启任务也仍先等完整周期；当前规则见[RECOVERY_CADENCE](RECOVERY_CADENCE.md)。它不产生新授权、不做守护进程或跨重启任务恢复；协作提供方必须及时写入实际正常完整新上下文。
 
 实际Surge Mac6.4.3的CLI script evaluate已执行自写合成脚本，DIRECT向独立本机回环服务器投递成功、HTTP200标记确认，未用真实凭证/外部请求或修改配置。只证明Surge脚本的本机HTTP能力可用，不证明真实SAPI响应规则被触发。
 

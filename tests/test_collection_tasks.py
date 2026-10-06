@@ -478,6 +478,30 @@ with CollectionTask(sys.argv[2],config=config,resume=False,now=now) as task:
         self.assertIsNone(self.raw()['credential']['blocked_authorization_digest'])
         self.assertEqual(sum(r.get('event') == 'credentials_resumed' for r in rows), 1)
 
+    def test_persistent_early_recovery_keeps_original_single_store_target(self):
+        self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=35),iat=BASE)))
+        self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(hours=1),iat=BASE))) if t==6 else None
+        code,_=self.run_cli(self.args(samples=3)+['--wait-for-credentials','3'])
+        self.assertEqual(code,0)
+        self.assertEqual(self.requests,[('900001',0),('900001',30),('900001',60)])
+        self.assertEqual(self.raw()['successful'],3)
+        self.assertEqual(self.raw()['failed'],0)
+
+    def test_persistent_late_recovery_has_no_repayment_burst(self):
+        self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=35),iat=BASE)))
+        self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(hours=1),iat=BASE))) if t==45 else None
+        code,_=self.run_cli(self.args(samples=3)+['--wait-for-credentials','60'])
+        self.assertEqual(code,0)
+        self.assertEqual(self.requests,[('900001',0),('900001',45),('900001',75)])
+        self.assertEqual(self.raw()['uncertain'],0)
+
+    def test_persistent_multistore_recovery_keeps_full_period_policy(self):
+        self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=35),iat=BASE)))
+        self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(hours=1),iat=BASE))) if t==6 else None
+        code,_=self.run_cli(self.args(ids=('900001','900002'),samples=2)+['--wait-for-credentials','3'])
+        self.assertEqual(code,0)
+        self.assertEqual(self.requests,[('900001',0),('900002',0),('900001',36),('900002',36)])
+
     def test_higher_revision_with_blocked_same_authorization_cannot_resume(self):
         self.failure = 401
         self.run_cli(self.args())
