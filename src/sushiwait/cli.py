@@ -254,11 +254,32 @@ def _collect_client(session: _QuerySession, db: SnapshotStore, store_id: str) ->
         return None
 
 
-def _recovery_poll_target(deadline: float, store_count: int, interval: int) -> float:
+def _recovery_poll_target(deadline: float, store_count: int, interval: int,
+                          last_completed: float | None = None) -> float:
     # One store retains its already reserved target. If it is past, query the
     # current state once and anchor subsequent periods to that new start.
-    # Multi-store rounds keep the existing full-period recovery policy.
-    return deadline if store_count == 1 else time.monotonic() + interval
+    # A completed multi-store round can reuse its reserved target, but never
+    # start before a full period after its final observation completed. This
+    # bounds every previous query start even if serial response times varied.
+    # An explicit restart has no same-process completion bound; keep its
+    # conservative full-period policy rather than infer monotonic time.
+    if store_count == 1:
+        return deadline
+    return max(deadline, last_completed + interval) if last_completed is not None else time.monotonic() + interval
+
+
+def _recovered_round_client(session: _QuerySession, db: SnapshotStore, store_id: str,
+                            *, last_completed: float, interval: int) -> SushiroClient | None:
+    # The declaration can cross its protection boundary between a finished
+    # round wait and the first GET preflight. Apply the same completion bound
+    # when that GET itself performed the one permitted recovery wait.
+    try:
+        session.wait_until(last_completed + interval)
+        return session.client()
+    except _PreflightStop as stop:
+        session.last_stop_code = stop.error_code
+        _record_preflight_stop(db, store_id, session.args.api_profile, stop)
+        return None
 
 
 def observe(
@@ -310,6 +331,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
             if task.value["state"] == "completed":
                 return 0 if task.value["failed"] == task.value["uncertain"] == 0 else 1
             session = _QuerySession(args, on_context=task.check_context)
+            last_completed = None
 
             def wait(deadline: float) -> bool:
                 try:
@@ -322,7 +344,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                         emit({"event": "collection_task_stopped", **public_task(task.value)})
                         return False
                 try:
-                    session.wait_until(_recovery_poll_target(deadline, len(args.store_id), args.interval))
+                    session.wait_until(_recovery_poll_target(deadline, len(args.store_id), args.interval, last_completed))
                     return True
                 except _PreflightStop as stop:
                     _record_preflight_stop(db, args.store_id[0], args.api_profile, stop)
@@ -343,14 +365,18 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                 store_id = args.store_id[task.value["cursor"] % count]
                 before_recovery = session.recovery_count
                 client = _collect_client(session, db, store_id)
+                if client is not None and session.recovery_count != before_recovery:
+                    if count > 1 and task.value["cursor"] % count == 0 and last_completed is not None:
+                        client = _recovered_round_client(session, db, store_id,
+                            last_completed=last_completed, interval=args.interval)
+                    started = time.monotonic()
                 if client is None:
                     task.stop(session.last_stop_code or "client_configuration_error", now=_utc_clock())
                     emit({"event": "collection_task_stopped", **public_task(task.value)})
                     return 1
-                if session.recovery_count != before_recovery:
-                    started = time.monotonic()
                 task.begin(now=_utc_clock())
                 ok = observe(client, store_id, db, api_profile=args.api_profile)
+                last_completed = time.monotonic()
                 task.reconcile(now=_utc_clock())
                 emit({"event": "collection_task_checkpoint", **public_task(task.value)})
                 if not ok:
@@ -912,17 +938,22 @@ def main(argv: list[str] | None = None) -> int:
                 return 0 if observe(client, args.store_id, db, api_profile=args.api_profile) else 1
             if args.command == "collect":
                 session = _QuerySession(args)
+                last_completed = None
                 for i in range(args.samples):
                     started = time.monotonic()
-                    for store_id in ids:
+                    for store_index, store_id in enumerate(ids):
                         before_recovery = session.recovery_count
                         client = _collect_client(session, db, store_id)
+                        if client is not None and session.recovery_count != before_recovery:
+                            if len(ids) > 1 and store_index == 0 and last_completed is not None:
+                                client = _recovered_round_client(session, db, store_id,
+                                    last_completed=last_completed, interval=args.interval)
+                            started = time.monotonic()
                         if client is None:
                             return 1
-                        if session.recovery_count != before_recovery:
-                            started = time.monotonic()
                         if not observe(client, store_id, db, api_profile=args.api_profile):
                             return 1
+                        last_completed = time.monotonic()
                     if i + 1 < args.samples:
                         try:
                             session.wait_until(started + args.interval)
@@ -931,7 +962,7 @@ def main(argv: list[str] | None = None) -> int:
                             if not _await_credentials(session, stop):
                                 return 1
                             try:
-                                session.wait_until(_recovery_poll_target(started + args.interval, len(ids), args.interval))
+                                session.wait_until(_recovery_poll_target(started + args.interval, len(ids), args.interval, last_completed))
                             except _PreflightStop as stop:
                                 _record_preflight_stop(db, ids[0], args.api_profile, stop)
                                 return 1

@@ -495,12 +495,55 @@ with CollectionTask(sys.argv[2],config=config,resume=False,now=now) as task:
         self.assertEqual(self.requests,[('900001',0),('900001',45),('900001',75)])
         self.assertEqual(self.raw()['uncertain'],0)
 
-    def test_persistent_multistore_recovery_keeps_full_period_policy(self):
+    def test_persistent_multistore_recovery_keeps_safe_original_target(self):
         self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=35),iat=BASE)))
         self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(hours=1),iat=BASE))) if t==6 else None
         code,_=self.run_cli(self.args(ids=('900001','900002'),samples=2)+['--wait-for-credentials','3'])
         self.assertEqual(code,0)
-        self.assertEqual(self.requests,[('900001',0),('900002',0),('900001',36),('900002',36)])
+        self.assertEqual(self.requests,[('900001',0),('900002',0),('900001',30),('900002',30)])
+
+    def test_persistent_late_multistore_recovery_does_not_catch_up(self):
+        self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=35),iat=BASE)))
+        self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(hours=1),iat=BASE))) if t==45 else None
+        code,_=self.run_cli(self.args(ids=('900001','900002'),samples=3)+['--wait-for-credentials','60'])
+        self.assertEqual(code,0)
+        self.assertEqual(self.requests,[('900001',0),('900002',0),('900001',45),('900002',45),('900001',75),('900002',75)])
+        self.assertTrue(task_status(self.task)['all_slots_successful'])
+
+    def test_persistent_serial_completion_bounds_multistore_recovery(self):
+        self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=60),iat=BASE)))
+        self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(hours=1),iat=BASE))) if t==33 else None
+        self.before_request=lambda sid:setattr(self.clock,'value',self.clock.value+{'900001':10,'900002':9}[sid])
+        code,_=self.run_cli(self.args(ids=('900001','900002'),samples=2)+['--wait-for-credentials','10'])
+        self.assertEqual(code,0)
+        self.assertEqual(self.requests,[('900001',0),('900002',10),('900001',49),('900002',59)])
+        self.assertEqual(self.raw()['uncertain'],0)
+
+    def test_restarted_multistore_task_preserves_full_period_without_process_bound(self):
+        self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=35),iat=BASE)))
+        args=self.args(ids=('900001','900002'),samples=2)+['--wait-for-credentials','3']
+        original=CollectionTask.reconcile
+        def interrupted(task,*,now,interrupted=False):
+            if task.value['cursor']==0 and not interrupted:raise KeyboardInterrupt
+            return original(task,now=now,interrupted=interrupted)
+        with patch.object(CollectionTask,'reconcile',new=interrupted):
+            code,_=self.run_cli(args)
+        self.assertEqual(code,130)
+        self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(hours=1),iat=BASE))) if t==6 else None
+        code,_=self.run_cli(args+['--resume-task'])
+        self.assertEqual(code,0)
+        self.assertEqual(self.requests,[('900001',0),('900002',36),('900001',66),('900002',66)])
+        self.assertEqual(self.raw()['successful'],4)
+
+    def test_persistent_new_context_expires_during_restored_target(self):
+        self.write_context(bundle(1,jwt(exp=BASE+timedelta(seconds=35),iat=BASE)))
+        self.clock.callback=lambda t:self.write_context(bundle(2,jwt(exp=BASE+timedelta(seconds=40),iat=BASE))) if t==6 else None
+        code,rows=self.run_cli(self.args(ids=('900001','900002'),samples=2)+['--wait-for-credentials','3'])
+        self.assertEqual(code,1)
+        self.assertEqual(self.requests,[('900001',0),('900002',0)])
+        self.assertEqual(self.raw()['successful'],2)
+        self.assertEqual(self.raw()['stop_reason'],'auth_expiring')
+        self.assertEqual(sum(r.get('event')=='credentials_paused' for r in rows),1)
 
     def test_higher_revision_with_blocked_same_authorization_cannot_resume(self):
         self.failure = 401

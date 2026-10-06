@@ -37,12 +37,13 @@ class CredentialRecoveryTests(unittest.TestCase):
         next_file=self.parent/"next-context.json"
         next_file.write_text(json.dumps(value));next_file.chmod(0o600);next_file.replace(self.context)
 
-    def run_collect(self,clock,*,wait=3,samples=1,extra=None,http_ok=True,wall_clock=None):
+    def run_collect(self,clock,*,wait=3,samples=1,extra=None,http_ok=True,wall_clock=None,fetch_seconds=None):
         outer=self
         class Client:
             def __init__(self,context):self.context=context
             def fetch_store(self,store_id):
                 outer.requests.append((clock.value,self.context,store_id))
+                clock.value+=(fetch_seconds or {}).get(store_id,0)
                 if not http_ok:return QueryResult(False,None,"http_auth_error",401,"start","end",1)
                 now=NOW.isoformat()
                 return QueryResult(True,{"id":int(store_id),"name":"合成门店","wait":20},None,200,now,now,1)
@@ -144,13 +145,42 @@ class CredentialRecoveryTests(unittest.TestCase):
         self.assertEqual([t for t,_,_ in self.requests],[0,45,75])
         self.assertEqual(sum(r.get("event")=="credentials_resumed" for r in rows),1)
 
-    def test_multiple_stores_keep_full_period_after_recovery(self):
+    def test_multiple_stores_retain_safe_original_target_after_early_recovery(self):
         self.replace(bundle(1,auth(NOW+timedelta(seconds=35),"short-synthetic-marker")))
         clock=Clock(lambda t:self.replace(self.fresh()) if t==6 else None)
         code,_=self.run_collect(clock,samples=2,extra=['--store-id','900002'],
             wall_clock=lambda:NOW+timedelta(seconds=clock.value))
         self.assertEqual(code,0)
-        self.assertEqual([t for t,_,_ in self.requests],[0,0,36,36])
+        self.assertEqual([t for t,_,_ in self.requests],[0,0,30,30])
+
+    def test_late_multiple_store_recovery_does_not_wait_another_period_or_catch_up(self):
+        self.replace(bundle(1,auth(NOW+timedelta(seconds=35),"short-synthetic-marker")))
+        clock=Clock(lambda t:self.replace(self.fresh()) if t==45 else None)
+        code,rows=self.run_collect(clock,wait=60,samples=3,extra=['--store-id','900002'],
+            wall_clock=lambda:NOW+timedelta(seconds=clock.value))
+        self.assertEqual(code,0)
+        self.assertEqual([t for t,_,_ in self.requests],[0,0,45,45,75,75])
+        self.assertEqual(sum(r.get('event')=='credentials_resumed' for r in rows),1)
+
+    def test_serial_response_completion_bounds_multistore_recovery(self):
+        self.replace(bundle(1,auth(NOW+timedelta(seconds=60),"short-synthetic-marker")))
+        clock=Clock(lambda t:self.replace(self.fresh()) if t==33 else None)
+        code,_=self.run_collect(clock,wait=10,samples=2,extra=['--store-id','900002'],
+            fetch_seconds={'900001':10,'900002':9},wall_clock=lambda:NOW+timedelta(seconds=clock.value))
+        self.assertEqual(code,0)
+        self.assertEqual([t for t,_,_ in self.requests],[0,10,49,59])
+        self.assertGreaterEqual(self.requests[2][0]-self.requests[0][0],30)
+        self.assertGreaterEqual(self.requests[3][0]-self.requests[1][0],30)
+
+    def test_new_context_expires_before_multistore_target_stops_without_second_pause(self):
+        self.replace(bundle(1,auth(NOW+timedelta(seconds=35),"short-synthetic-marker")))
+        clock=Clock(lambda t:self.replace(bundle(2,auth(NOW+timedelta(seconds=40),"new-short-synthetic-marker"))) if t==6 else None)
+        code,rows=self.run_collect(clock,samples=2,extra=['--store-id','900002'],
+            wall_clock=lambda:NOW+timedelta(seconds=clock.value))
+        self.assertEqual(code,1)
+        self.assertEqual([t for t,_,_ in self.requests],[0,0])
+        self.assertEqual(sum(r.get('event')=='credentials_paused' for r in rows),1)
+        self.assertEqual(rows[-1]['error_code'],'auth_expiring')
 
     def test_invalid_wait_bounds_reject_before_opening_database(self):
         for seconds in (-1,601):

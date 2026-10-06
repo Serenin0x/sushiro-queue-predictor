@@ -1,6 +1,7 @@
 """Check a wheel install outside the checkout, using only a synthetic fixture."""
 
 import argparse
+import base64
 import contextlib
 from datetime import datetime,timedelta,timezone
 import io
@@ -68,7 +69,9 @@ def check() -> None:
                 patch("socket.create_connection", side_effect=AssertionError("unexpected_network")):
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
-                        or _recovery_poll_target(30, 2, 30) != 36):
+                        or _recovery_poll_target(30, 2, 30) != 36
+                        or _recovery_poll_target(30, 2, 30, 0) != 30
+                        or _recovery_poll_target(30, 2, 30, 19) != 49):
                     raise SystemExit("installed_recovery_target_semantics_mismatch")
             with patch("sushiwait.cli.time.monotonic", return_value=45):
                 if _recovery_poll_target(30, 1, 30) != 30:
@@ -157,6 +160,51 @@ def check() -> None:
                     or not shared_policy["output_requires_private_handling"]):
                 raise SystemExit("installed_shared_monitoring_semantics_mismatch")
             from types import SimpleNamespace
+            from sushiwait.client import QueryResult
+            from sushiwait.credentials import QueryCredentials
+            recovery_simulated_queries = 0
+            for persistent in (False, True):
+                simulated_time, simulated_starts = [0], []
+                recovery_base = datetime(2020,1,1,tzinfo=timezone.utc)
+                def simulated_wall():
+                    return recovery_base+timedelta(seconds=simulated_time[0])
+                def simulated_sleep(seconds):
+                    simulated_time[0]+=seconds
+                def synthetic_context(revision, expiry):
+                    encode=lambda raw:base64.urlsafe_b64encode(raw).decode().rstrip('=')
+                    token='.'.join((encode(b'{"alg":"HS256"}'),encode(json.dumps({
+                        'iat':int(recovery_base.timestamp()),'exp':int((recovery_base+timedelta(seconds=expiry)).timestamp()),
+                        'synthetic_revision':revision}).encode()),encode(b'synthetic-only-signature')))
+                    return QueryCredentials('miniapp_gateway',revision,token,'synthetic-client','synthetic-code',
+                        'Synthetic Agent/1.0','https://synthetic.invalid/reference','application/json')
+                old_context,new_context=synthetic_context(1,35),synthetic_context(2,3600)
+                def synthetic_source(_source):
+                    return new_context if simulated_time[0]>=45 else old_context
+                def synthetic_fetch(store_id):
+                    simulated_starts.append((store_id,simulated_time[0]));stamp=simulated_wall().isoformat()
+                    return QueryResult(True,{'id':int(store_id),'name':'synthetic store'},None,200,stamp,stamp,0)
+                simulated_output=io.StringIO()
+                collection_args=['collect','--api-profile','miniapp_gateway','--store-id','900001','--store-id','900002',
+                    '--credentials-file',str(Path(directory).resolve()/'unused-query-context'),
+                    '--db',str(Path(directory).resolve()/f'synthetic-recovery-{persistent}.sqlite3'),
+                    '--samples','3','--interval','30','--wait-for-credentials','60']
+                if persistent:collection_args+=['--task-file',str(Path(directory).resolve()/'synthetic-recovery-task.json')]
+                with patch('sushiwait.credentials.CredentialSource.current',new=synthetic_source), \
+                        patch('sushiwait.cli.client_for',return_value=SimpleNamespace(fetch_store=synthetic_fetch)), \
+                        patch('sushiwait.cli.time.monotonic',side_effect=lambda:simulated_time[0]), \
+                        patch('sushiwait.cli.time.sleep',side_effect=simulated_sleep), \
+                        patch('sushiwait.cli._utc_clock',side_effect=simulated_wall), \
+                        patch('sushiwait.credentials.read_credentials_file',side_effect=AssertionError('unexpected_query_context')) as auth, \
+                        patch('sushiwait.surgeguard._command',side_effect=AssertionError('unexpected_native')) as native, \
+                        patch('subprocess.Popen',side_effect=AssertionError('unexpected_child')) as child, \
+                        contextlib.redirect_stdout(simulated_output):
+                    if main(collection_args)!=0:raise SystemExit('installed_multistore_simulation_failed')
+                events=[json.loads(line) for line in simulated_output.getvalue().splitlines()]
+                if (auth.call_count or native.call_count or child.call_count
+                        or simulated_starts!=[('900001',0),('900002',0),('900001',45),('900002',45),('900001',75),('900002',75)]
+                        or sum(row.get('event')=='credentials_resumed' for row in events)!=1):
+                    raise SystemExit('installed_multistore_simulation_semantics_mismatch')
+                recovery_simulated_queries+=len(simulated_starts)
             adaptive_file = Path(directory).resolve() / "adaptive-plans.json"
             adaptive_database = str(Path(directory).resolve() / "adaptive.sqlite3")
             adaptive_file.write_text(json.dumps({"schema_version":1,"plans":[
@@ -406,7 +454,12 @@ def check() -> None:
         "adaptive_simulation_socket_calls": 0, "adaptive_simulation_native_cli_calls": 0,
         "adaptive_simulation_child_process_calls": 0, "adaptive_simulation_credentials_accessed": False,
         "adaptive_plan_unchanged": True, "adaptive_simulation_is_live_acceptance": False,
-        "single_store_recovery_target_ok": True, "multistore_full_recovery_period_ok": True,
+        "single_store_recovery_target_ok": True, "multistore_restart_full_period_ok": True,
+        "multistore_completion_bound_ok": True, "multistore_cli_recovery_simulation_ok": True,
+        "multistore_recovery_simulated_queries": recovery_simulated_queries,
+        "multistore_recovery_transport_stubbed": True, "multistore_recovery_is_live_acceptance": False,
+        "multistore_recovery_query_credentials_accessed": False,
+        "multistore_recovery_native_cli_calls": 0, "multistore_recovery_child_process_calls": 0,
         "recovery_target_socket_calls": 0,
         "interval_evaluation_ok": True, "evaluation_socket_calls": 0,
         "evaluation_native_cli_calls": 0, "evaluation_child_process_calls": 0,

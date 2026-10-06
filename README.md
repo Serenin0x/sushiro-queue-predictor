@@ -23,9 +23,9 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/c886e589de78387b-dark.svg"><img src="assets/readme-labels/c886e589de78387b-light.svg" alt="把一次正常刷新接到电脑查询" width="210" height="20"></picture></strong>：可离线检查本人导出的捕获文件，明确选择正常单店请求，将完整上下文写入私有配置。到期或临近到期时拒绝导入；此功能不自动登录或续期。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与同进程恢复已有重复实证；新增独立的短窗关闭保护工具，到时关闭调试并核对状态；新增私有暂存提交组件，调试关闭后才更新采集上下文，已实测公开组件完成主配置更新及原进程恢复；新增一个短窗协调入口，将暂存接收与独立关闭保护联动，已实测接入新凭证、提前关闭调试并恢复原进程；最近一次更新仍有 98.760 秒采集缺口，继续改进更新速度。重复可靠性和长期自动更新继续验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与同进程恢复已有重复实证；新增独立的短窗关闭保护工具，到时关闭调试并核对状态；新增私有暂存提交组件，调试关闭后才更新采集上下文，已实测公开组件完成主配置更新及原进程恢复；新增一个短窗协调入口，将暂存接收与独立关闭保护联动，已实测接入新凭证、提前关闭调试并恢复原进程；已记录单店 98.760 秒及最近三店约 179 秒更新缺口，继续改进更新速度。重复可靠性和长期自动更新继续验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。单店在同进程更新通过后保留原采样目标，避免再次等完整周期；最终包本轮跨更新间隔为 98.760 秒，恢复后约 30 秒；更新缺口和长期稳定性继续验证。长期无人值守与服务器独立更新仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。单店保留原采样目标；多店新增完整轮次的恢复目标与间隔保护，减少额外等待。已安装单店版的一次真实跨更新间隔为 98.760 秒，恢复后约 30 秒；多店新版真实验收另记；更新缺口和长期稳定性继续验证。长期无人值守与服务器独立更新仍待验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料。新增包格式校验与本机事务归档，重复不新增、同标识不同内容整批停止；新增有容量上限的持久待确认目录，重开后仍能校验已保存的包，相同包重复加入保持原文件；新增有界本机接收服务，独立校验身份、验证整包并事务归档，成功后返回对应确认；新增本机投递、回执签名与逐条对应校验，保存后可以离线复核，原包始终保留；远程上传与部署继续实现。
 
@@ -33,13 +33,13 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/fce6b943bcea13b8-dark.svg"><img src="assets/readme-labels/fce6b943bcea13b8-light.svg" alt="比较最近的展示号变化" width="162" height="20"></picture></strong>：按指定历史时刻分析两分钟或更长窗口，比较前后两段展示集合的变化速率；遇到失败、缺口和时间逆序会断开比较，资料不足会明确显示。为异常检测准备可观察指标，尚不判断真实过号人数或触发提醒。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/65105f86981488eb-dark.svg"><img src="assets/readme-labels/65105f86981488eb-light.svg" alt="看懂页面数字的含义" width="146" height="20"></picture></strong>：已核对堂食与预约展示数组，以及“已签到等待桌数”的客户端字段绑定；同屏桌数仍待对照。页面更新时间与门店源时间分开解释，避免把刷新动作当作数据刚刚更新。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/65105f86981488eb-dark.svg"><img src="assets/readme-labels/65105f86981488eb-light.svg" alt="看懂页面数字的含义" width="146" height="20"></picture></strong>：已核对堂食与预约展示数组，以及“已签到等待桌数”的客户端字段绑定和西单同次响应数值。列表与详情分别记录刷新情况，营业状态显示关闭时也可能有叫号。页面更新时间与门店源时间分开解释，避免把刷新动作当作数据刚刚更新。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史；新增只读历史回放，核对整条修订链并按声明的历史时刻选择结果，避免后来纠错覆盖早先版本。人工记录与合成样例分别统计；新增私有区间误差计算，可核对已记录预测与叫号区间的误差范围、覆盖情况，保留不确定性。真实性和训练资格还需审核，尚未发布真实模型成绩或预测。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证，提醒与长期调度继续推进。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、697 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、704 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc21 签名确认候选版，正式 v0.2.0 尚未完成验收**。新增仅本机投递、逐观测签名回执核对与私有确认保存，重开后可以离线复核，原包始终保留；19 项新增检查与 697 项完整本机检查通过，30 模块独立安装及真实两页四次签名确认保存/离线重开已验证，新增 7 条、重试重复 7 条，原包保持；本次 GitHub 检查继续验证。上一接收版已完成真实两页四次本机接收、7 条新增及 7 条重复识别，三版本各 678 项检查通过。三店每店 60 次已完整结束，共 180 次成功，跨正常更新恢复；另一更长任务已开始；三店更新缺口约 183 秒，仍未达到临近叫号的持续监控要求。当前没有远程部署、真实训练标签或已验收预测。
+当前代码为 **v0.2.0rc22 采集恢复候选版，正式 v0.2.0 尚未完成验收**。多店正常凭证恢复后保留安全的采样目标，减少额外等待；新增 7 个场景、50 项专项和 704 项完整本机检查通过，新版安装、公开与真实采集证据持续记入交接文档。上一签名确认版已完成 30 模块独立安装、真实两页四次确认保存和离线重开，三版本各 697 项 GitHub 检查通过。西单“已签到等待桌数”已完成同次响应对照；三店每店 60 次、共 180 次查询已完整成功并跨更新恢复，另一更长任务仍在运行。已记录的三店更新缺口约 179–183 秒，仍未达到临近叫号的持续监控要求。当前没有远程部署、真实训练标签或已验收预测。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/38f3874d8754bd25-dark.svg"><img src="assets/readme-labels/38f3874d8754bd25-light.svg" alt="2026-10-06 · v0.2.0rc22" width="179" height="20"></picture></strong>：减少多店恢复后的额外等待，同时保留上一轮完成后的间隔保护；提前更新、较晚更新、慢响应和显式重启分别验证，50 项专项与 704 项完整检查通过。补齐西单同次响应的签到桌数对照，保留源新鲜度未知状态。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/36b3d307de4822c3-dark.svg"><img src="assets/readme-labels/36b3d307de4822c3-light.svg" alt="2026-10-06 · v0.2.0rc21" width="179" height="20"></picture></strong>：新增本机投递、签名回执核对与私有确认保存/离线重开；19 项新增检查与 697 项完整检查通过。丢失回执后的去重重试和慢响应截止已验证，原包保留，继续实现远程部署与长期采集。
 
