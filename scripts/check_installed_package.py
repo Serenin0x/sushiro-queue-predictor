@@ -36,7 +36,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "packet-deliver-local", "receipt-check")):
+            ("remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -227,6 +227,61 @@ def check() -> None:
             print(json.dumps({'installed_remote_service_asgi_ok':True,'service_saved_pairs':1,
                 'service_synthetic_http_attempts':2,'service_display_reads':5,'service_extra_upstream_requests':0,
                 'service_socket_calls':0,'service_query_credentials_accessed':False,'service_is_live_acceptance':False}))
+            from sushiwait.remotewindow import RemoteWindowTask,remote_window_status
+            window_db=Path(directory).resolve()/"synthetic-window.sqlite3"
+            window_task=Path(directory).resolve()/"synthetic-window-task.json"
+            window_plan=Path(directory).resolve()/"synthetic-window-plan.json"
+            window_clock=[0.0];window_starts=[]
+            window_arrival=(task_base+timedelta(minutes=16)).isoformat()
+            window_plan.write_text(json.dumps({'schema_version':1,'plans':[
+                {'store_id':'3014','desired_arrival_at':window_arrival}]*2}))
+            window_plan.chmod(0o600);window_plan_before=window_plan.read_bytes()
+            class WindowOpener(RemoteFakeOpener):
+                def open(self,request,*,timeout):
+                    if '/groupqueues?' in request.full_url:window_starts.append(window_clock[0])
+                    return super().open(request,timeout=timeout)
+            window_args=['remote-window-collect','--db',str(window_db),'--task-file',str(window_task),
+                '--plan-file',str(window_plan),'--store-id','3014','--base-interval','300',
+                '--duration','151','--max-pairs','10']
+            original_window_reconcile=RemoteWindowTask.reconcile
+            def interrupt_window(task,*,now,interrupted=False):
+                if not interrupted:raise KeyboardInterrupt
+                return original_window_reconcile(task,now=now,interrupted=interrupted)
+            window_output=io.StringIO()
+            with patch('sushiwait.remote.RemoteClient',return_value=RemoteClient(opener=WindowOpener())), \
+                    patch('sushiwait.cli._utc_clock',side_effect=lambda:task_base+timedelta(seconds=window_clock[0])), \
+                    patch('sushiwait.remote._utc',side_effect=lambda:(task_base+timedelta(seconds=window_clock[0])).isoformat()), \
+                    patch('sushiwait.cli.time.monotonic',side_effect=lambda:window_clock[0]), \
+                    patch('sushiwait.cli.time.sleep',side_effect=lambda seconds:window_clock.__setitem__(0,window_clock[0]+seconds)), \
+                    patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('unexpected_credentials')) as window_auth, \
+                    contextlib.redirect_stdout(window_output):
+                with patch.object(RemoteWindowTask,'reconcile',new=interrupt_window):
+                    if main(window_args)!=130:raise SystemExit('installed_window_interrupt_failed')
+                pending_status=remote_window_status(window_task)
+                if not pending_status['pending_attempt']:raise SystemExit('installed_window_pending_missing')
+                window_clock[0]=10
+                if main(window_args+['--resume-task'])!=0:raise SystemExit('installed_window_resume_failed')
+                before_window=window_db.read_bytes(),window_task.read_bytes()
+                with patch('sushiwait.remote.RemoteClient',side_effect=AssertionError('terminal_client')):
+                    if main(window_args+['--resume-task'])!=0:raise SystemExit('installed_window_terminal_failed')
+                    if main(['remote-window-status','--task-file',str(window_task)])!=0:
+                        raise SystemExit('installed_window_status_failed')
+            window_status=remote_window_status(window_task)
+            if (window_starts!=[0,60,90,120,150] or window_clock[0]!=151 or window_auth.call_count
+                    or window_status['deadline_at']!=pending_status['deadline_at']
+                    or window_status['maximum_pair_budget']!=10 or window_status['recorded_http_attempts']!=10
+                    or window_status['successful_pairs']!=5 or window_status['uncertain_pair_slots']
+                    or window_status['end_reason']!='deadline' or window_status['eta_available']
+                    or window_plan.read_bytes()!=window_plan_before
+                    or before_window!=(window_db.read_bytes(),window_task.read_bytes())
+                    or any(private in window_output.getvalue() for private in
+                        (str(window_db),str(window_task),str(window_plan),window_arrival))):
+                raise SystemExit('installed_window_persistence_semantics_failed')
+            print(json.dumps({'installed_remote_window_restart_ok':True,'window_saved_pairs':5,
+                'window_synthetic_http_attempts':10,'window_saved_pair_not_requeried':True,
+                'window_shared_60_to_30_seconds_applied':True,'window_original_deadline_and_budget_preserved':True,
+                'window_plan_file_unchanged':True,'window_socket_calls':0,'window_query_credentials_accessed':False,
+                'window_terminal_database_unchanged':True,'window_is_live_acceptance':False}))
             with patch("sushiwait.cli.time.monotonic", return_value=6):
                 if (_recovery_poll_target(30, 1, 30) != 30
                         or _recovery_poll_target(30, 2, 30) != 36

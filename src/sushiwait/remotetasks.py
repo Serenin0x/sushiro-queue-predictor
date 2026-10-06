@@ -133,6 +133,15 @@ def remote_task_status(path):
 
 
 class RemoteTask:
+    decode = staticmethod(_decode)
+
+    @staticmethod
+    def initial_value(config,now):
+        return {'schema_version':1,'source':SOURCE,'config':deepcopy(config),
+            'database_identity':[0,0],'initial_id':0,'cursor':0,'successful':0,
+            'failed':0,'uncertain':0,'recorded_http_attempts':0,'records_digest':_EMPTY,
+            'pending':None,'last_attempt_at':None,'updated_at':_now(now),'state':'ready','last_gap':None}
+
     def __init__(self,path,*,config,resume,now):
         self.path=Path(os.path.abspath(path));self.parent_fd=self.lock_fd=None
         self.identity=None;self.loaded=False;self.db=None
@@ -151,16 +160,13 @@ class RemoteTask:
             except FileNotFoundError:pass
             if self.identity is not None:
                 if not resume:raise RemoteTaskError('remote_task_exists_use_resume')
-                self.value=_decode(_read_private_file(self.path))
+                self.value=self.decode(_read_private_file(self.path))
                 if self.value['config']!=config:raise RemoteTaskError('remote_task_config_conflict')
                 self.loaded=True
             elif resume:raise RemoteTaskError('remote_task_missing')
             else:
-                self.value={'schema_version':1,'source':SOURCE,'config':deepcopy(config),
-                    'database_identity':[0,0],'initial_id':0,'cursor':0,'successful':0,
-                    'failed':0,'uncertain':0,'recorded_http_attempts':0,'records_digest':_EMPTY,
-                    'pending':None,'last_attempt_at':None,'updated_at':_now(now),'state':'ready','last_gap':None}
-                _decode(json.dumps(self.value).encode())
+                self.value=self.initial_value(config,now)
+                self.decode(json.dumps(self.value).encode())
             self._guard()
         except BaseException as error:
             self.close()
@@ -185,7 +191,7 @@ class RemoteTask:
         if identity!=self.identity:raise RemoteTaskError('remote_task_changed')
 
     def _commit(self,value):
-        body=json.dumps(value,sort_keys=True,allow_nan=False).encode();_decode(body);self._guard()
+        body=json.dumps(value,sort_keys=True,allow_nan=False).encode();self.decode(body);self._guard()
         name=self.name+'.'+uuid4().hex+'.tmp';fd=None;renamed=False
         try:
             fd=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=self.parent_fd)

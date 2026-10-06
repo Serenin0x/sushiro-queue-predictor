@@ -125,31 +125,39 @@ class RemoteQueueService:
                     raise RemoteServiceError('remote_service_record_invalid')
                 self.view.publish(record,saved_history=True)
 
+    def _make_task(self):
+        return RemoteTask(self.task_file,config=self.config,resume=self.resume,now=self.wall_clock())
+
+    @staticmethod
+    def _task_status(task):return public_status(task.value)
+
+    def _collect(self,task,client,sleep,emit):
+        return collect_remote_task(task,client,wall_clock=self.wall_clock,
+            monotonic_clock=self.monotonic_clock,sleep=sleep,emit=emit,should_stop=self.stop_event.is_set)
+
     def _run(self):
         try:
-            with RemoteTask(self.task_file,config=self.config,resume=self.resume,now=self.wall_clock()) as task:
+            with self._make_task() as task:
                 task.prepare_database()
                 with RemoteStore(self.config['db']) as database:
                     task.bind(database,now=self.wall_clock())
                     self._restore(database)
-                    self._set('ready',task=public_status(task.value));self.ready.set()
+                    self._set('ready',task=self._task_status(task));self.ready.set()
                     self.activated.wait()
                     if self.stop_event.is_set():
-                        self._set('stopped',task=public_status(task.value));return
+                        self._set('stopped',task=self._task_status(task));return
                     if task.value['state'] in ('completed','failed'):
                         state = task.value['state']
                         self._set(state,error='remote_service_query_failed' if state=='failed' else None,
-                            task=public_status(task.value));return
-                    self._set('running',task=public_status(task.value))
+                            task=self._task_status(task));return
+                    self._set('running',task=self._task_status(task))
                     def emit(event):
                         if 'record' in event:self.view.publish(event['record'])
-                        self._set('running',task=public_status(task.value))
+                        self._set('running',task=self._task_status(task))
                     def sleep(seconds):
                         if self.wait is None:self.stop_event.wait(seconds)
                         else:self.wait(seconds,self.stop_event)
-                    result = collect_remote_task(task,self.client_factory(),wall_clock=self.wall_clock,
-                        monotonic_clock=self.monotonic_clock,sleep=sleep,emit=emit,
-                        should_stop=self.stop_event.is_set)
+                    result = self._collect(task,self.client_factory(),sleep,emit)
                     state = 'failed' if task.value['state']=='failed' else 'completed' if task.value['state']=='completed' else 'stopped'
                     self._set(state,error='remote_service_query_failed' if state=='failed' else None,task=result)
         except BaseException as error:

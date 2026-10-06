@@ -467,6 +467,19 @@ def build_parser() -> argparse.ArgumentParser:
     remote_serve.add_argument("--resume-task", action="store_true")
     remote_serve.add_argument("--stale-after", type=int, help="本机成功响应年龄阈值30–7200秒；不是上游更新频率")
     remote_serve.add_argument("--port", type=int, default=8765, help="仅127.0.0.1；1024–65535")
+    for name in ("remote-window-collect","remote-window-serve"):
+        window = commands.add_parser(name,help="持久共享匿名采集窗口；最多72小时，原期限与预算跨重启保持")
+        window.add_argument("--db",required=True)
+        window.add_argument("--task-file",required=True)
+        window.add_argument("--plan-file",required=True,help="明确私有不可变计划；空plans也持续采集背景数据")
+        window.add_argument("--store-id",action="append",required=True)
+        window.add_argument("--base-interval",type=int,default=300)
+        window.add_argument("--duration",type=int,default=86400)
+        window.add_argument("--max-pairs",type=int,default=8640)
+        window.add_argument("--resume-task",action="store_true")
+        if name=="remote-window-serve":window.add_argument("--port",type=int,default=8765)
+    window_status = commands.add_parser("remote-window-status",help="只读保存窗口状态；不读计划、不联网、不检查存活")
+    window_status.add_argument("--task-file",required=True)
     for name, help_text in (("outcome-check", "离线校验本人结果记录，只输出安全统计"),
                            ("outcome-import", "校验并追加私有结果修订，不验证真实性"),
                            ("outcome-receive", "将新结果修订接入独立私有首次接收库；不认证训练标签")):
@@ -665,6 +678,35 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in ("remote-window-collect","remote-window-serve","remote-window-status"):
+        from .remotewindow import (RemoteWindowTask,RemoteWindowService,collect_remote_window,
+            remote_window_status,window_config)
+        from .remoteservice import serve_local,RemoteServiceError
+        from .remote import RemoteClient,RemoteStore
+        from .remotetasks import RemoteTaskError
+        try:
+            if args.command=="remote-window-status":emit(remote_window_status(args.task_file));return 0
+            ids=[canonical_store_id(s) for s in args.store_id]
+            if args.command=="remote-window-serve":
+                service=RemoteWindowService(db=args.db,task_file=args.task_file,plan_file=args.plan_file,store_ids=ids,
+                    base_interval=args.base_interval,duration_seconds=args.duration,max_pairs=args.max_pairs,resume=args.resume_task)
+                serve_local(service,port=args.port)
+                return 1 if service.status()['service_state']=='failed' else 0
+            config=window_config(args.db,args.plan_file,ids,args.base_interval,args.duration,args.max_pairs,now=_utc_clock())
+            with RemoteWindowTask(args.task_file,config=config,resume=args.resume_task,now=_utc_clock()) as task:
+                task.prepare_database()
+                with RemoteStore(args.db) as database:
+                    task.bind(database,now=_utc_clock())
+                    client=None if task.value['state'] in ('completed','failed') else RemoteClient()
+                    summary=collect_remote_window(task,client,wall_clock=_utc_clock,
+                        monotonic_clock=time.monotonic,sleep=time.sleep,emit=emit)
+                    return 0 if summary['ok'] else 1
+        except KeyboardInterrupt:
+            emit({'ok':False,'source':'crm_remote_v1_1','error_code':'interrupted'});return 130
+        except (RemoteTaskError,RemoteServiceError) as error:
+            emit({'ok':False,'source':'crm_remote_v1_1','error_code':str(error)});return 2
+        except (OSError,ValueError,TypeError,KeyError,OverflowError,sqlite3.Error):
+            emit({'ok':False,'source':'crm_remote_v1_1','error_code':'remote_window_input_or_storage_error'});return 2
     if args.command == "remote-serve":
         from .remoteservice import RemoteQueueService, RemoteServiceError, serve_local
         try:
