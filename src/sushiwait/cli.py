@@ -458,6 +458,13 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--max-pairs", type=int, default=120, help="1–360成对查询，每对最多两次HTTP；首错停止")
     remote_status = commands.add_parser("remote-task-status", help="只读匿名任务摘要；不联网、不检查进程存活")
     remote_status.add_argument("--task-file", required=True)
+    remote_signal = commands.add_parser("remote-signal-report", help="只读匿名库的独立响应窗口/日期与展示集合变化；不推断真实过号率")
+    remote_signal.add_argument("--db", required=True)
+    remote_signal.add_argument("--store-id", required=True)
+    remote_signal.add_argument("--as-of", required=True)
+    remote_signal.add_argument("--window", type=int, default=120)
+    remote_signal.add_argument("--max-gap", type=int, default=90)
+    remote_signal.add_argument("--limit", type=int, default=10000)
     remote_serve = commands.add_parser("remote-serve", help="本机只读号码服务与一份持久匿名任务；固定预算，不提供预测")
     remote_serve.add_argument("--db", required=True)
     remote_serve.add_argument("--task-file", required=True)
@@ -678,6 +685,20 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "remote-signal-report":
+        from .remote import RemoteStore
+        from .remotesignals import remote_signal_report
+        from .signals import SignalError as RemoteSignalError
+        try:
+            store_id=canonical_store_id(args.store_id)
+            with RemoteStore(args.db,read_only=True) as database:
+                emit(remote_signal_report(database,store_id,as_of=args.as_of,window_seconds=args.window,
+                    max_gap_seconds=args.max_gap,sample_limit=args.limit))
+            return 0
+        except RemoteSignalError as error:
+            emit({'ok':False,'source':'crm_remote_v1_1','error_code':error.error_code});return 2
+        except (OSError,ValueError,TypeError,KeyError,OverflowError,sqlite3.Error):
+            emit({'ok':False,'source':'crm_remote_v1_1','error_code':'remote_signal_input_or_storage_error'});return 2
     if args.command in ("remote-window-collect","remote-window-serve","remote-window-status"):
         from .remotewindow import (RemoteWindowTask,RemoteWindowService,collect_remote_window,
             remote_window_status,window_config)

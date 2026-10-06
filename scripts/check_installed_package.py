@@ -36,7 +36,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -108,6 +108,27 @@ def check() -> None:
             print(json.dumps({"installed_remote_snapshot_and_report_ok": True,
                 "remote_is_live_acceptance": False, "remote_socket_calls": 0,
                 "remote_query_credentials_accessed": False, "remote_report_database_unchanged": True}))
+            signal_output=io.StringIO();signal_before=remote_db.read_bytes()
+            with patch('sushiwait.remote.RemoteClient',side_effect=AssertionError('unexpected_client')) as signal_client, \
+                    patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('unexpected_credentials')) as signal_auth, \
+                    contextlib.redirect_stdout(signal_output):
+                if main(['remote-signal-report','--db',str(remote_db),'--store-id','3014',
+                         '--as-of',datetime.now(timezone.utc).isoformat()])!=0:
+                    raise SystemExit('installed_remote_signal_failed')
+            signal=json.loads(signal_output.getvalue())
+            if (signal_client.call_count or signal_auth.call_count or signal_before!=remote_db.read_bytes()
+                    or signal['scan']['admitted_pair_rows']!=1 or signal['source']!='crm_remote_v1_1'
+                    or set(signal['endpoints']['groupqueues']['queues'])!=set(QUEUE_NAMES)
+                    or signal['endpoints']['groupqueues']['queues']['storeQueue']['whole']['comparable_pairs']
+                    or signal['endpoints']['storequeuecount']['reported_count']['unit']!='unknown'
+                    or signal['true_no_show_rate'] is not None or signal['historical_availability_verified']
+                    or signal['eta_available'] or signal['network_performed']
+                    or str(remote_db) in signal_output.getvalue() or '\"13-1\"' in signal_output.getvalue()):
+                raise SystemExit('installed_remote_signal_semantics_failed')
+            print(json.dumps({'installed_remote_signal_ok':True,'remote_signal_admitted_synthetic_pairs':1,
+                'remote_signal_database_unchanged':True,'remote_signal_socket_calls':0,
+                'remote_signal_query_credentials_accessed':False,'remote_signal_clients_created':0,
+                'remote_signal_is_live_acceptance':False}))
             remote_plan = Path(directory).resolve() / "synthetic-remote-plan.json"
             arrival = (datetime.now(timezone.utc) + timedelta(minutes=16)).isoformat()
             remote_plan.write_text(json.dumps({"schema_version": 1, "plans": [
