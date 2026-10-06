@@ -81,11 +81,11 @@
 
 ## 版本说明
 
-当前开发候选为 **v0.2.0rc40**，新增[运行中的计划更新](docs/MONITORING_PLAN_UPDATES.md)：后台可接受整组新用餐计划，调整共享60／30秒节奏，保存已接受版本并保留原截止时间和预算。29项专项与1069项完整软件检查通过，独立安装与公开提交分别核对；监控调度不代表真实叫号预测或防过号提醒。原三店24小时任务继续保持原配置，全天与生产部署仍待验，正式v0.2.0和v1.0.0尚未完成。
+当前开发候选为 **v0.2.0rc40**，新增[运行中的计划更新](docs/MONITORING_PLAN_UPDATES.md)：后台可接受整组新用餐计划，调整共享60／30秒节奏，保存已接受版本并保留原截止时间和预算。29项专项与1069项完整软件检查通过；独立安装版随后完成真实接口验证：接受三次计划更新，六次请求全部成功，实际约60秒转30秒，前五次页面读取没有额外查询寿司郎。调度输入为合成计划，真实预测与防过号效果仍待验收。原三店24小时任务继续保持原配置，全天与生产部署仍待验，正式v0.2.0和v1.0.0尚未完成。
 
 ## 更新说明
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/886bdfa11b63c899-dark.svg"><img src="assets/readme-labels/886bdfa11b63c899-light.svg" alt="2026-10-07 · v0.2.0rc40" width="179" height="20"></picture></strong>：计划变了，监控跟着调整：新增显式计划更新入口，让运行中的后台接受新时间和关注状态，同店共用查询，临近用餐切换60／30秒节奏。新版本有据可查，原截止和请求预算保持；实际预测与提醒继续验收。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/886bdfa11b63c899-dark.svg"><img src="assets/readme-labels/886bdfa11b63c899-light.svg" alt="2026-10-07 · v0.2.0rc40" width="179" height="20"></picture></strong>：计划变了，监控跟着调整：新增显式计划更新入口，让运行中的后台接受新时间和关注状态，同店共用查询，临近用餐切换60／30秒节奏。新版本有据可查，原截止和请求预算保持；独立安装版真实查询已验证60秒转30秒，展示读取共用后台采集。实际预测与提醒继续验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/05f144782e048efa-dark.svg"><img src="assets/readme-labels/05f144782e048efa-light.svg" alt="2026-10-07 · v0.2.0rc39" width="179" height="20"></picture></strong>：检验历史，也尊重当时的信息：每个取号或已等待时刻重新筛选已收到的经历和审核，再计算后续叫号误差；后来补录不提前训练，资料不足也留下记录。按不同提前量分别统计，回放与真实模型成绩分开。
 
