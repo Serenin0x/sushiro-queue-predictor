@@ -1,6 +1,6 @@
 # 预测数据、真实结果与日期特征规范
 
-当前本地rc38新增[历史区间研究基线](HISTORY_BASELINE.md)，将[首次接收](OUTCOME_INTAKE.md)和[审核声明](OUTCOME_REVIEWS.md)的截止选择接到分层等待、条件剩余等待和理想时刻候选；真实性、训练资格及真实误差仍待验。旧rc22和下文219份盘点保留当时范围，匿名来源与长采集单独记录。公开/安装状态见[PROJECT_HANDOVER](PROJECT_HANDOVER.md)，接入验收见[V0_2_ACCEPTANCE](V0_2_ACCEPTANCE.md)，字段见[FIELD_MAPPING](FIELD_MAPPING.md)。
+当前本地rc39新增[按历史时刻的基线误差检验](BASELINE_BACKTEST.md)，仅使用当时已接收资料，不认证真实预测日志；此前rc38新增[历史区间研究基线](HISTORY_BASELINE.md)，将[首次接收](OUTCOME_INTAKE.md)和[审核声明](OUTCOME_REVIEWS.md)的截止选择接到分层等待、条件剩余等待和理想时刻候选；真实性、训练资格及真实误差仍待验。旧rc22和下文219份盘点保留当时范围，匿名来源与长采集单独记录。公开/安装状态见[PROJECT_HANDOVER](PROJECT_HANDOVER.md)，接入验收见[V0_2_ACCEPTANCE](V0_2_ACCEPTANCE.md)，字段见[FIELD_MAPPING](FIELD_MAPPING.md)。
 
 ## 当前数据能回答什么
 

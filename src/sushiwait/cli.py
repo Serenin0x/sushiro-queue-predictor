@@ -40,6 +40,7 @@ from .cohort import CohortError, cohort_report, reconstruct_claims
 from .intake import IntakeError, OutcomeIntakeStore
 from .reviews import ReviewError, OutcomeReviewStore, read_review, draft_review
 from .baseline import BaselineError, read_plan as read_baseline_plan, write_baseline
+from .backtest import BacktestError, read_backtest_plan, write_backtest
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -652,6 +653,12 @@ def build_parser() -> argparse.ArgumentParser:
     baseline.add_argument("--input", required=True)
     baseline.add_argument("--output", required=True)
     baseline.add_argument("--max-revisions", type=int, default=10000)
+    backtest = commands.add_parser("baseline-backtest", help="按当时接收资料重建历史基线并计算误差界；不认证线上预测日志")
+    backtest.add_argument("--source-db", required=True)
+    backtest.add_argument("--reviews-db", required=True)
+    backtest.add_argument("--input", required=True)
+    backtest.add_argument("--output", required=True)
+    backtest.add_argument("--max-revisions", type=int, default=10000)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -930,6 +937,23 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "baseline-backtest":
+            try:
+                plan = read_backtest_plan(args.input)
+                if not 1 <= args.max_revisions <= 10000:
+                    raise BacktestError("backtest_invalid_plan")
+                with OutcomeIntakeStore(args.source_db, read_only=True) as source, \
+                        OutcomeReviewStore(args.reviews_db, read_only=True) as reviews:
+                    result = write_backtest(source=source,reviews=reviews,plan=plan,
+                        destination=args.output,max_revisions=args.max_revisions)
+                durable = result['durability_confirmed']
+                emit({"ok":durable,**result,**({} if durable else {"error_code":"backtest_durability_unconfirmed"})})
+                return 0 if durable else 1
+            except (BacktestError, IntakeError, ReviewError) as error:
+                emit({"ok":False,"error_code":error.error_code,"committed":getattr(error,"committed",False),
+                    "durability_confirmed":False,"network_performed":False,"eta_available":False,
+                    "verified_training_labels":0,"model_performance_verified":False})
                 return 1
         if args.command == "baseline-research":
             try:

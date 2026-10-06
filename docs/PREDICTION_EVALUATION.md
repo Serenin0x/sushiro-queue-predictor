@@ -2,7 +2,7 @@
 
 rc37新增[人工审核声明](OUTCOME_REVIEWS.md)的草稿、接收和历史回放。已确认、拒绝、证据不足、冲突及结果修订后过时分别记录；人工声明不自动认证事件或训练资格，事件真实性及真实标签继续本方案验收，rc38基线接入的是人工声明。
 
-rc38已实现[可调用的历史区间研究入口](HISTORY_BASELINE.md)，支持新加入、已等待条件计算和理想时刻候选；还没有实时特征或真实误差校准。本文保留实际模型验收方案。当前真实训练标签0、源新鲜度未知，ETA不可用。已有数据契约见[DATASET_DESIGN](DATASET_DESIGN.md)，本人结果工具见[OUTCOMES](OUTCOMES.md)，公共展示分析见[SIGNALS](SIGNALS.md)，完整要求见[PROJECT_HANDOVER](PROJECT_HANDOVER.md)。正常查询更新与营业字段验收仍优先；不以本方案替代v0.2/v1验收。
+rc38已实现[可调用的历史区间研究入口](HISTORY_BASELINE.md)，支持新加入、已等待条件计算和理想时刻候选；还没有实时特征或真实误差校准。rc39进一步实现[按时间顺序的历史检验](BASELINE_BACKTEST.md)，不借未来修订并保留冷启动案例；仍没有认证的实际预测日志或校准。本文保留实际模型验收方案。当前真实训练标签0、源新鲜度未知，ETA不可用。已有数据契约见[DATASET_DESIGN](DATASET_DESIGN.md)，本人结果工具见[OUTCOMES](OUTCOMES.md)，公共展示分析见[SIGNALS](SIGNALS.md)，完整要求见[PROJECT_HANDOVER](PROJECT_HANDOVER.md)。正常查询更新与营业字段验收仍优先；不以本方案替代v0.2/v1验收。
 
 ## 预测目标与用户时间偏好
 

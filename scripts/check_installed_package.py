@@ -36,7 +36,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -856,6 +856,32 @@ def check() -> None:
             print(json.dumps({'installed_baseline_research_ok':True,'synthetic_forecast_available':True,
                 'source_and_review_files_unchanged':True,'baseline_socket_calls':0,'baseline_credentials_accessed':False,
                 'real_labels_admitted':0,'eta_available':False,'is_live_acceptance':False}))
+            backtest_plan={key:plan[key] for key in ('schema_version','as_of','data_origin','api_profile','store_id','minimum_samples')}
+            backtest_plan.update(elapsed_seconds=[0],max_cases=100)
+            backtest_input,backtest_output=baseline_directory/'backtest-plan.json',baseline_directory/'backtest.json'
+            backtest_input.write_text(json.dumps(backtest_plan));backtest_input.chmod(0o600)
+            backtest_logs=io.StringIO()
+            with patch('socket.socket',side_effect=AssertionError('unexpected_backtest_network')) as backtest_socket, \
+                    patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('unexpected_backtest_auth')) as backtest_auth, \
+                    patch('sushiwait.cli.client_for',side_effect=AssertionError('unexpected_backtest_client')) as backtest_client, \
+                    contextlib.redirect_stdout(backtest_logs):
+                if main(['baseline-backtest','--source-db',intake_database,'--reviews-db',str(review_db),
+                         '--input',str(backtest_input),'--output',str(backtest_output)])!=0:
+                    raise SystemExit('installed_backtest_failed')
+            replay=json.loads(backtest_output.read_text());summary=json.loads(backtest_logs.getvalue())
+            if (replay['reviewed_scope_episodes']!=1 or replay['attempted_cases']!=1 or replay['scored_cases']!=0
+                    or replay['cases'][0]['research_forecast_available'] or replay['forecast_log_verified']
+                    or replay['historical_target_context_verified']
+                    or replay['model_performance_verified'] or replay['eta_available'] or replay['verified_training_labels']
+                    or not summary['durability_confirmed'] or backtest_output.stat().st_mode & 0o777!=0o600
+                    or backtest_socket.call_count or backtest_auth.call_count or backtest_client.call_count
+                    or review_before!=review_db.read_bytes()
+                    or intake_before!=hashlib.sha256(Path(intake_database).read_bytes()).digest()
+                    or episode['episode_id'] in backtest_logs.getvalue() or episode['store_id'] in backtest_logs.getvalue()):
+                raise SystemExit('installed_backtest_semantics_failed')
+            print(json.dumps({'installed_baseline_backtest_ok':True,'synthetic_late_receipt_cases':1,
+                'synthetic_scored_cases':0,'source_and_review_files_unchanged':True,'backtest_socket_calls':0,
+                'backtest_credentials_accessed':False,'real_labels_admitted':0,'eta_available':False,'is_live_acceptance':False}))
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["outcome-check", "--synthetic-fixture", str(args.outcome_fixture)]) != 0:
                     raise SystemExit("installed_outcome_check_failed")
