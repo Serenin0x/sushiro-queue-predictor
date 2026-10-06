@@ -35,11 +35,11 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/65105f86981488eb-dark.svg"><img src="assets/readme-labels/65105f86981488eb-light.svg" alt="看懂页面数字的含义" width="146" height="20"></picture></strong>：已核对堂食与预约展示数组，以及“已签到等待桌数”的客户端字段绑定和西单同次响应数值。列表与详情分别记录刷新情况，营业状态显示关闭时也可能有叫号。页面更新时间与门店源时间分开解释，避免把刷新动作当作数据刚刚更新。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史；新增只读历史回放，核对整条修订链并按声明的历史时刻选择结果，避免后来纠错覆盖早先版本。人工记录与合成样例分别统计；新增私有区间误差计算，可核对已记录预测与叫号区间的误差范围、覆盖情况，保留不确定性。新增[首次接收账本](docs/OUTCOME_INTAKE.md)，由程序单独记录收到每份修订的时刻，补录的旧经历不会被提前算入历史回放；重复提交保留原接收时间。新增[人工审核记录](docs/OUTCOME_REVIEWS.md)，为具体结果生成未批准草稿，保存人工结论及其接收时间；结果改过后须重新审核，晚到审核不会倒灌历史，冲突保持未确认。人工确认声明与事件真实性认证分开，尚未发布真实模型成绩或预测。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史；新增只读历史回放，核对整条修订链并按声明的历史时刻选择结果，避免后来纠错覆盖早先版本。人工记录与合成样例分别统计；新增私有区间误差计算，可核对已记录预测与叫号区间的误差范围、覆盖情况，保留不确定性。新增[首次接收账本](docs/OUTCOME_INTAKE.md)，由程序单独记录收到每份修订的时刻，补录的旧经历不会被提前算入历史回放；重复提交保留原接收时间。新增[人工审核记录](docs/OUTCOME_REVIEWS.md)，为具体结果生成未批准草稿，保存人工结论及其接收时间；结果改过后须重新审核，晚到审核不会倒灌历史，冲突保持未确认。新增[历史区间研究基线](docs/HISTORY_BASELINE.md)，按同店、队列和日期匹配经历，计算新取号等待、已排队剩余等待和理想时间候选；保留上下界，资料不足明确缺失。人工确认与事件真实性认证分开，研究结果还需真实误差校准。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证；新匿名来源已实际验证同店共享的60／30秒策略，四份成对查询/八次请求成功；固定周期采集新增[任务保存与恢复](docs/ANONYMOUS_TASKS.md)，未知槽位不重发，原预算不重置。新增[持久共享窗口](docs/ANONYMOUS_WINDOWS.md)，将背景采集与同店60／30秒计划一并保存，重启保持原期限和预算，未知结果留为缺口；长期实际稳定性与提醒继续验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、990 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、1020 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -71,7 +71,7 @@
 
 当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；新增独立匿名CRM采集、报告及按私人计划的共享60／30秒调度，和微信凭证来源隔离，并新增[匿名任务保存与显式恢复](docs/ANONYMOUS_TASKS.md)，见[匿名来源说明](docs/ANONYMOUS_QUEUES.md)。保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，单店恢复节奏见 [恢复周期说明](docs/RECOVERY_CADENCE.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。 普通采集的[有限临时错误处理](docs/TRANSIENT_SAMPLING.md)可保留部分失败并继续后续槽位，默认首错停止，鉴权失败仍立即停采。
 
-字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录；本机公共字段导出、分页和保存状态见[导出说明](docs/PUBLIC_PACKETS.md)，接收格式校验与本机去重/冲突规则见[归档说明](docs/PACKET_ARCHIVE.md)，持久待确认目录与容量/故障规则见[保存说明](docs/PENDING_PACKETS.md)，本机接收与确认协议见[服务说明](docs/PACKET_RECEIVER.md)，本机投递与签名确认保存见[投递说明](docs/PACKET_DELIVERY.md)。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)，独立首次接收库与按本机接收时间回放见[接收说明](docs/OUTCOME_INTAKE.md)。 人工结论、版本绑定与审核接收时刻见[审核说明](docs/OUTCOME_REVIEWS.md)。
+字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录；本机公共字段导出、分页和保存状态见[导出说明](docs/PUBLIC_PACKETS.md)，接收格式校验与本机去重/冲突规则见[归档说明](docs/PACKET_ARCHIVE.md)，持久待确认目录与容量/故障规则见[保存说明](docs/PENDING_PACKETS.md)，本机接收与确认协议见[服务说明](docs/PACKET_RECEIVER.md)，本机投递与签名确认保存见[投递说明](docs/PACKET_DELIVERY.md)。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)，独立首次接收库与按本机接收时间回放见[接收说明](docs/OUTCOME_INTAKE.md)。 人工结论、版本绑定与审核接收时刻见[审核说明](docs/OUTCOME_REVIEWS.md)，分层历史、条件剩余等待与理想时刻候选见[历史基线](docs/HISTORY_BASELINE.md)。
 
 展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。用餐偏移与近时段刷新目标见[监控时间策略](docs/MONITORING_TARGETS.md)，离线工具保留；[同店共享策略](docs/SHARED_MONITORING.md)会合并请求目标，并在时间窗口切换前安排重新判断。[自适应采集](docs/ADAPTIVE_COLLECTION.md)将策略接入一个进程内的有界只读查询，遇到凭证保护或首个失败停止；尚无常驻调度或提醒。 门店号码与最后刷新结果的只读投影见[门店展示说明](docs/STORE_VIEW.md)；响应年龄与源更新时间、后台进程存活分别解释；可显式关联同库私有任务，停止或过时状态让各店展示同步转为最后已知信息。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前开发候选为 **v0.2.0rc37**，新增[真实经历的人工审核声明](docs/OUTCOME_REVIEWS.md)：审核绑定具体结果和首次接收版本，保留确认、拒绝、证据不足、冲突和纠错，历史回放按实际本机接收顺序选择。28项专项与990项完整软件检查通过；独立安装与实际发布分别核对，人工声明不自动认证训练标签。上一候选已公开终态窗口质量报告，原三店24小时任务继续运行；全天与生产部署、真实预测及误差仍待验，正式v0.2.0和v1.0.0尚未完成。
+当前开发候选为 **v0.2.0rc38**，新增[历史区间研究基线](docs/HISTORY_BASELINE.md)：把审核经历接入同店和日期匹配，计算新取号、已排队剩余等待与理想时间候选，保留不确定范围和资料不足原因。30项专项与1020项完整软件检查通过，独立安装与实际发布分别核对；真实模型误差尚未校准。原三店24小时任务继续运行，全天与生产部署仍待验，正式v0.2.0和v1.0.0尚未完成。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/863ef543701efe87-dark.svg"><img src="assets/readme-labels/863ef543701efe87-light.svg" alt="2026-10-07 · v0.2.0rc38" width="179" height="20"></picture></strong>：让历史经历开始参与计算：按门店、队列、日型和时段寻找参考，已等待时重新估计剩余分布，理想时间逐个比较候选；保留区间、不假设取号时间单调，没有足够资料就明确缺失。研究候选与真实校准成绩分别记录。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/a07a99db4f7bdb68-dark.svg"><img src="assets/readme-labels/a07a99db4f7bdb68-light.svg" alt="2026-10-07 · v0.2.0rc37" width="179" height="20"></picture></strong>：把真实经历变成可核对的资料：人工审核引用具体结果版本，确认、拒绝和证据不足分别保存；结果纠错会使旧审核过时，晚到审核不提前进入历史回放。合成样例单列，事件真实性、训练和误差仍需真实验收。
 

@@ -1,6 +1,6 @@
 # 预测数据、真实结果与日期特征规范
 
-这是数据阶段的设计和已有盘点，不是训练或预测接口。rc2已实现本机结果校验、独立私有库修订追加与汇总，操作见[OUTCOMES.md](OUTCOMES.md)；真实性审核和训练资格仍未实现。当前公开rc22（eb05a66）多店恢复改进及三版本各704项/独立安装已验，E0183补同次桌数对应；离线日期、本机结果记录与只读信号工具已公开，正式v0.2的剩余条件见[V0_2_ACCEPTANCE.md](V0_2_ACCEPTANCE.md)。完整需求和每轮历史见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)；字段含义见[FIELD_MAPPING.md](FIELD_MAPPING.md)。
+当前本地rc38新增[历史区间研究基线](HISTORY_BASELINE.md)，将[首次接收](OUTCOME_INTAKE.md)和[审核声明](OUTCOME_REVIEWS.md)的截止选择接到分层等待、条件剩余等待和理想时刻候选；真实性、训练资格及真实误差仍待验。旧rc22和下文219份盘点保留当时范围，匿名来源与长采集单独记录。公开/安装状态见[PROJECT_HANDOVER](PROJECT_HANDOVER.md)，接入验收见[V0_2_ACCEPTANCE](V0_2_ACCEPTANCE.md)，字段见[FIELD_MAPPING](FIELD_MAPPING.md)。
 
 ## 当前数据能回答什么
 

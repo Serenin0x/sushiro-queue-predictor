@@ -39,6 +39,7 @@ from .evaluation import EvaluationError, evaluate_document, read_evaluation_docu
 from .cohort import CohortError, cohort_report, reconstruct_claims
 from .intake import IntakeError, OutcomeIntakeStore
 from .reviews import ReviewError, OutcomeReviewStore, read_review, draft_review
+from .baseline import BaselineError, read_plan as read_baseline_plan, write_baseline
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -645,6 +646,12 @@ def build_parser() -> argparse.ArgumentParser:
     review_cohort.add_argument("--data-origin", choices=("self_reported", "synthetic"), required=True)
     review_cohort.add_argument("--api-profile", choices=API_PROFILES, required=True)
     review_cohort.add_argument("--max-revisions", type=int, default=10000)
+    baseline = commands.add_parser("baseline-research", help="私有历史区间基线与理想时刻候选搜索；不提供已校准ETA")
+    baseline.add_argument("--source-db", required=True)
+    baseline.add_argument("--reviews-db", required=True)
+    baseline.add_argument("--input", required=True)
+    baseline.add_argument("--output", required=True)
+    baseline.add_argument("--max-revisions", type=int, default=10000)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -923,6 +930,24 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "baseline-research":
+            try:
+                plan = read_baseline_plan(args.input)
+                if not 1 <= args.max_revisions <= 10000:
+                    raise BaselineError("baseline_invalid_plan")
+                with OutcomeIntakeStore(args.source_db, read_only=True) as source, \
+                        OutcomeReviewStore(args.reviews_db, read_only=True) as reviews:
+                    result = write_baseline(source=source,reviews=reviews,plan=plan,
+                        destination=args.output,max_revisions=args.max_revisions)
+                durable = result['durability_confirmed']
+                emit({"ok":durable,**result,**({} if durable else {"error_code":"baseline_durability_unconfirmed"})})
+                return 0 if durable else 1
+            except (BaselineError, IntakeError, ReviewError) as error:
+                emit({"ok":False,"error_code":error.error_code,
+                    "committed":getattr(error,"committed",False),"durability_confirmed":False,
+                    "network_performed":False,"authenticity_verified":False,
+                    "verified_training_labels":0,"eta_available":False})
                 return 1
         if args.command in ("outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort"):
             try:

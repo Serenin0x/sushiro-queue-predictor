@@ -350,6 +350,11 @@ class OutcomeReviewStore(OutcomeStore):
 
     def cohort(self, *, source, as_of, data_origin, api_profile, max_revisions=MAX_REVIEWS):
         """Aggregate review qualifications; no private episode or targets exported."""
+        return self._selection(source=source, as_of=as_of, data_origin=data_origin,
+            api_profile=api_profile, max_revisions=max_revisions)[0]
+
+    def _selection(self, *, source, as_of, data_origin, api_profile, max_revisions=MAX_REVIEWS):
+        """Internal private candidates for research; the public cohort remains aggregate."""
         begun = False
         try:
             now, cutoff = _clock(), _time(as_of)
@@ -369,11 +374,13 @@ class OutcomeReviewStore(OutcomeStore):
             begun = True
             rows = self._rows(now=now, limit=max_revisions)
             reviews = {}
+            review_receipts = {}
             future = 0
             for value, received in rows:
                 _bind(value, sources.get((value['episode_id'], value['episode_revision'])))
                 if received <= cutoff:
                     reviews[value['review_id']] = value
+                    review_receipts[value['review_id']] = received
                 else:
                     future += 1
             attached, stale, decisions = {}, 0, Counter()
@@ -387,18 +394,22 @@ class OutcomeReviewStore(OutcomeStore):
                 attached.setdefault(review['episode_id'], []).append(review)
                 decisions[review['decision']] += 1
             accepted = rejected = insufficient = conflicts = 0
+            candidates = []
             for episode_id, group in attached.items():
                 states = {v['decision'] for v in group}
                 conflicts += int(len(states) > 1)
                 if states == {'accept'}:
                     accepted += 1
+                    item = selected[episode_id]
+                    candidates.append({'episode': item[0], 'source_receipt_sha256': item[2],
+                        'available_at': _utc(max(item[1], *(review_receipts[v['review_id']] for v in group)))})
                 elif 'reject' in states:
                     rejected += 1
                 else:
                     insufficient += 1
             source._guard()
             self._guard()
-            return {'review_schema_version': 1, 'review_policy': POLICY,
+            report = {'review_schema_version': 1, 'review_policy': POLICY,
                 'source_revisions_audited': len(sources), 'review_revisions_audited': len(rows),
                 'selected_episodes': len(selected), 'reviewed_episodes': len(attached),
                 'episodes_without_current_review': len(selected)-len(attached),
@@ -414,6 +425,7 @@ class OutcomeReviewStore(OutcomeStore):
                 'verified_training_labels': 0, 'training_eligible': False,
                 'prediction_features_exported': False, 'eta_available': False,
                 'output_requires_private_handling': True, 'network_performed': False}
+            return report, candidates
         except ReviewError:
             raise
         except Exception:

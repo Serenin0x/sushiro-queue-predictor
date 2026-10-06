@@ -36,7 +36,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -824,6 +824,38 @@ def check() -> None:
             print(json.dumps({'installed_outcome_reviews_ok':True,'synthetic_review_cutoff_counts':[0,1],
                 'source_and_review_files_unchanged':True,'review_socket_calls':0,'review_credentials_accessed':False,
                 'real_labels_admitted':0,'authenticity_verified':False,'is_live_acceptance':False}))
+            baseline_directory = Path(directory).resolve()/'private-baseline'
+            baseline_directory.mkdir(mode=0o700)
+            baseline_input, baseline_output = baseline_directory/'plan.json',baseline_directory/'result.json'
+            episode = json.loads(args.outcome_fixture.read_text())
+            plan = {'schema_version':1,'as_of':datetime.now(timezone.utc).isoformat(),
+                'data_origin':'synthetic','api_profile':episode['api_profile'],'store_id':episode['store_id'],
+                'queue_type':episode['queue_type'],'party_size':episode['party_size'],'table_type':episode['table_type'],
+                'mode':'new_join','minimum_samples':1,'target_episode_id':None}
+            baseline_input.write_text(json.dumps(plan))
+            baseline_input.chmod(0o600)
+            baseline_logs=io.StringIO()
+            with patch('socket.socket',side_effect=AssertionError('unexpected_baseline_network')) as baseline_socket, \
+                    patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('unexpected_baseline_auth')) as baseline_auth, \
+                    patch('sushiwait.cli.client_for',side_effect=AssertionError('unexpected_baseline_client')) as baseline_client, \
+                    contextlib.redirect_stdout(baseline_logs):
+                if main(['baseline-research','--source-db',intake_database,'--reviews-db',str(review_db),
+                         '--input',str(baseline_input),'--output',str(baseline_output)]) != 0:
+                    raise SystemExit('installed_baseline_failed')
+            candidate=json.loads(baseline_output.read_text())
+            summary=json.loads(baseline_logs.getvalue())
+            if (not candidate['forecast']['research_forecast_available'] or candidate['eta_available']
+                    or candidate['authenticity_verified'] or candidate['verified_training_labels']
+                    or baseline_socket.call_count or baseline_auth.call_count or baseline_client.call_count
+                    or review_before != review_db.read_bytes()
+                    or intake_before != hashlib.sha256(Path(intake_database).read_bytes()).digest()
+                    or summary['eta_available'] or not summary['durability_confirmed']
+                    or baseline_output.stat().st_mode & 0o777 != 0o600
+                    or episode['episode_id'] in baseline_logs.getvalue() or episode['store_id'] in baseline_logs.getvalue()):
+                raise SystemExit('installed_baseline_semantics_failed')
+            print(json.dumps({'installed_baseline_research_ok':True,'synthetic_forecast_available':True,
+                'source_and_review_files_unchanged':True,'baseline_socket_calls':0,'baseline_credentials_accessed':False,
+                'real_labels_admitted':0,'eta_available':False,'is_live_acceptance':False}))
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["outcome-check", "--synthetic-fixture", str(args.outcome_fixture)]) != 0:
                     raise SystemExit("installed_outcome_check_failed")
