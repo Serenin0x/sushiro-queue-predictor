@@ -25,9 +25,9 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/18e6edb814fdbffe-dark.svg"><img src="assets/readme-labels/18e6edb814fdbffe-light.svg" alt="为正常刷新准备更轻的接入方式" width="226" height="20"></picture></strong>：保留同电脑响应接收与安全诊断，新增正常目录查询的短时摘要接入工具。目录来源已实测取得完整新凭证，关闭小程序后电脑查询三店成功，无需导出 HAR；接入工具与同进程恢复已有重复实证；新增独立的短窗关闭保护工具，到时关闭调试并核对状态；新增私有暂存提交组件，调试关闭后才更新采集上下文，已实测公开组件完成主配置更新及原进程恢复；新增一个短窗协调入口，将暂存接收与独立关闭保护联动，已实测接入新凭证、提前关闭调试并恢复原进程；本次仍有约 3 分 47 秒采集缺口，继续改进更新速度。重复可靠性和长期自动更新继续验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。单店在同进程更新通过后保留原采样目标，避免再次等完整周期；真实缩短幅度继续验证。长期无人值守与服务器独立更新仍待验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。单店在同进程更新通过后保留原采样目标，避免再次等完整周期；最终包本轮跨更新间隔为 98.760 秒，恢复后约 30 秒；更新缺口和长期稳定性继续验证。长期无人值守与服务器独立更新仍待验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料；当前不上传。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bf4fbb34b32ed56d-dark.svg"><img src="assets/readme-labels/bf4fbb34b32ed56d-light.svg" alt="看清采集是否可靠" width="130" height="20"></picture></strong>：报告区分请求失败、字段处理失败与本机停采，统计实际请求间隔、展示号码变化和字段状态。明确统计窗口，帮助发现异常；相同数据不会被当成刚更新的数据；可离线查看私有任务的成功、失败与未知槽位，不读取凭证或查询门店。
 
@@ -39,7 +39,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证，提醒与长期调度继续推进。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、575 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、615 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -71,7 +71,7 @@
 
 当前使用 Python 3.11+ 标准库、固定 HTTPS 只读请求和 SQLite；保留分队列展示数组、字段存在状态与数据来源。通过有界离线捕获检查、同电脑短时上下文接收与正常目录摘要接入、私有上下文原子更新、到期保护与可选等待恢复完善采集可靠性。运行、凭证状态及批量采样步骤见 [数据验证手册](docs/DATA_ACCESS.md)，正常更新证据与进入条件见 [凭证更新说明](docs/AUTH_REFRESH.md)，辅助端与采集恢复见 [本机接入说明](docs/BRIDGE.md)，无 HAR 路线见 [正常查询接入](docs/SURGE_INTAKE.md)，客户端辅助采集与服务器保存的实施计划见 [长期采集方案](docs/LONG_TERM_COLLECTION.md)，持久有界任务和重启对账见 [任务恢复说明](docs/COLLECTION_TASKS.md)，独立关闭保护与实际限制见 [短窗保护说明](docs/SURGE_GUARD.md)，完整暂存提交见 [更新协调说明](docs/CONTEXT_PROMOTION.md)，单店恢复节奏见 [恢复周期说明](docs/RECOVERY_CADENCE.md)，短窗联动与前置条件见 [窗口协调说明](docs/CONTEXT_WINDOW.md)。
 
-字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)。
+字段解释见 [字段映射](docs/FIELD_MAPPING.md)，真实采样与剩余条件见 [接入验收报告](docs/V0_2_ACCEPTANCE.md)，自动检查与安装验证见 [检查说明](docs/CHECKS.md)。缓存、HTTP 时间和配额提示保留为单独观察，运行资料默认存放在本机应用数据目录；本机公共字段导出、分页和保存状态见[导出说明](docs/PUBLIC_PACKETS.md)。结果记录、私有追加库与操作边界见[结果记录说明](docs/OUTCOMES.md)，日期/时段分类及历史信息规则见[日期特征说明](docs/CALENDAR.md)；记录中的误差范围与覆盖计算见[区间评估说明](docs/INTERVAL_EVALUATION.md)，完整修订核对与历史声明回放见[结果回放说明](docs/OUTCOME_COHORT.md)。
 
 展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。用餐偏移与近时段刷新目标见[监控时间策略](docs/MONITORING_TARGETS.md)，离线工具保留；[同店共享策略](docs/SHARED_MONITORING.md)会合并请求目标，并在时间窗口切换前安排重新判断。[自适应采集](docs/ADAPTIVE_COLLECTION.md)将策略接入一个进程内的有界只读查询，遇到凭证保护或首个失败停止；尚无常驻调度或提醒。
 
@@ -81,11 +81,13 @@
 
 ## 版本说明
 
-当前代码为 **v0.2.0rc16 采集恢复候选版，正式 v0.2.0 尚未完成验收**。单店在凭证恢复后继续沿用原采样目标，去掉额外等待，同时保留首错停止和到期保护；提前、延后、多店与持久任务共 43 项专项及 575 项完整本机检查通过，实际缺口、最终安装与本次 GitHub 检查逐次核验。上一候选版的同店有界调度已实测按 60.010／30.014／30.007 秒间隔完成四次查询，三版本安装检查通过。结果修订回放与区间算术不认证真实模型表现；常驻凭证提供方、营业字段、真实标签、预测与后续产品按阶段推进。
+当前代码为 **v0.2.0rc17 数据导出候选版，正式 v0.2.0 尚未完成验收**。新增只读分页导出，原库保持、允许字段与来源分隔、已有文件不覆盖；40 项新增检查和 615 项完整本机检查通过，26 模块安装包已对本轮真实资料完成 3+4 两页导出，原库保持不变；本次公开与 GitHub 检查逐次核验。上一最终安装包已完成第五个不同任务的同进程跨凭证恢复：本轮西单六次查询全成功，跨更新间隔 98.760 秒，恢复后约 30 秒；另外两店各查询成功一次。闭店数据仍不能验证营业叫号或源新鲜度，导出也不代表服务器收到数据。常驻供应、真实标签、预测与后续产品继续按阶段推进。
 
 ## 更新说明
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/b62e66a254a0dea2-dark.svg"><img src="assets/readme-labels/b62e66a254a0dea2-light.svg" alt="2026-10-06 · v0.2.0rc16" width="179" height="20"></picture></strong>：单店在正常凭证更新成功后保留原采样目标，错过目标只查询一次当前状态；下一次从新周期开始，减少额外等待。多店和跨进程重启保持完整周期，43 项专项与 575 项完整本机检查通过，真实恢复缺口继续验证。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/2fa26719104da7b2-dark.svg"><img src="assets/readme-labels/2fa26719104da7b2-light.svg" alt="2026-10-06 · v0.2.0rc17" width="179" height="20"></picture></strong>：新增本机门店公共字段分页导出，保留缺失信息、号码顺序与失败时间语义；稳定观测标识和内容校验为后续重复数据检查准备格式。40 项新增检查、615 项完整本机检查通过，源库只读、拒绝覆盖及提交前后故障状态已验证；上传、待确认队列与服务器继续实现。
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/b62e66a254a0dea2-dark.svg"><img src="assets/readme-labels/b62e66a254a0dea2-light.svg" alt="2026-10-06 · v0.2.0rc16" width="179" height="20"></picture></strong>：单店在正常凭证更新成功后保留原采样目标，错过目标只查询一次当前状态；下一次从新周期开始，减少额外等待。多店和跨进程重启保持完整周期，43 项专项与 575 项完整本机检查通过；最终包本轮真实跨更新间隔 98.760 秒，恢复后约 30 秒，长期稳定性继续验证。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/1b7386d87f5a032f-dark.svg"><img src="assets/readme-labels/1b7386d87f5a032f-light.svg" alt="2026-10-06 · v0.2.0rc15" width="179" height="20"></picture></strong>：同店共享策略接入有界采集，按临近用餐的 60／30 秒目标运行；实际开始锚定、窗口边界重算、查询预算与首错停止，29 项专项和 570 项完整本机检查通过。新凭证退出小程序后三店再次成功；另一次 504 后保留失败槽位，显式完成剩余四份。安装包在小程序关闭后按约 60／30 秒完成四次真实查询；闭店数据不用于验证营业叫号。长期调度、提醒与预测继续验收。
 

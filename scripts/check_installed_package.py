@@ -32,7 +32,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report")):
+            ("capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "packet-export")):
         raise SystemExit("installed_cli_missing_commands")
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                   "context-bridge", "--help"],
@@ -204,6 +204,26 @@ def check() -> None:
                 if main(["report", "--db", database]) != 0:
                     raise SystemExit("installed_report_failed")
             group = json.loads(output.getvalue())["groups"][0]
+            packet_file = Path(directory).resolve() / "public-fields.json"
+            packet_before = hashlib.sha256(Path(database).read_bytes()).digest()
+            packet_output = io.StringIO()
+            with patch("sushiwait.cli.read_credentials_file", side_effect=AssertionError("unexpected_credentials")) as auth, \
+                    patch("sushiwait.surgeguard._command", side_effect=AssertionError("unexpected_native_command")) as native, \
+                    patch("subprocess.Popen", side_effect=AssertionError("unexpected_child")) as child, \
+                    contextlib.redirect_stdout(packet_output):
+                if main(["packet-export", "--db", database, "--output", str(packet_file),
+                         "--store-id", group["store_id"], "--api-profile", group["api_profile"],
+                         "--data-origin", "synthetic", "--as-of", group["last_received_at"]]) != 0:
+                    raise SystemExit("installed_packet_export_failed")
+            packet_summary = json.loads(packet_output.getvalue())
+            packet = json.loads(packet_file.read_bytes())
+            if (auth.call_count or native.call_count or child.call_count
+                    or packet_before != hashlib.sha256(Path(database).read_bytes()).digest()
+                    or packet_summary["record_count"] != 1 or packet_summary["server_received"]
+                    or packet_summary["credentials_accessed"] or packet["eta_available"]
+                    or packet["verified_training_labels"] != 0
+                    or packet["records"][0]["display"]["groupQueues"]["groups"]["boothQueue"]["value"] != ["B001"]):
+                raise SystemExit("installed_packet_export_semantics_mismatch")
             from datetime import datetime, timezone
             from sushiwait.tasks import CollectionTask
             from sushiwait.storage import SnapshotStore
@@ -311,6 +331,10 @@ def check() -> None:
         "outcomes_socket_calls": 0, "verified_training_labels": 0,
         "calendar_package_data_ok": True, "calendar_socket_calls": 0,
         "readonly_signal_report_ok": True, "signal_socket_calls": 0,
+        "public_field_packet_export_ok": True, "packet_database_unchanged": True,
+        "packet_socket_calls": 0, "packet_native_cli_calls": 0,
+        "packet_child_process_calls": 0, "packet_query_credentials_accessed": False,
+        "packet_server_received": False,
         "collection_task_options_ok": True, "private_task_status_ok": True, "task_status_socket_calls": 0}))
 
 

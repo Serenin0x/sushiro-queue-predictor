@@ -23,6 +23,7 @@ from .outcomes import OutcomeError, OutcomeStore, public_summary, read_episode
 from .localpaths import local_data_directory
 from .storage import SnapshotStore
 from .signals import SignalError, signal_report
+from .packets import PacketError, export_packet
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
 from .promotion import PromotionError, promote_context
@@ -504,6 +505,15 @@ def build_parser() -> argparse.ArgumentParser:
     signals.add_argument("--window-seconds", type=int, default=120)
     signals.add_argument("--max-gap-seconds", type=int, default=90)
     signals.add_argument("--sample-limit", type=int, default=10000)
+    packet = commands.add_parser("packet-export", help="只读导出门店公共字段到私有文件；不上传或读取凭证")
+    packet.add_argument("--db", required=True, help="明确的私有DB2，文件0600或0400/父目录0700")
+    packet.add_argument("--output", required=True, help="新的0600文件，已有0700目录；拒绝覆盖")
+    packet.add_argument("--store-id", action="append", required=True, help="明确1–3店的规范ID，不合并重复输入")
+    packet.add_argument("--api-profile", choices=API_PROFILES, required=True)
+    packet.add_argument("--data-origin", choices=("live", "fixture", "synthetic"), required=True)
+    packet.add_argument("--as-of", required=True, help="带秒与时区的资料截止时间；选中未来记录时整页拒绝")
+    packet.add_argument("--after-id", type=int, default=0, help="本机同库同范围的已保存游标，不代表服务端确认")
+    packet.add_argument("--limit", type=int, default=1000, help="本次按ID升序选择1–1000条")
     return parser
 
 
@@ -655,6 +665,20 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except TaskError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "packet-export":
+            try:
+                result = export_packet(args.db, args.output, store_ids=args.store_id,
+                    api_profile=args.api_profile, data_origin=args.data_origin,
+                    as_of=args.as_of, after_id=args.after_id, limit=args.limit)
+                emit({"ok":result["durability_confirmed"], **result,
+                      **({} if result["durability_confirmed"] else
+                         {"error_code":"packet_durability_unconfirmed"})})
+                return 0 if result["durability_confirmed"] else 1
+            except PacketError as error:
+                emit({"ok":False, "error_code":error.error_code, "committed":error.committed,
+                      "durability_confirmed":False, "network_performed":False,
+                      "credentials_accessed":False, "server_received":False})
                 return 1
         if args.command == "collect" and args.task_file:
             try:
