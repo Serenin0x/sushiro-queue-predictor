@@ -4,6 +4,8 @@
 
 本表是 v0.2.0 的接入解释层，原始快照保持 schema 1、数据库 schema 2。事实字段与解释证据分开，既有快照不回填、不改哈希。完整需求和研究历史见 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)，操作见 [DATA_ACCESS.md](DATA_ACCESS.md)。
 
+2026-10-06北京两店官方正常页面与匿名源近时对照见交接E0219：西单普通号对应mixed、预约号对应reservation，booth与storeQueue不能替代；目录签到桌数与附近count不同。非同次绑定，不改匿名单位/身份/新鲜度unknown；手机小助手的显示绑定与固定线性估时方法见[ANONYMOUS_QUEUES.md](ANONYMOUS_QUEUES.md)。
+
 ## 已核对的映射
 
 证据范围：本人正常下载的目标微信客户端 181 版、2026-10-04 正常营业页面及17:15唯一详情捕获，以及2026-10-06西单正常列表/详情的仅公开字段短窗对照（E0183）。只在内存解析字段绑定，没有执行或发布官方源码。版本范围不能当作第三方 API 的稳定合约。
