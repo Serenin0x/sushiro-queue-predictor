@@ -318,10 +318,18 @@ class RemoteWindowTask(RemoteTask):
 
 
 class PersistentWindowSchedule:
-    def __init__(self,task,*,wall,monotonic):
+    def __init__(self,task,*,wall,monotonic,previous_starts=None,previous_monotonic=None,resume_wait=False):
         self.task=task;self.last_wall=None;self.last_mono=None;self.starts_mono={}
         at,mono=self.clock(wall,monotonic)
-        self.resume_mono=mono if task.loaded else None
+        self.previous_starts=deepcopy(previous_starts or {})
+        carried=deepcopy(previous_monotonic or {})
+        stores=set(task.value['config']['store_ids'])
+        if (type(resume_wait) is not bool or set(self.previous_starts)-stores or set(carried)-stores
+                or any(_at(t)>at for t in self.previous_starts.values())
+                or any(type(t) not in (int,float) or not math.isfinite(t) or not 0<=t<=mono for t in carried.values())):
+            raise RemoteTaskError('remote_window_invalid_carryover')
+        self.starts_mono=carried
+        self.resume_mono=mono if task.loaded or resume_wait else None
         self.deadline_mono=mono+max(0,(_at(task.value['deadline_at'])-at).total_seconds())
 
     def clock(self,wall,mono):
@@ -342,7 +350,7 @@ class PersistentWindowSchedule:
         policies={p['store_id']:p for p in policy['stores']};due=[];wakes=[]
         for store in c['store_ids']:
             item=policies.get(store);interval=(item['requested_interval_seconds'] if item else None) or c['base_interval']
-            previous=value['starts'].get(store)
+            previous=value['starts'].get(store,self.previous_starts.get(store))
             target=mono+max(0,(_at(previous)+timedelta(seconds=interval)-at).total_seconds()) if previous else mono
             if store in self.starts_mono:target=max(target,self.starts_mono[store]+interval)
             if self.resume_mono is not None:target=max(target,self.resume_mono+interval)
@@ -359,8 +367,9 @@ class PersistentWindowSchedule:
         self.task.begin(store,now=wall);self.starts_mono[store]=monotonic
 
 
-def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,should_stop=lambda:False):
-    schedule=PersistentWindowSchedule(task,wall=wall_clock(),monotonic=monotonic_clock())
+def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,should_stop=lambda:False,schedule=None):
+    if schedule is None:schedule=PersistentWindowSchedule(task,wall=wall_clock(),monotonic=monotonic_clock())
+    if schedule.task is not task:raise RemoteTaskError('remote_window_schedule_conflict')
     while not should_stop():
         decision=schedule.decision(wall=wall_clock(),monotonic=monotonic_clock())
         if decision['done']:break

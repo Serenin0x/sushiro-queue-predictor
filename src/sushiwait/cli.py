@@ -500,6 +500,24 @@ def build_parser() -> argparse.ArgumentParser:
             window.add_argument("--listen-host",choices=("127.0.0.1","0.0.0.0"),default="127.0.0.1")
     window_status = commands.add_parser("remote-window-status",help="只读保存窗口状态；不读计划、不联网、不检查存活")
     window_status.add_argument("--task-file",required=True)
+    for name in ("remote-campaign-collect", "remote-campaign-serve"):
+        campaign = commands.add_parser(name, help="最多14天的连续采集计划；正常窗口接续，总期限和预算跨重启保持")
+        campaign.add_argument("--root", required=True, help="专用空0700状态目录；保留每段窗口，不删除旧库")
+        campaign.add_argument("--plan-file", required=True, help="状态目录外的不可变私有计划")
+        campaign.add_argument("--plan-updates-file", help="状态目录外独立私有计划更新")
+        campaign.add_argument("--store-id", action="append", required=True)
+        campaign.add_argument("--base-interval", type=int, default=300)
+        campaign.add_argument("--duration", type=int, default=604800)
+        campaign.add_argument("--window-duration", type=int, default=86400)
+        campaign.add_argument("--max-pairs", type=int, default=6300)
+        modes = campaign.add_mutually_exclusive_group()
+        modes.add_argument("--resume-task", action="store_true")
+        modes.add_argument("--resume-if-present", action="store_true")
+        if name == "remote-campaign-serve":
+            campaign.add_argument("--port", type=int, default=8765)
+            campaign.add_argument("--listen-host", choices=("127.0.0.1", "0.0.0.0"), default="127.0.0.1")
+    campaign_status = commands.add_parser("remote-campaign-status", help="只读多日采集检查点；不打开数据库、不联网")
+    campaign_status.add_argument("--root", required=True)
     plans_publish=commands.add_parser("monitor-plans-publish",help="私有计划修订原子发布；不查询、不取号、不发送提醒")
     plans_publish.add_argument("--input",required=True)
     plans_publish.add_argument("--output",required=True)
@@ -776,6 +794,40 @@ def main(argv: list[str] | None = None) -> int:
             emit({'ok':False,'committed':error.committed,'error_code':str(error)});return 2
         except (OSError,ValueError,TypeError,KeyError,OverflowError):
             emit({'ok':False,'committed':False,'error_code':'plan_update_input_or_storage_error'});return 2
+    if args.command in ("remote-campaign-collect", "remote-campaign-serve", "remote-campaign-status"):
+        from .remotecampaign import RemoteCampaign, RemoteCampaignService, campaign_config, remote_campaign_status
+        from .remoteservice import serve_local, RemoteServiceError
+        from .remotetasks import RemoteTaskError
+        from .planupdates import PlanUpdateError
+        try:
+            if args.command == "remote-campaign-status":
+                emit(remote_campaign_status(args.root))
+                return 0
+            ids = [canonical_store_id(s) for s in args.store_id]
+            if args.command == "remote-campaign-serve":
+                service = RemoteCampaignService(root=args.root, plan_file=args.plan_file, store_ids=ids,
+                    base_interval=args.base_interval, duration_seconds=args.duration, window_seconds=args.window_duration,
+                    max_pairs=args.max_pairs, plan_updates_file=args.plan_updates_file,
+                    resume=args.resume_task, resume_if_present=args.resume_if_present)
+                serve_local(service, port=args.port, listen_host=args.listen_host)
+                return 1 if service.status()['service_state'] == 'failed' else 0
+            config = campaign_config(args.root, args.plan_file, ids, args.base_interval, args.duration,
+                                     args.window_duration, args.max_pairs, now=_utc_clock(),
+                                     plan_updates_file=args.plan_updates_file)
+            with RemoteCampaign(config=config, now=_utc_clock(), resume=args.resume_task,
+                                resume_if_present=args.resume_if_present) as campaign:
+                result = campaign.collect(wall_clock=_utc_clock, monotonic_clock=time.monotonic,
+                                          sleep=time.sleep, emit=emit)
+                return 0 if result['ok'] else 1
+        except KeyboardInterrupt:
+            emit({'ok': False, 'source': 'crm_remote_v1_1', 'error_code': 'interrupted'})
+            return 130
+        except (RemoteTaskError, RemoteServiceError, PlanUpdateError) as error:
+            emit({'ok': False, 'source': 'crm_remote_v1_1', 'error_code': str(error)})
+            return 2
+        except (OSError, ValueError, TypeError, KeyError, OverflowError, sqlite3.Error):
+            emit({'ok': False, 'source': 'crm_remote_v1_1', 'error_code': 'remote_campaign_input_or_storage_error'})
+            return 2
     if args.command in ("remote-window-collect","remote-window-serve","remote-window-status"):
         from .remotewindow import (RemoteWindowTask,RemoteWindowService,collect_remote_window,
             remote_window_status,window_config)

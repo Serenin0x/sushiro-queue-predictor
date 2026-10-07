@@ -16,9 +16,9 @@ RUN python -m pip install --no-cache-dir --only-binary=:all: --require-hashes -r
     && python -m pip install --no-index --no-deps /wheels/*.whl \
     && python -m pip check \
     && rm -rf /wheels \
-    && mkdir /state /plan-updates \
+    && mkdir /state /state/campaign /plan-updates \
     && printf '{"schema_version":1,"plans":[]}\n' > /state/plans.json \
-    && chmod 700 /state /plan-updates && chmod 600 /state/plans.json \
+    && chmod 700 /state /state/campaign /plan-updates && chmod 600 /state/plans.json \
     && chown -R 10001:10001 /state /plan-updates
 USER 10001:10001
 WORKDIR /state

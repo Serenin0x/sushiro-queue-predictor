@@ -66,7 +66,7 @@ docker compose -p sushiwait-live-plans \
 ## 合成来源的实际容器验证
 
 ```sh
-python3 scripts/check_container_plans.py --image sushiwait:0.2.0rc41
+python3 scripts/check_container_plans.py --image sushiwait:0.2.0rc42
 ```
 
 检查启动真实Linux容器和HTTP，使用实际墙钟/单调时钟及本机管理员发布；固定合成店900001和假传输，官方请求0。它核对初始空计划、同店两计划、运行中60／30秒与清空、已接受revision、终态的新文件版本不复活任务、重建后库/检查点/种子字节保持，并只清理本次独有的容器、测试镜像与卷。合成计划及假响应不作为真实用餐、过号、预测误差或长期稳定性的证据；实际运行结果以交接编号为准。

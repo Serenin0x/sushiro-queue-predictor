@@ -59,3 +59,5 @@ jobs:
         run: python3 scripts/check_container.py --image sushiwait:check
       - name: Check running plan updates with synthetic upstream
         run: python3 scripts/check_container_plans.py --image sushiwait:check
+      - name: Check multi-window campaign and restart with synthetic upstream
+        run: python3 scripts/check_container_campaign.py --image sushiwait:check

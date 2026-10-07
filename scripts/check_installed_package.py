@@ -20,6 +20,74 @@ from sushiwait.cli import main
 from sushiwait.cli import _recovery_poll_target
 
 
+def check_campaign_install():
+    """Use the installed CLI, real private files and an explicitly fake source."""
+    from sushiwait.remote import RemoteClient, QUEUE_NAMES
+    from sushiwait.remotecampaign import RemoteCampaign
+    base = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    seconds = [0.0]
+    starts = []
+    class Response:
+        headers = {}
+        def __init__(self, request): self.request = request
+        def geturl(self): return self.request.full_url
+        def getcode(self): return 200
+        def close(self): pass
+        def read(self, size):
+            return json.dumps({k: [] for k in QUEUE_NAMES} if 'groupqueues?' in self.request.full_url else 0).encode()[:size]
+    class Opener:
+        def open(self, request, *, timeout):
+            if 'groupqueues?' in request.full_url:
+                starts.append(seconds[0])
+            return Response(request)
+    client = RemoteClient(opener=Opener())
+    real_collect = RemoteCampaign.collect
+    terminal = [False]
+    def collect(campaign, **kwargs):
+        def factory():
+            if terminal[0]:
+                raise AssertionError('terminal_campaign_constructed_client')
+            return client
+        kwargs['client_factory'] = factory
+        return real_collect(campaign, **kwargs)
+    def sleep(delay):
+        seconds[0] += delay
+    with tempfile.TemporaryDirectory() as temporary:
+        parent = Path(temporary).resolve()
+        root, seed = parent / 'campaign', parent / 'seed.json'
+        root.mkdir(mode=0o700)
+        seed.write_text('{"schema_version":1,"plans":[]}')
+        seed.chmod(0o600)
+        arguments = ['remote-campaign-collect', '--root', str(root), '--plan-file', str(seed),
+                     '--store-id', '900001', '--base-interval', '60', '--duration', '150',
+                     '--window-duration', '45', '--max-pairs', '20']
+        logs = io.StringIO()
+        with patch.object(RemoteCampaign, 'collect', autospec=True, side_effect=collect), \
+             patch('sushiwait.remote._utc', side_effect=lambda: (base + timedelta(seconds=seconds[0])).isoformat()), \
+             patch('sushiwait.cli._utc_clock', side_effect=lambda: base + timedelta(seconds=seconds[0])), \
+             patch('sushiwait.cli.time.monotonic', side_effect=lambda: seconds[0]), \
+             patch('sushiwait.cli.time.sleep', side_effect=sleep), \
+             patch('socket.socket', side_effect=AssertionError('campaign_socket')) as network, \
+             patch('sushiwait.cli.read_credentials_file', side_effect=AssertionError('campaign_credentials')) as auth, \
+             contextlib.redirect_stdout(logs):
+            assert main(arguments) == 0
+            before = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file()}
+            terminal[0] = True
+            seconds[0] += 5
+            assert main(arguments + ['--resume-if-present']) == 0
+            assert main(['remote-campaign-status', '--root', str(root)]) == 0
+            after = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file()}
+        summaries = [json.loads(line)['remote_campaign_summary'] for line in logs.getvalue().splitlines()
+                     if 'remote_campaign_summary' in json.loads(line)]
+        assert starts == [0, 60, 120] and before == after and network.call_count == auth.call_count == 0
+        assert all(s['windows_archived'] == 3 and s['recorded_http_attempts'] == 6 and s['ok'] for s in summaries)
+        assert str(root) not in logs.getvalue()
+        print(json.dumps({'installed_campaign_ok': True, 'synthetic_windows_archived': 3,
+            'synthetic_pairs': 3, 'synthetic_http_attempts': 6, 'campaign_socket_calls': 0,
+            'campaign_credentials_accessed': False, 'terminal_files_unchanged': True,
+            'eta_available': False, 'is_live_acceptance': False}))
+
+
 def check() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
@@ -993,6 +1061,7 @@ def check() -> None:
         if (task_summary["task_schema_version"] != 1 or task_summary["completed_slots"] != 0
                 or task_summary["network_performed"] or task_summary["eta_available"]):
             raise SystemExit("installed_task_status_semantics_mismatch")
+    check_campaign_install()
     print(json.dumps({"installed_version": expected, "import_outside_checkout": True,
         "cli_help_ok": True, "bridge_diagnostic_option_ok": True, "surge_intake_help_ok": True,
         "surge_guard_help_ok": True, "guard_invalid_window_ok": True,
