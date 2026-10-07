@@ -71,6 +71,77 @@ def check_deepseek_install():
                          'provider_calls':0,'socket_calls':0,'billing_verified':False,'eta_available':False}))
 
 
+def check_tracking_install():
+    """Use installed private episode CLI and actual current-version publication."""
+    from uuid import uuid4
+    from sushiwait.tracking import prepare_prediction, calculate_prediction, publish_prediction, TrackingError
+    from sushiwait.fusion import context_from_history
+    from sushiwait.remoteservice import LiveRemoteView
+    from sushiwait.remote import RemoteClient, QUEUE_NAMES
+    now = datetime.now(timezone.utc)
+    stamp = lambda second: (now+timedelta(seconds=second)).isoformat()
+    class Response:
+        headers = {}
+        def __init__(self, request): self.request = request
+        def geturl(self): return self.request.full_url
+        def getcode(self): return 200
+        def close(self): pass
+        def read(self, size):
+            value = {k:['10','13','13'] for k in QUEUE_NAMES} if 'groupqueues?' in self.request.full_url else 5
+            return json.dumps(value).encode()[:size]
+    class Transport:
+        def open(self, request, timeout): return Response(request)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp).resolve(); root.chmod(0o700)
+        state = root/'state'; state.mkdir(mode=0o700)
+        inputs = root/'inputs'; inputs.mkdir(mode=0o700)
+        ticket = {'schema_version':1,'episode_id':str(uuid4()),'data_origin':'synthetic','api_profile':'miniapp_gateway',
+            'store_id':'900001','queue_type':'ordinary','number':'13','issued_at':stamp(-300),
+            'party_size':2,'table_type':'unknown','checked_in':None,'created_at':stamp(-1),'deadline_at':stamp(3600),
+            'desired_arrival_at':stamp(1800),'call_offset_minutes':0,'minimum_samples':1,'max_updates':10}
+        with patch('socket.socket',side_effect=AssertionError('tracking_install_socket')) as sockets, \
+                patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('tracking_install_credentials')) as auth, \
+                patch('sushiwait.remote._utc',return_value=stamp(-1)),patch('sushiwait.tracking._now',return_value=now):
+            view = LiveRemoteView(['900001'],stale_after_seconds=120)
+            view.publish(RemoteClient(opener=Transport()).snapshot('900001'))
+            snapshot = view.snapshot('900001',now=now,service_state='running',worker_alive=True)
+            context = context_from_history(view.monitor_history('900001',now=now,service_state='running',worker_alive=True),
+                queue_type='ordinary',now=now)
+            for name, value in [('ticket',ticket),('view',snapshot),('context',context)]:
+                p=inputs/(name+'.json');p.write_text(json.dumps(value));p.chmod(0o600)
+            commands=[['ticket-track-init','--state-dir',str(state),'--ticket-file',str(inputs/'ticket.json')],
+                ['ticket-track-observe','--state-dir',str(state),'--view-file',str(inputs/'view.json'),
+                 '--context-file',str(inputs/'context.json'),'--as-of',stamp(0)]]
+            for command in commands:
+                output=io.StringIO()
+                with contextlib.redirect_stdout(output): assert main(command)==0
+                assert str(root) not in output.getvalue() and ticket['episode_id'] not in output.getvalue()
+            preparation=prepare_prediction(directory=state,version=1,now=now)
+            plan={'schema_version':2,'data_origin':'synthetic','model_version':'install-tracking-v1',
+                'prediction_target':'remaining','conditioning':'call_not_observed_after_elapsed','ai_blend_ppm':0,
+                'public_context':preparation['receipt']['observation']['public_context'],
+                'candidates':[{'candidate_id':'history','interval_sample':{'elapsed_us':300_000_000,
+                    'intervals':[[600_000_000,660_000_000,1]]}}],'prior_weights_ppm':{'history':1_000_000}}
+            p=inputs/'fusion.json';p.write_text(json.dumps(plan));p.chmod(0o600)
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                assert main(['ticket-track-predict','--state-dir',str(state),'--version','1','--fusion-plan-file',str(p)])==0
+                assert main(['ticket-track-status','--state-dir',str(state)])==0
+                assert main(['ticket-track-end','--state-dir',str(state),'--status','ended','--declared-at',stamp(0)])==0
+            result=json.loads((state/'prediction-0001.json').read_bytes())
+            assert result['fusion']['wait_quantile_envelopes_us']['p50']=={'lower_us':300_000_000,'upper_us':360_000_000}
+            assert result['polling_request']['requested_interval_seconds']==30 and not result['eta_available']
+            assert all(p.stat().st_mode&0o777==0o600 for p in state.iterdir())
+            assert ticket['episode_id'] not in output.getvalue() and str(root) not in output.getvalue()
+            try: publish_prediction(directory=state,preparation=preparation,result=result,now=now)
+            except TrackingError as error: assert error.error_code=='tracking_terminal'
+            else: raise AssertionError('tracking_install_terminal_publication')
+        assert sockets.call_count==auth.call_count==0
+    print(json.dumps({'installed_manual_tracking_ok':True,'actual_private_cli_paths':5,'conditional_distribution_applied':True,
+        'terminal_publication_rejected':True,'socket_calls':0,'credentials_accessed':False,'provider_calls':0,
+        'verified_training_labels':0,'eta_available':False}))
+
+
 def check_campaign_install():
     """Use the installed CLI, real private files and an explicitly fake source."""
     from sushiwait.remote import RemoteClient, QUEUE_NAMES
@@ -208,10 +279,11 @@ def check() -> None:
         raise SystemExit("package_imported_from_checkout")
     check_personal_install()
     check_deepseek_install()
+    check_tracking_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')

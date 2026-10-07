@@ -46,6 +46,8 @@ from .features import FeatureError, read_feature_plan, write_feature_dataset
 from .fusion import FusionError, read_plan as read_fusion_plan, read_advice, write_fusion
 from .deepseek import DeepSeekError, write_deepseek_fusion
 from .historyfusion import HistoryFusionError, read_context as read_fusion_context, write_history_fusion
+from .tracking import (TrackingError, read_document as read_tracking_document, create_session,
+    observe_session, prepare_prediction, calculate_prediction, publish_prediction, end_session, session_status)
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -726,6 +728,30 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--model-version", default="reviewed-history-intervals-v1")
     history.add_argument("--ai-blend-ppm", type=int, default=0)
     history.add_argument("--max-revisions", type=int, default=10000)
+    track = commands.add_parser('ticket-track-init', help='保存手动已有号的私有有界会话；不取号')
+    track.add_argument('--ticket-file', required=True)
+    track.add_argument('--state-dir', required=True)
+    track = commands.add_parser('ticket-track-observe', help='绑定已提交公开投影与本人号码；不查询上游')
+    track.add_argument('--state-dir', required=True)
+    track.add_argument('--view-file', required=True)
+    track.add_argument('--context-file', required=True)
+    track.add_argument('--as-of', required=True)
+    track = commands.add_parser('ticket-track-predict', help='条件剩余计算与当前版本原子提交；研究区间未校准')
+    track.add_argument('--state-dir', required=True)
+    track.add_argument('--version', required=True, type=int)
+    track.add_argument('--source-db')
+    track.add_argument('--reviews-db')
+    track.add_argument('--fusion-plan-file')
+    track.add_argument('--advice-file')
+    track.add_argument('--base-interval', type=int, default=300)
+    track.add_argument('--model-version', default='reviewed-history-intervals-v1')
+    track.add_argument('--ai-blend-ppm', type=int, default=0)
+    track = commands.add_parser('ticket-track-end', help='本人声明结束追踪；不取消官方号或制造认证标签')
+    track.add_argument('--state-dir', required=True)
+    track.add_argument('--status', choices=('called','no_show','cancelled','ended'), required=True)
+    track.add_argument('--declared-at', required=True)
+    track = commands.add_parser('ticket-track-status', help='查看私有追踪的版本与过期状态；不显示号码')
+    track.add_argument('--state-dir', required=True)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -1071,6 +1097,61 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command.startswith('ticket-track-'):
+            try:
+                state = Path(args.state_dir).resolve()
+                inputs = [Path(p).resolve() for p in (
+                    getattr(args, 'ticket_file', None), getattr(args, 'view_file', None),
+                    getattr(args, 'context_file', None), getattr(args, 'source_db', None),
+                    getattr(args, 'reviews_db', None), getattr(args, 'fusion_plan_file', None),
+                    getattr(args, 'advice_file', None)) if p is not None]
+                if len(set(inputs)) != len(inputs) or any(p.is_relative_to(state) for p in inputs):
+                    raise TrackingError('tracking_invalid_input')
+                if args.command == 'ticket-track-init':
+                    result = create_session(read_tracking_document(args.ticket_file), directory=args.state_dir)
+                elif args.command == 'ticket-track-observe':
+                    result = observe_session(directory=args.state_dir, view=read_tracking_document(args.view_file),
+                        context=read_tracking_document(args.context_file), as_of=args.as_of)
+                elif args.command == 'ticket-track-end':
+                    result = end_session(directory=args.state_dir, status=args.status, declared_at=args.declared_at)
+                elif args.command == 'ticket-track-status':
+                    result = {'ok': True, **session_status(directory=args.state_dir)}
+                else:
+                    if (bool(args.source_db) != bool(args.reviews_db)
+                            or args.source_db and args.fusion_plan_file
+                            or args.source_db and (Path(args.source_db).resolve().parent ==
+                                Path(args.reviews_db).resolve().parent or
+                                state.is_relative_to(Path(args.source_db).resolve().parent) or
+                                state.is_relative_to(Path(args.reviews_db).resolve().parent))):
+                        raise TrackingError('tracking_invalid_input')
+                    preparation = prepare_prediction(directory=args.state_dir, version=args.version)
+                    advice, advice_error = None, None
+                    if args.advice_file:
+                        try:
+                            advice = read_advice(args.advice_file)
+                        except FusionError:
+                            advice_error = 'fusion_invalid_advice'
+                    options = {'advice': advice, 'advice_error': advice_error,
+                        'fusion_plan': read_fusion_plan(args.fusion_plan_file) if args.fusion_plan_file else None,
+                        'base_interval': args.base_interval, 'model_version': args.model_version,
+                        'ai_blend_ppm': args.ai_blend_ppm}
+                    if args.source_db:
+                        with OutcomeIntakeStore(args.source_db, read_only=True) as source, \
+                                OutcomeReviewStore(args.reviews_db, read_only=True) as reviews:
+                            prediction = calculate_prediction(preparation, source=source, reviews=reviews, **options)
+                    else:
+                        prediction = calculate_prediction(preparation, **options)
+                    result = publish_prediction(directory=args.state_dir, preparation=preparation, result=prediction)
+                durable = result.get('durability_confirmed', True)
+                emit({**result, **({} if durable else {'error_code': 'tracking_durability_unconfirmed'})})
+                return 0 if durable else 1
+            except (TrackingError, FusionError, HistoryFusionError, IntakeError, ReviewError,
+                    ValueError, OSError, KeyError, TypeError) as error:
+                emit({'ok': False, 'error_code': getattr(error, 'error_code', 'tracking_invalid_input'),
+                    'committed': getattr(error, 'committed', False), 'durability_confirmed': False,
+                    'network_performed': False, 'provider_called': False, 'business_writes': 0,
+                    'notification_sent': False, 'verified_training_labels': 0, 'eta_available': False})
                 return 1
         if args.command == "history-fusion-research":
             try:
