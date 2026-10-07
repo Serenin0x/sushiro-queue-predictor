@@ -44,3 +44,5 @@
 5. 大模型按公共实时趋势与事件契约参与状态判断和受限数值融合，供应商可替换，密钥单独私有提供；不借个人号单或模型文本自动操作业务。
 
 大模型格式依据：[DeepSeek 官方接口入口](https://api-docs.deepseek.com/)、[JSON 输出说明](https://api-docs.deepseek.com/guides/json_mode/)。官方 JSON 模式仍可能空输出，应用必须验证并处理失败；本轮只是核对文档，不代表付费调用或预测收益已经验证。
+
+最新四层实时数值方案与论文依据见[REALTIME_PREDICTION_MODEL](REALTIME_PREDICTION_MODEL.md)，供应商与官方价格/许可见[LLM_MODEL_CHOICES](LLM_MODEL_CHOICES.md)，扩店实际范围见[STORE_EXPANSION](STORE_EXPANSION.md)；当前仍未训练、调用或校准。

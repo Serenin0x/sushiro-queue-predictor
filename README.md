@@ -27,7 +27,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。单店保留原采样目标；多店新增完整轮次的恢复目标与间隔保护，减少额外等待。已安装单店版的一次真实跨更新间隔为 98.760 秒，恢复后约 30 秒；多店新版真实验收另记；更新缺口和长期稳定性继续验证。长期无人值守与服务器独立更新仍待验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料。新增包格式校验与本机事务归档，重复不新增、同标识不同内容整批停止；新增有容量上限的持久待确认目录，重开后仍能校验已保存的包，相同包重复加入保持原文件；新增有界本机接收服务，独立校验身份、验证整包并事务归档，成功后返回对应确认；新增本机投递、回执签名与逐条对应校验，保存后可以离线复核，原包始终保留；新增[采集统计页](docs/COLLECTION_MONITOR.md)：查看门店原始数量、堂食与预约展示变化及实际响应间隔，失败和断采缺口清楚标记；页面查看不额外查询上游。新增[Linux 部署说明](docs/LINUX_DEPLOYMENT.md)，打包匿名采集与号码服务；新增[手动云端检查](docs/CLOUD_SOURCE_CHECK.md)，核对云端 Linux 的当次来源连通性，实际服务器与远程上传继续验收。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料。新增包格式校验与本机事务归档，重复不新增、同标识不同内容整批停止；新增有容量上限的持久待确认目录，重开后仍能校验已保存的包，相同包重复加入保持原文件；新增有界本机接收服务，独立校验身份、验证整包并事务归档，成功后返回对应确认；新增本机投递、回执签名与逐条对应校验，保存后可以离线复核，原包始终保留；新增[采集统计页](docs/COLLECTION_MONITOR.md)：查看门店原始数量、堂食与预约展示变化及实际响应间隔，失败和断采缺口清楚标记；页面查看不额外查询上游；新增[六店分批采集](docs/STORE_EXPANSION.md)，上海、广州、深圳三店首次6次独立查询均成功，48小时统计服务正在积累观测，原三日试点保持。新增[Linux 部署说明](docs/LINUX_DEPLOYMENT.md)，打包匿名采集与号码服务；新增[手动云端检查](docs/CLOUD_SOURCE_CHECK.md)，核对云端 Linux 的当次来源连通性，实际服务器与远程上传继续验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bf4fbb34b32ed56d-dark.svg"><img src="assets/readme-labels/bf4fbb34b32ed56d-light.svg" alt="看清采集是否可靠" width="130" height="20"></picture></strong>：报告区分请求失败、字段处理失败与本机停采，统计实际请求间隔、展示号码变化和字段状态。明确统计窗口，帮助发现异常；新增[终态窗口质量](docs/ANONYMOUS_WINDOW_QUALITY.md)，完整核对结果链、跨日期统计和成功请求缺口，区分预算用完与原截止结束；相同数据不会被当成刚更新的数据；可离线查看私有任务的成功、失败与未知槽位，不读取凭证或查询门店。
 
@@ -75,17 +75,17 @@
 
 展示集合的窗口统计、历史时刻过滤与样本不足规则见[窗口分析说明](docs/SIGNALS.md)；该工具只读已有快照，尚未接入预测、告警或自动排队。用餐偏移与近时段刷新目标见[监控时间策略](docs/MONITORING_TARGETS.md)，离线工具保留；[同店共享策略](docs/SHARED_MONITORING.md)会合并请求目标，并在时间窗口切换前安排重新判断。[自适应采集](docs/ADAPTIVE_COLLECTION.md)将策略接入一个进程内的有界只读查询，遇到凭证保护或首个失败停止；尚无常驻调度或提醒。 门店号码与最后刷新结果的只读投影见[门店展示说明](docs/STORE_VIEW.md)；响应年龄与源更新时间、后台进程存活分别解释；可显式关联同库私有任务，停止或过时状态让各店展示同步转为最后已知信息。
 
-匿名号码服务使用原创ASGI应用、一个数据库所属工作者和标准库展示投影；可选server安装项采用Uvicorn提供本机HTTP，基本数据工具仍无运行依赖。后续规划使用 PostgreSQL、Redis 后台调度及统计与分位数预测。大语言模型用于提取有来源的商场活动、营业调整等外部事件，并辅助解释预测；用户已选择 DeepSeek 官方接口，其实际调用和收益仍待实现与回测验证；PostgreSQL、Redis 与数值预测模型尚未实现。
+匿名号码服务使用原创ASGI应用、一个数据库所属工作者和标准库展示投影；可选server安装项采用Uvicorn提供本机HTTP，基本数据工具仍无运行依赖。后续规划使用 PostgreSQL、Redis 后台调度及统计与分位数预测。规划采用[历史初估与实时融合模型](docs/REALTIME_PREDICTION_MODEL.md)，大语言模型参与状态判断和受限数值更新，也处理有来源的外部事件；DeepSeek为优先，[低成本开放模型候选](docs/LLM_MODEL_CHOICES.md)可替换，其实际调用和收益仍待实现与回测验证；PostgreSQL、Redis 与数值预测模型尚未实现。
 
 前端在实时数据准备充分后开发。Logo 已选定 Unbounded 的红色像素刷痕矢量版，随 GitHub 浅色／深色模式自动切换；设计与字体来源见 [Logo 说明](docs/BRAND_DESIGN.md)，README 横幅与后续动态图文继续按独立视觉任务推进。
 
 ## 版本说明
 
-当前源码候选为 **v0.2.0rc45**，新增[采集统计页](docs/COLLECTION_MONITOR.md)：查看已保存观测的四类曲线，明确失败、缺口和历史状态。16 项新增检查、完整 1200 项本机检查通过；安装、浏览器及公开结果见交接记录。按最新[核心版范围](docs/V1_CORE_SCOPE.md)，v1 优先手动输入自己的号码进行实时预测和提醒，精确个人前方桌数与自动取号、取消、重排后置；预测与误差仍需真实结果校准。正式 v0.2.0 和 v1.0.0 尚未完成。
+当前源码候选为 **v0.2.0rc45**，新增[采集统计页](docs/COLLECTION_MONITOR.md)：查看已保存观测的四类曲线，明确失败、缺口和历史状态。16 项新增检查、完整 1200 项本机检查通过；安装、镜像和真实浏览器已验证，公开实现的三版本检查／安装与Linux容器CI通过，具体提交与范围见交接记录。按最新[核心版范围](docs/V1_CORE_SCOPE.md)，v1 优先手动输入自己的号码进行实时预测和提醒，精确个人前方桌数与自动取号、取消、重排后置；预测与误差仍需真实结果校准。正式 v0.2.0 和 v1.0.0 尚未完成。
 
 ## 更新说明
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/feeb0b014d31ac09-dark.svg"><img src="assets/readme-labels/feeb0b014d31ac09-light.svg" alt="2026-10-08 · v0.2.0rc45" width="179" height="20"></picture></strong>：新增采集统计页，让原始数量、堂食与预约展示变化、实际响应间隔可见；失败不补零、缺口断开曲线、停止保留历史。核心v1采用手动号码实时预测路线，自动业务后置；DeepSeek选定但尚未调用。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/feeb0b014d31ac09-dark.svg"><img src="assets/readme-labels/feeb0b014d31ac09-light.svg" alt="2026-10-08 · v0.2.0rc45" width="179" height="20"></picture></strong>：新增采集统计页，让原始数量、堂食与预约展示变化、实际响应间隔可见；失败不补零、缺口断开曲线、停止保留历史。新增上海、广州、深圳48小时分批采集；核心v1采用手动号码实时预测路线，自动业务后置。补充历史初估、实时趋势与大模型数值融合设计及官方费用／许可研究，尚未调用或校准。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d96820671eda0ba8-dark.svg"><img src="assets/readme-labels/d96820671eda0ba8-light.svg" alt="2026-10-08 · v0.2.0rc44" width="179" height="20"></picture></strong>：让已审核的排队经历与当时门店观测对应起来，生成私有研究资料；后来收到的旧响应不倒灌历史，有限号码变化和未知单位计数分别保存。模型仍需真实叫号结果校准。
 

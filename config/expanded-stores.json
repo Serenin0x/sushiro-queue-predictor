@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "directory_observed_at": "2026-10-03T20:32:51+08:00",
+  "directory_store_count": 147,
+  "directory_source": "miniapp_gateway_normal_response",
+  "directory_currentness_verified": false,
+  "collection_source": "crm_remote_v1_1",
+  "maximum_stores_per_worker": 3,
+  "selection": [
+    {
+      "store_id": "3025",
+      "directory_name": "上海环球港店",
+      "city": "上海"
+    },
+    {
+      "store_id": "4",
+      "directory_name": "悦汇城店",
+      "city": "广州"
+    },
+    {
+      "store_id": "1015",
+      "directory_name": "壹方城店",
+      "city": "深圳"
+    }
+  ],
+  "response_store_identity_verified": false,
+  "source_freshness": "unknown",
+  "count_unit": "unknown",
+  "eta_available": false
+}
