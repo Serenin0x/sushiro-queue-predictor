@@ -121,7 +121,7 @@ class TrackingCoordinator:
                  source_db=None, reviews_db=None, candidate_builder=None,
                  model_version='reviewed-history-intervals-v1', ai_blend_ppm=0,
                  plan_output=None, plan_series_id=None, allow_paid_request=False,
-                 budget_file=None, key_file=None, transport=None, clock=_now,
+                 budget_file=None, key_file=None, transport=None, trend_profile_files=None, clock=_now,
                  monotonic=time.monotonic):
         try:
             if (type(directories) is not list or not 1 <= len(directories) <= MAX_SESSIONS
@@ -140,8 +140,11 @@ class TrackingCoordinator:
             self.directories = [Path(os.path.abspath(p)) for p in directories]
             if len(set(self.directories)) != len(self.directories):
                 raise ValueError
+            profiles = [] if trend_profile_files is None else trend_profile_files
+            if type(profiles) is not list or len(profiles) > 3:
+                raise ValueError
             external = [Path(os.path.abspath(p)) for p in
-                (source_db, reviews_db, plan_output, budget_file, key_file) if p is not None]
+                [source_db, reviews_db, plan_output, budget_file, key_file]+profiles if p is not None]
             if (len(set(external)) != len(external)
                     or any(p.is_relative_to(d) or d.is_relative_to(p.parent)
                            for p in external for d in self.directories)
@@ -157,6 +160,13 @@ class TrackingCoordinator:
             self.plan_output, self.series = plan_output, plan_series_id
             self.paid, self.budget, self.key, self.transport = allow_paid_request, budget_file, key_file, transport
             self.clock, self.monotonic = clock, monotonic
+            from .trendprofiles import read_profile
+            self.trend_profiles = {}
+            for path in profiles:
+                profile = read_profile(path, now=clock())
+                if profile['store_id'] not in stores or profile['store_id'] in self.trend_profiles:
+                    raise ValueError
+                self.trend_profiles[profile['store_id']] = profile
             episodes = []
             for directory in self.directories:
                 with TrackingSession(directory) as session:
@@ -372,8 +382,13 @@ class TrackingCoordinator:
             prediction = session._read(name) if name and name in os.listdir(session.fd) else None
         if terminal is not None or self.clock() >= _time(ticket['deadline_at']):
             return
+        profile = self.trend_profiles.get(ticket['store_id'])
         context = context_from_history(frame['history'], queue_type=ticket['queue_type'],
-            now=self.clock(), max_local_age_seconds=360, ttl_seconds=60)
+            now=self.clock(), window_seconds=profile['window_seconds'] if profile else 600,
+            max_local_age_seconds=360, ttl_seconds=60)
+        if profile is not None:
+            from .trendprofiles import enrich_context
+            context, _ = enrich_context(profile, context, now=self.clock())
         observation = normalize_observation(ticket, frame['view'], context,
                                            as_of=context['as_of'], now=self.clock())
         elapsed = None if latest is None else (_time(context['as_of'])-

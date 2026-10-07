@@ -142,6 +142,67 @@ def check_tracking_install():
         'verified_training_labels':0,'eta_available':False}))
 
 
+def check_trend_profiles_install():
+    """Exercise installed private CLI modes using an actual synthetic database."""
+    from dataclasses import asdict
+    from sushiwait.remote import RemoteResult, RemoteStore, QUEUE_NAMES, SOURCE
+    from sushiwait.trendprofiles import read_profile
+    base = datetime(2026, 10, 6, 4, tzinfo=timezone.utc)
+    with tempfile.TemporaryDirectory() as name:
+        root = Path(name).resolve(); root.chmod(0o700)
+        db = root/'remote.sqlite3'
+        with RemoteStore(db) as remote:
+            for day in (1, 2):
+                for minute in range(0, 121, 5):
+                    at = datetime(2026, 10, day, 4, tzinfo=timezone.utc)+timedelta(minutes=minute)
+                    queues = {key: [str(minute)] for key in QUEUE_NAMES}
+                    q = RemoteResult('groupqueues', True, True, {'queues': queues}, None, 200,
+                        at.isoformat(), (at+timedelta(milliseconds=100)).isoformat(), 100)
+                    c = RemoteResult('storequeuecount', True, True, {'raw_count': 5, 'unit': 'unknown'}, None, 200,
+                        (at+timedelta(milliseconds=200)).isoformat(), (at+timedelta(milliseconds=300)).isoformat(), 100)
+                    record = {'schema_version': 1, 'source': SOURCE, 'data_origin': 'live',
+                        'requested_store_id': '900001', 'response_store_identity_verified': False, 'ok': True,
+                        'queries': {'groupqueues': asdict(q), 'storequeuecount': asdict(c)},
+                        'atomic_snapshot': False, 'source_update_time_verified': False,
+                        'source_freshness': 'unknown', 'eta_available': False,
+                        'complete_queue_cursor_available': False, 'verified_training_labels': 0}
+                    with patch('sushiwait.remoteintake._clock', return_value=at+timedelta(seconds=1)):
+                        remote.append(record)
+        before = db.read_bytes(); profile = root/'profile.json'; out = io.StringIO()
+        with patch('sushiwait.trendprofiles._now', return_value=base), \
+             patch('socket.socket', side_effect=AssertionError('network')) as sockets, \
+             contextlib.redirect_stdout(out):
+            assert main(['trend-profile', '--remote-db', str(db), '--store-id', '900001',
+                '--as-of', (base-timedelta(seconds=120)).isoformat(), '--output', str(profile)]) == 0
+            reference = read_profile(profile, now=base)
+            assert len(reference['samples']) == 8
+            context = {'schema_version': 1, 'source': SOURCE, 'store_id': '900001', 'queue_type': 'ordinary',
+                'observation_revision': 1, 'as_of': base.isoformat(),
+                'expires_at': (base+timedelta(seconds=60)).isoformat(), 'window_seconds': 1800,
+                'max_local_age_seconds': 360, 'latest_queue_received_at': base.isoformat(),
+                'latest_count_received_at': base.isoformat(), 'source_freshness': 'unknown',
+                'count_unit': 'unknown', 'store_identity_verified': False, 'collector_running': True,
+                'latest_queue_origin': 'worker_commit', 'features': [
+                    {'feature_id': key, 'value': value, 'available_at': base.isoformat()}
+                    for key, value in [('ordinary_removed_labels', 100), ('ordinary_comparable_pairs', 5),
+                        ('ordinary_observed_milliseconds', 1500000)]]}
+            input_file = root/'context.json'
+            input_file.write_text(json.dumps(context)); input_file.chmod(0o600)
+            scored = root/'score.json'
+            assert main(['trend-score', '--profile-file', str(profile), '--context-file', str(input_file),
+                '--output', str(scored)]) == 0
+            result = json.loads(scored.read_bytes())
+            assert result['trend_score']['rank_lower_ppm'] == 1000000
+            assert result['trend_score']['reference_days'] == 2
+            assert all(p.stat().st_mode & 0o777 == 0o600 for p in (profile, scored))
+            assert str(root) not in out.getvalue() and not sockets.call_count
+        assert before == db.read_bytes()
+    print(json.dumps({'installed_trend_profiles_ok': True, 'actual_trend_cli_modes': 2,
+        'synthetic_reference_windows': 8, 'calendar_distinct_days': 2, 'ranks_applied_numerically': True,
+        'private_source_unchanged': True, 'socket_calls': 0, 'provider_calls': 0,
+        'historical_availability_verified': False, 'true_no_show_rate': None, 'eta_available': False}))
+
+
 def check_tracker_loop_install():
     """Execute installed automatic CLI plus genuine private compute threads."""
     from uuid import uuid4
@@ -368,10 +429,11 @@ def check() -> None:
     check_deepseek_install()
     check_tracking_install()
     check_tracker_loop_install()
+    check_trend_profiles_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')

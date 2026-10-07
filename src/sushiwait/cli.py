@@ -770,6 +770,25 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument('--allow-paid-request', action='store_true')
     loop.add_argument('--budget-file')
     loop.add_argument('--key-file')
+    loop.add_argument('--trend-profile-file', action='append')
+    trend = commands.add_parser('trend-profile', help='从已封存门店观测建立日期/时段周转参考；不是过号率或ETA')
+    trend.add_argument('--remote-db', required=True)
+    trend.add_argument('--store-id', required=True)
+    trend.add_argument('--as-of', required=True)
+    trend.add_argument('--output', required=True)
+    trend.add_argument('--window-seconds', type=int, default=1800)
+    trend.add_argument('--max-gap-seconds', type=int, default=360)
+    trend.add_argument('--minimum-pairs', type=int, default=2)
+    trend.add_argument('--minimum-coverage-ppm', type=int, default=500000)
+    trend.add_argument('--max-observations', type=int, default=10000)
+    trend.add_argument('--availability-basis', choices=('local_first_receipt','sealed_response_reconstruction'),
+                       default='local_first_receipt')
+    trend = commands.add_parser('trend-score', help='将当前展示变化与相似日期参考比较；不调用模型或上游')
+    trend.add_argument('--profile-file', required=True)
+    trend.add_argument('--context-file', required=True)
+    trend.add_argument('--output', required=True)
+    trend.add_argument('--minimum-windows', type=int, default=8)
+    trend.add_argument('--minimum-days', type=int, default=2)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -1116,6 +1135,35 @@ def main(argv: list[str] | None = None) -> int:
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
+        if args.command in ('trend-profile', 'trend-score'):
+            try:
+                from .trendprofiles import build_profile, read_profile, write_profile, enrich_context
+                from .remote import RemoteStore as TrendRemoteStore
+                from .credentials import _read_private_file as read_trend_bytes
+                from .outcomes import _json as parse_trend_json
+                from .packets import _write_packet as write_trend_packet
+                from .intake import _canonical as canonical_trend
+                if args.command == 'trend-profile':
+                    with TrendRemoteStore(args.remote_db, read_only=True) as remote:
+                        profile = build_profile(remote, args.store_id, as_of=args.as_of,
+                            window_seconds=args.window_seconds, max_gap_seconds=args.max_gap_seconds,
+                            minimum_pairs=args.minimum_pairs, minimum_coverage_ppm=args.minimum_coverage_ppm,
+                            max_observations=args.max_observations, availability_basis=args.availability_basis)
+                    result = write_profile(profile, args.output)
+                else:
+                    context, score = enrich_context(read_profile(args.profile_file),
+                        parse_trend_json(read_trend_bytes(args.context_file)),
+                        minimum_windows=args.minimum_windows, minimum_days=args.minimum_days)
+                    saved = write_trend_packet(canonical_trend({'public_context':context, 'trend_score':score}).encode(), args.output)
+                    result = {'artifact_written':True,'committed':True,
+                        'durability_confirmed':saved['durability_confirmed'],
+                        'reference_windows':score['reference_windows'],
+                        'trend_available':score['unavailable_reason'] is None,
+                        'network_performed':False,'eta_available':False}
+                emit({'ok':True, **result}); return 0
+            except Exception as error:
+                emit({'ok':False,'error_code':getattr(error,'error_code','trend_profile_operation_failed'),
+                    'committed':getattr(error,'committed',False),'eta_available':False,'network_performed':False}); return 1
         if args.command == 'ticket-track-run':
             from .trackerloop import TrackingCoordinator, RemoteProjectionReader, TrackerLoopError, run_tracking
             coordinator = None
@@ -1132,7 +1180,8 @@ def main(argv: list[str] | None = None) -> int:
                     source_db=args.source_db, reviews_db=args.reviews_db,
                     model_version=args.model_version, ai_blend_ppm=args.ai_blend_ppm,
                     plan_output=args.plan_output, plan_series_id=args.plan_series_id,
-                    allow_paid_request=args.allow_paid_request, budget_file=args.budget_file, key_file=args.key_file)
+                    allow_paid_request=args.allow_paid_request, budget_file=args.budget_file, key_file=args.key_file,
+                    trend_profile_files=args.trend_profile_file)
                 if args.prepare_plans_only:
                     result = coordinator.publish_demands()
                     emit({'ok': True, 'prepared_plan_revision': result['revision'], **coordinator.summary()})

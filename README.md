@@ -31,7 +31,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bf4fbb34b32ed56d-dark.svg"><img src="assets/readme-labels/bf4fbb34b32ed56d-light.svg" alt="看清采集是否可靠" width="130" height="20"></picture></strong>：报告区分请求失败、字段处理失败与本机停采，统计实际请求间隔、展示号码变化和字段状态。明确统计窗口，帮助发现异常；新增[终态窗口质量](docs/ANONYMOUS_WINDOW_QUALITY.md)，完整核对结果链、跨日期统计和成功请求缺口，区分预算用完与原截止结束；相同数据不会被当成刚更新的数据；可离线查看私有任务的成功、失败与未知槽位，不读取凭证或查询门店。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/fce6b943bcea13b8-dark.svg"><img src="assets/readme-labels/fce6b943bcea13b8-light.svg" alt="比较最近的展示号变化" width="162" height="20"></picture></strong>：按指定历史时刻分析两分钟或更长窗口，比较前后两段展示集合的变化速率；遇到失败、缺口和时间逆序会断开比较，资料不足会明确显示。新增[匿名响应窗口分析](docs/ANONYMOUS_SIGNALS.md)，当前无需微信凭证来源也能结合日期查看五类展示集合变化、独立数量差值和实际覆盖；两条响应、失败与缺口分别处理，未来数据不提前使用。新数据支持[本机首次接收筛选](docs/ANONYMOUS_INTAKE.md)：后来补录的观测不会被算进早先历史窗口，旧记录缺失接收信息时明确保留未知。为异常检测准备可观察指标，尚不判断真实过号人数或触发提醒。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/fce6b943bcea13b8-dark.svg"><img src="assets/readme-labels/fce6b943bcea13b8-light.svg" alt="比较最近的展示号变化" width="162" height="20"></picture></strong>：按指定历史时刻分析两分钟或更长窗口，比较前后两段展示集合的变化速率；遇到失败、缺口和时间逆序会断开比较，资料不足会明确显示。新增[匿名响应窗口分析](docs/ANONYMOUS_SIGNALS.md)，当前无需微信凭证来源也能结合日期查看五类展示集合变化、独立数量差值和实际覆盖；两条响应、失败与缺口分别处理，未来数据不提前使用。新数据支持[本机首次接收筛选](docs/ANONYMOUS_INTAKE.md)：后来补录的观测不会被算进早先历史窗口，旧记录缺失接收信息时明确保留未知。新增[相似日期趋势参考](docs/TREND_PROFILES.md)：把当前变化速度与同店历史比较，区分日型、周几、时段、月份和季节；采样频率不同及资料不足不会硬算成异常，数值可接入自动追踪与公共AI输入。尚不判断真实过号人数或触发提醒。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/65105f86981488eb-dark.svg"><img src="assets/readme-labels/65105f86981488eb-light.svg" alt="看懂页面数字的含义" width="146" height="20"></picture></strong>：已核对堂食与预约展示数组，以及“已签到等待桌数”的客户端字段绑定和西单同次响应数值。列表与详情分别记录刷新情况，营业状态显示关闭时也可能有叫号。页面更新时间与门店源时间分开解释，避免把刷新动作当作数据刚刚更新。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前源码候选为 **v0.2.0rc50**，新增[已有号自动更新后台](docs/TICKET_TRACKING_LOOP.md)：门店投影共享读取、私人观测持续前进、异步历史／公共AI数值计算和当前版本提交；临近用餐及本人号码展示的加速需求可通过有期限计划交给采集工作者，未知到店时间不编造。33项专项与完整1371项本机检查通过；安装、Linux、真实本机HTTP及公开CI证据分别记录。当前是有界后台与研究区间，真实快慢模型、正常用餐结果／误差、提醒与产品页面继续验收，正式v0.2.0和v1.0.0未完成。
+当前源码候选为 **v0.2.0rc51**，新增[相似日期趋势参考](docs/TREND_PROFILES.md)：以同店历史窗口比较当前堂食／预约展示变化，报告实际匹配的日期层级与参考数量，将相对快慢数字接入自动已有号后台及公共AI契约。30项专项与完整1401项本机检查通过；安装、Linux及公开CI分别记录。历史缺少首次接收时间时需明确采用前瞻封存重建，当前仍是研究输出，真实等待／过号率、模型效果和提醒继续验收，正式v0.2.0和v1.0.0未完成。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/50b7caba5e80cbef-dark.svg"><img src="assets/readme-labels/50b7caba5e80cbef-light.svg" alt="2026-10-08 · v0.2.0rc51" width="179" height="20"></picture></strong>：让实时变化有历史参照：相似日期、有效覆盖和采样节奏分别核对，堂食与预约独立比较；同值保留范围，缺少资料明确显示。已接入自动追踪与公共模型输入，等待时间校准和真实模型效果继续验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d55451cd2606760c-dark.svg"><img src="assets/readme-labels/d55451cd2606760c-light.svg" alt="2026-10-08 · v0.2.0rc50" width="179" height="20"></picture></strong>：已有号码可持续自动读取门店投影、更新私人研究预测；新观测与模型计算并行，迟到结果整条拒绝。同店共用采集需求，短期加速到期退回正常策略；缺失仍明确显示，真实模型效果和提醒继续验收。
 

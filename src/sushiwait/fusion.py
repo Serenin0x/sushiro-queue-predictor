@@ -27,7 +27,12 @@ MAX_BYTES = 16_384
 CANDIDATE_IDS = frozenset({'history', 'steady', 'fast', 'slow'})
 FEATURE_IDS = frozenset({'ordinary_removed_labels', 'ordinary_comparable_pairs',
     'reservation_removed_labels', 'reservation_comparable_pairs', 'reported_count_raw',
-    'longest_gap_seconds', 'groupqueues_failures', 'storequeuecount_failures'})
+    'longest_gap_seconds', 'groupqueues_failures', 'storequeuecount_failures',
+    'ordinary_observed_milliseconds', 'reservation_observed_milliseconds',
+    'ordinary_turnover_rank_lower_ppm', 'ordinary_turnover_rank_upper_ppm',
+    'ordinary_turnover_reference_windows', 'ordinary_turnover_reference_days',
+    'reservation_turnover_rank_lower_ppm', 'reservation_turnover_rank_upper_ppm',
+    'reservation_turnover_reference_windows', 'reservation_turnover_reference_days'})
 REASONS = frozenset({'history_dominant', 'rapid_display_turnover',
     'slower_display_turnover', 'mixed_evidence', 'insufficient_evidence'})
 _CONTEXT = {'schema_version', 'source', 'store_id', 'queue_type', 'observation_revision',
@@ -122,12 +127,29 @@ def validate_plan(value, *, now=None):
                     or feature['feature_id'] in seen or feature['value'] is not None and
                     not _integer(feature['value'], 0, 2**31-1)):
                 raise ValueError
+            identifier, number = feature['feature_id'], feature['value']
+            upper = (PPM if '_turnover_rank_' in identifier else
+                96 if identifier.endswith(('_turnover_reference_windows', '_turnover_reference_days')) else
+                context['window_seconds']*1000 if identifier.endswith('_observed_milliseconds') else 2**31-1)
+            if number is not None and number > upper:
+                raise ValueError
             available = _time(feature['available_at'])
             if not cutoff-timedelta(seconds=context['window_seconds']) <= available <= cutoff:
                 raise ValueError
             seen.add(feature['feature_id'])
             normalized.append({**feature, 'available_at': _utc(available)})
         context['features'] = sorted(normalized, key=lambda f: f['feature_id'])
+        fields = {f['feature_id']:f['value'] for f in normalized}
+        for queue in ('ordinary','reservation'):
+            names = [queue+'_turnover_'+name for name in
+                ('rank_lower_ppm','rank_upper_ppm','reference_windows','reference_days')]
+            if any(name in fields for name in names):
+                if not all(name in fields for name in names):
+                    raise ValueError
+                a,b,n,days = [fields[name] for name in names]
+                if not all(v is None for v in (a,b,n,days)) and (
+                        any(v is None for v in (a,b,n,days)) or a>b or not 1<=days<=n):
+                    raise ValueError
         candidates, seen = value['candidates'], set()
         if type(candidates) is not list or not 1 <= len(candidates) <= len(CANDIDATE_IDS):
             raise ValueError
@@ -243,7 +265,7 @@ def context_from_history(history, *, queue_type, now=None, window_seconds=600,
         previous, latest = None, {'groupqueues': None, 'storequeuecount': None}
         last_seen = {'groupqueues': None, 'storequeuecount': None}
         removed = {'ordinary': 0, 'reservation': 0}
-        comparable, gaps = 0, []
+        comparable, observed_us, gaps = 0, 0, []
         failures = {'groupqueues': 0, 'storequeuecount': 0}
         count_raw, queue_origin = None, 'unavailable'
         for point in points:
@@ -284,6 +306,8 @@ def context_from_history(history, *, queue_type, now=None, window_seconds=600,
                                 or not _integer(values.get('reservationQueue'), 0, 2**31-1)):
                             raise ValueError
                         comparable += 1
+                        span = current-previous
+                        observed_us += (span.days*86400+span.seconds)*1_000_000+span.microseconds
                         removed['ordinary'] += values['storeQueue']
                         removed['reservation'] += values['reservationQueue']
             if comparison['state'] == 'time_order_or_duplicate':
@@ -300,6 +324,8 @@ def context_from_history(history, *, queue_type, now=None, window_seconds=600,
                   'ordinary_comparable_pairs': comparable,
                   'reservation_removed_labels': removed['reservation'] if comparable else None,
                   'reservation_comparable_pairs': comparable, 'reported_count_raw': count_raw,
+                  'ordinary_observed_milliseconds': observed_us//1000 if comparable else None,
+                  'reservation_observed_milliseconds': observed_us//1000 if comparable else None,
                   'longest_gap_seconds': math.ceil(max(gaps)) if gaps else None,
                   'groupqueues_failures': failures['groupqueues'],
                   'storequeuecount_failures': failures['storequeuecount']}
