@@ -122,9 +122,12 @@ def _observation_key(request):
         del context[field]
     for feature in context['features']:
         del feature['available_at']
-    return _digest({'provider': 'deepseek_official', 'model': MODEL,
+    identity = {'provider': 'deepseek_official', 'model': MODEL,
         'prompt_version': PROMPT_VERSION, 'model_version': request['model_version'],
-        'candidate_ids': request['candidate_ids'], 'context': context})
+        'candidate_ids': request['candidate_ids'], 'context': context}
+    if request['policy'] != 'public_scenario_interval_mixture_v1':
+        identity['policy'] = request['policy']
+    return _digest(identity)
 
 
 def _cost(prompt, completion, budget):
@@ -384,6 +387,8 @@ def run_deepseek(plan, *, budget_file=None, key_file=None, allow_paid_request=Fa
         check_current()
         if allow_paid_request is not True:
             raise DeepSeekError('deepseek_disabled')
+        if len(request['candidate_ids']) < 2:
+            raise DeepSeekError('deepseek_single_scenario')
         # Validate current evidence before reading a key or charging a reservation.
         context = request['context']
         preflight = {'schema_version': 1, 'public_input_sha256': request['public_input_sha256'],

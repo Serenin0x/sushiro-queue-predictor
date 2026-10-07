@@ -194,15 +194,19 @@ def _prepare(candidates, plan):
     return pool,excluded
 
 
+def _matching(pool, wanted, keys):
+    return [item for item in pool if not keys or (
+        wanted['calendar_status'] == 'available' and
+        all(item[endpoint]['calendar_status'] == 'available' and
+            all(item[endpoint][key] == wanted[key] for key in keys)
+            for endpoint in ('lower_features', 'upper_features')))]
+
+
 def _forecast(pool, plan, issued_at, *, elapsed_us=None):
     wanted = _features(issued_at, as_of=plan['as_of'])
     attempts = []
     for level, keys in _GROUPS:
-        matched = [item for item in pool if not keys or (
-            wanted['calendar_status'] == 'available' and
-            all(item[endpoint]['calendar_status'] == 'available' and
-                all(item[endpoint][key] == wanted[key] for key in keys)
-                for endpoint in ('lower_features', 'upper_features')))]
+        matched = _matching(pool, wanted, keys)
         arithmetic = interval_quantiles([item['interval'] for item in matched], elapsed_us=elapsed_us) if matched else None
         survivors = arithmetic['definite_survivors'] if arithmetic else 0
         attempts.append({'group':level, 'matching_samples':len(matched),

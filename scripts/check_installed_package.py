@@ -25,7 +25,7 @@ def check_deepseek_install():
     from sushiwait.deepseek import MODEL, run_deepseek
     now=datetime.now(timezone.utc)
     stamp=lambda seconds:(now+timedelta(seconds=seconds)).isoformat()
-    plan={'schema_version':1,'data_origin':'synthetic','model_version':'install-synthetic-v1',
+    plan={'schema_version':2,'data_origin':'synthetic','model_version':'install-synthetic-v1',
         'prediction_target':'new_join_total','conditioning':'new_join','ai_blend_ppm':500000,
         'public_context':{'schema_version':1,'source':'crm_remote_v1_1','store_id':'900001',
             'queue_type':'ordinary','observation_revision':1,'as_of':stamp(0),'expires_at':stamp(60),
@@ -33,7 +33,7 @@ def check_deepseek_install():
             'latest_count_received_at':None,'features':[{'feature_id':'ordinary_removed_labels','value':1,'available_at':stamp(-5)}],
             'source_freshness':'unknown','count_unit':'unknown','store_identity_verified':False,
             'collector_running':True,'latest_queue_origin':'worker_commit'},
-        'candidates':[{'candidate_id':k,'atoms':[{'lower_us':v,'upper_us':v,'mass_ppm':1000000}]}
+        'candidates':[{'candidate_id':k,'interval_sample':{'elapsed_us':None,'intervals':[[v,v,1]]}}
                       for k,v in [('history',100),('fast',0)]],
         'prior_weights_ppm':{'history':1000000,'fast':0}}
     budget={'schema_version':1,'provider':'deepseek_official','model':MODEL,
@@ -211,7 +211,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')
@@ -1147,6 +1147,33 @@ def check() -> None:
             print(json.dumps({'installed_baseline_research_ok':True,'synthetic_forecast_available':True,
                 'source_and_review_files_unchanged':True,'baseline_socket_calls':0,'baseline_credentials_accessed':False,
                 'real_labels_admitted':0,'eta_available':False,'is_live_acceptance':False}))
+            context={'schema_version':1,'source':'crm_remote_v1_1','store_id':plan['store_id'],
+                'queue_type':plan['queue_type'],'observation_revision':1,'as_of':plan['as_of'],
+                'expires_at':(datetime.fromisoformat(plan['as_of'])+timedelta(seconds=60)).isoformat(),
+                'window_seconds':300,'max_local_age_seconds':90,
+                'latest_queue_received_at':plan['as_of'],'latest_count_received_at':None,
+                'features':[{'feature_id':'ordinary_removed_labels','value':1,'available_at':plan['as_of']}],
+                'source_freshness':'unknown','count_unit':'unknown','store_identity_verified':False,
+                'collector_running':True,'latest_queue_origin':'worker_commit'}
+            history_context=baseline_directory/'history-context.json';history_output=baseline_directory/'history-fusion.json'
+            history_context.write_text(json.dumps(context));history_context.chmod(0o600)
+            history_logs=io.StringIO()
+            with patch('socket.socket',side_effect=AssertionError('history_fusion_socket')) as history_socket,\
+                 patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('history_fusion_auth')) as history_auth,\
+                 contextlib.redirect_stdout(history_logs):
+                assert main(['history-fusion-research','--source-db',intake_database,'--reviews-db',str(review_db),
+                    '--input',str(baseline_input),'--context-file',str(history_context),'--output',str(history_output)])==0
+            history=json.loads(history_output.read_bytes());summary=json.loads(history_logs.getvalue())
+            assert history['research_candidate_available'] and not history['eta_available']
+            assert history['candidates'][0]['fusion_plan']['schema_version']==2
+            assert history['candidates'][0]['history_only_fusion_quantiles_us']==candidate['forecast']['wait_quantile_envelopes_us']
+            assert history['scenario_ids_generated']==['history'] and not history['realtime_regime_models_fitted']
+            assert history_socket.call_count==history_auth.call_count==0 and summary['durability_confirmed']
+            assert history_output.stat().st_mode&0o777==0o600 and str(baseline_directory) not in history_logs.getvalue()
+            assert review_before==review_db.read_bytes() and intake_before==hashlib.sha256(Path(intake_database).read_bytes()).digest()
+            print(json.dumps({'installed_history_fusion_ok':True,'synthetic_reviewed_candidate':True,
+                'full_interval_sample_preserved':True,'source_and_reviews_unchanged':True,'socket_calls':0,
+                'provider_calls':0,'realtime_regimes_fitted':False,'verified_training_labels':0,'eta_available':False}))
             backtest_plan={key:plan[key] for key in ('schema_version','as_of','data_origin','api_profile','store_id','minimum_samples')}
             backtest_plan.update(elapsed_seconds=[0],max_cases=100)
             backtest_input,backtest_output=baseline_directory/'backtest-plan.json',baseline_directory/'backtest.json'

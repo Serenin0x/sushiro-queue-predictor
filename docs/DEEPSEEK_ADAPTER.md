@@ -66,3 +66,5 @@ sushiwait deepseek-fusion --input plan.private.json --output output/result.priva
 2026-10-08核对[官方首次调用](https://api-docs.deepseek.com/quick_start/pricing-details-cny/)、[Chat Completions契约](https://api-docs.deepseek.com/api/create-chat-completion/)和[JSON Output](https://api-docs.deepseek.com/guides/json_mode/)的地址、模型、思考开关、JSON要求、结束原因和usage定义。首次直接读取价格页与JSON指南曾超时/工具内部错误，后来官方搜索能取得指南与模型信息；本轮不据未成功重读的价格页改称单价已再次验证。此前价格研究见[模型候选](LLM_MODEL_CHOICES.md)，实际调用前仍需核当时价格。
 
 专项验证覆盖固定TLS目的地、无重定向、公共输入隔离、模型到算术融合、同观测去重、私人分布共享、跨中断不重发、先持久占用再POST、磁盘同步失败、预算修改/期限/数量/token/费用估算上限、输入大小、usage一致性/超限、思考与截断答复、过期和新版本拒绝、默认无网络CLI及私有输出。实际模型输出、费用账单、收益、速度和在线并发发布仍没有验收证据。
+
+rc48增加[历史区间候选桥接](HISTORY_FUSION.md)，按截止可用的审核记录生成完整次数区间，支持总等待、条件剩余和理想时间网格；CDF融合保留精确分数和不确定上界。当前只生成历史情景，实时候景尚未拟合，单一情景不产生无作用的付费请求；真实结果、误差与在线发布继续验证。

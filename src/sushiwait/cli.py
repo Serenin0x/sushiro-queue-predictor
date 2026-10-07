@@ -45,6 +45,7 @@ from .backtest import BacktestError, read_backtest_plan, write_backtest
 from .features import FeatureError, read_feature_plan, write_feature_dataset
 from .fusion import FusionError, read_plan as read_fusion_plan, read_advice, write_fusion
 from .deepseek import DeepSeekError, write_deepseek_fusion
+from .historyfusion import HistoryFusionError, read_context as read_fusion_context, write_history_fusion
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -716,6 +717,15 @@ def build_parser() -> argparse.ArgumentParser:
     deepseek.add_argument("--budget-file")
     deepseek.add_argument("--api-key-file")
     deepseek.add_argument("--allow-paid-request", action="store_true")
+    history = commands.add_parser("history-fusion-research", help="将截至当时可用的私有审核经历转成区间分布；无已校准ETA")
+    history.add_argument("--source-db", required=True)
+    history.add_argument("--reviews-db", required=True)
+    history.add_argument("--input", required=True)
+    history.add_argument("--context-file", required=True)
+    history.add_argument("--output", required=True)
+    history.add_argument("--model-version", default="reviewed-history-intervals-v1")
+    history.add_argument("--ai-blend-ppm", type=int, default=0)
+    history.add_argument("--max-revisions", type=int, default=10000)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -1061,6 +1071,29 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "history-fusion-research":
+            try:
+                from .baseline import read_plan as read_history_plan
+                paths = [Path(p).resolve() for p in (args.source_db, args.reviews_db, args.input,
+                                                   args.context_file, args.output)]
+                if (len(set(paths)) != 5 or paths[0].parent == paths[1].parent
+                        or paths[4].parent in {p.parent for p in paths[:2]}):
+                    raise HistoryFusionError("history_fusion_invalid_input")
+                plan = read_history_plan(args.input)
+                context = read_fusion_context(args.context_file)
+                with OutcomeIntakeStore(args.source_db, read_only=True) as source, \
+                        OutcomeReviewStore(args.reviews_db, read_only=True) as reviews:
+                    result = write_history_fusion(source=source, reviews=reviews, plan=plan,
+                        context=context, destination=args.output, model_version=args.model_version,
+                        ai_blend_ppm=args.ai_blend_ppm, max_revisions=args.max_revisions)
+                durable = result['durability_confirmed']
+                emit({"ok": durable, **result, **({} if durable else {"error_code": "history_fusion_durability_unconfirmed"})})
+                return 0 if durable else 1
+            except (HistoryFusionError, BaselineError, IntakeError, ReviewError) as error:
+                emit({"ok": False, "error_code": error.error_code, "committed": getattr(error, 'committed', False),
+                    "durability_confirmed": False, "network_performed": False, "provider_called": False,
+                    "verified_training_labels": 0, "eta_available": False})
                 return 1
         if args.command == "deepseek-fusion":
             try:

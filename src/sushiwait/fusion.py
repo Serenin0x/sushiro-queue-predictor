@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 import hashlib
 import math
 import re
@@ -19,6 +20,7 @@ from .packets import PacketError, _write_packet
 from .remote import SOURCE
 
 POLICY = 'public_scenario_interval_mixture_v1'
+EMPIRICAL_POLICY = 'public_empirical_interval_cdf_mixture_v2'
 PPM = 1_000_000
 MAX_WAIT_US = 172_800_000_000
 MAX_BYTES = 16_384
@@ -74,13 +76,14 @@ def validate_plan(value, *, now=None):
         if not isinstance(clock, datetime) or clock.utcoffset() is None:
             raise ValueError
         if (type(value) is not dict or set(value) != _PLAN
-                or not _integer(value['schema_version'], 1, 1)
+                or not _integer(value['schema_version'], 1, 2)
                 or value['data_origin'] not in ('synthetic', 'research')
                 or type(value['model_version']) is not str
                 or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', value['model_version'])
                 or value['prediction_target'] not in ('new_join_total', 'remaining')
                 or value['conditioning'] != ('new_join' if value['prediction_target'] == 'new_join_total'
-                                            else 'caller_supplied_conditional')
+                    else 'caller_supplied_conditional' if value['schema_version'] == 1
+                    else 'call_not_observed_after_elapsed')
                 or not _integer(value['ai_blend_ppm'], 0, PPM)):
             raise ValueError
         context = value['public_context']
@@ -128,13 +131,43 @@ def validate_plan(value, *, now=None):
         candidates, seen = value['candidates'], set()
         if type(candidates) is not list or not 1 <= len(candidates) <= len(CANDIDATE_IDS):
             raise ValueError
+        elapsed_values = set()
         for candidate in candidates:
-            if (type(candidate) is not dict or set(candidate) != {'candidate_id', 'atoms'}
+            if (type(candidate) is not dict or set(candidate) not in
+                    ({'candidate_id', 'atoms'}, {'candidate_id', 'interval_sample'})
                     or type(candidate['candidate_id']) is not str
-                    or candidate['candidate_id'] not in CANDIDATE_IDS or candidate['candidate_id'] in seen
-                    or type(candidate['atoms']) is not list or not 1 <= len(candidate['atoms']) <= 32):
+                    or candidate['candidate_id'] not in CANDIDATE_IDS or candidate['candidate_id'] in seen):
                 raise ValueError
             seen.add(candidate['candidate_id'])
+            if 'interval_sample' in candidate:
+                if value['schema_version'] != 2:
+                    raise ValueError
+                sample = candidate['interval_sample']
+                if (type(sample) is not dict or set(sample) != {'elapsed_us', 'intervals'}
+                        or type(sample['intervals']) is not list or not 1 <= len(sample['intervals']) <= 128):
+                    raise ValueError
+                elapsed = sample['elapsed_us']
+                if value['prediction_target'] == 'remaining':
+                    if not _integer(elapsed, 0, MAX_WAIT_US):
+                        raise ValueError
+                    elapsed_values.add(elapsed)
+                elif elapsed is not None:
+                    raise ValueError
+                pairs = set()
+                total = definite = 0
+                for row in sample['intervals']:
+                    if (type(row) is not list or len(row) != 3
+                            or not _integer(row[0], 0, MAX_WAIT_US)
+                            or row[1] is not None and not _integer(row[1], row[0], MAX_WAIT_US)
+                            or not _integer(row[2], 1, 10_000) or (row[0], row[1]) in pairs):
+                        raise ValueError
+                    pairs.add((row[0], row[1])); total += row[2]
+                    definite += row[2] if elapsed is not None and row[0] > elapsed else 0
+                if total > 10_000 or elapsed is not None and definite == 0:
+                    raise ValueError
+                continue
+            if type(candidate['atoms']) is not list or not 1 <= len(candidate['atoms']) <= 32:
+                raise ValueError
             for atom in candidate['atoms']:
                 if (type(atom) is not dict or set(atom) != {'lower_us', 'upper_us', 'mass_ppm'}
                         or not _integer(atom['lower_us'], 0, MAX_WAIT_US)
@@ -143,8 +176,14 @@ def validate_plan(value, *, now=None):
                     raise ValueError
             if sum(a['mass_ppm'] for a in candidate['atoms']) != PPM:
                 raise ValueError
+        if (len(elapsed_values) > 1 or value['schema_version'] == 2
+                and value['prediction_target'] == 'remaining' and not elapsed_values):
+            raise ValueError
         prior = _weights(value['prior_weights_ppm'], seen)
         safe = {**deepcopy(value), 'public_context': context, 'prior_weights_ppm': prior}
+        for candidate in safe['candidates']:
+            if 'interval_sample' in candidate:
+                candidate['interval_sample']['intervals'].sort(key=lambda row: (row[0], row[1] is None, row[1] or 0))
         if len(_canonical(safe).encode()) > MAX_BYTES:
             raise ValueError
         return safe
@@ -284,7 +323,7 @@ def context_from_history(history, *, queue_type, now=None, window_seconds=600,
 def public_request(plan, *, now=None):
     plan = validate_plan(plan, now=now)
     # No distribution atoms, personal queue number, issue time or arrival plan.
-    public = {'schema_version': 1, 'policy': POLICY, 'model_version': plan['model_version'],
+    public = {'schema_version': 1, 'policy': POLICY if plan['schema_version'] == 1 else EMPIRICAL_POLICY, 'model_version': plan['model_version'],
               'context': plan['public_context'], 'candidate_ids': sorted(plan['prior_weights_ppm']),
               'calendar_at_observation': date_features(plan['public_context']['as_of'],
                                                        as_of=plan['public_context']['as_of'])}
@@ -344,6 +383,71 @@ def _quantile(atoms, q, endpoint):
     raise FusionError('fusion_operation_failed')
 
 
+def _cdf_bounds(candidate, t):
+    """Exact rational empirical CDF envelopes; t=0 may be a right-limit bound.
+
+    Conditional intervals do not have a fixed number of survivors: dividing
+    by the unconditioned sample size, or assigning fixed survivor masses, is
+    incorrect when an interval straddles elapsed time.
+    """
+    if 'atoms' in candidate:
+        rows = candidate['atoms']
+        lower = sum(a['mass_ppm'] for a in rows if a['upper_us'] is not None and a['upper_us'] <= t)
+        upper = sum(a['mass_ppm'] for a in rows if a['lower_us'] <= t)
+        return Fraction(lower, PPM), Fraction(upper, PPM)
+    sample = candidate['interval_sample']
+    rows, elapsed = sample['intervals'], sample['elapsed_us']
+    if elapsed is None:
+        total = sum(n for _, _, n in rows)
+        return (Fraction(sum(n for _, u, n in rows if u is not None and u <= t), total),
+                Fraction(sum(n for l, _, n in rows if l <= t), total))
+    target = elapsed+t
+    must_finished = sum(n for l, u, n in rows if l > elapsed and u is not None and u <= target)
+    could_later = sum(n for _, u, n in rows if u is None or u > target)
+    could_finished = sum(n for l, u, n in rows if (u is None or u > elapsed) and l <= target)
+    must_later = sum(n for l, _, n in rows if l > target)
+    return Fraction(must_finished, must_finished+could_later), Fraction(could_finished, could_finished+must_later)
+
+
+def _empirical_quantiles(candidates, effective):
+    active = [c for c in candidates if effective[c['candidate_id']] > 0]
+    points = {0}
+    for candidate in active:
+        if 'atoms' in candidate:
+            for row in candidate['atoms']:
+                points.add(row['lower_us'])
+                if row['upper_us'] is not None:
+                    points.add(row['upper_us'])
+        else:
+            sample = candidate['interval_sample']
+            elapsed = sample['elapsed_us'] or 0
+            for lower, upper, _ in sample['intervals']:
+                points.add(max(0, lower-elapsed))
+                if upper is not None:
+                    points.add(max(0, upper-elapsed))
+    points = sorted(points)
+    cache = {}
+    def bounds(index):
+        if index not in cache:
+            values = [_cdf_bounds(c, points[index]) for c in active]
+            cache[index] = tuple(sum((Fraction(effective[c['candidate_id']], PPM**2)*v[side]
+                for c, v in zip(active, values)), Fraction(0)) for side in (0, 1))
+        return cache[index]
+    def inverse(q, side):
+        if bounds(len(points)-1)[side] < q:
+            return None
+        lo, hi = 0, len(points)-1
+        while lo < hi:
+            mid = (lo+hi)//2
+            if bounds(mid)[side] >= q:
+                hi = mid
+            else:
+                lo = mid+1
+        return points[lo]
+    return {name: {'lower_us': inverse(q, 1), 'upper_us': inverse(q, 0)}
+            for name, q in (('p10', Fraction(1, 10)), ('p50', Fraction(1, 2)), ('p90', Fraction(9, 10)))}
+
+
 def fuse(plan, *, advice=None, now=None, current_public_input_sha256=None,
          current_observation_revision=None):
     clock = _clock() if now is None else now
@@ -366,20 +470,22 @@ def fuse(plan, *, advice=None, now=None, current_public_input_sha256=None,
     effective = {key: (PPM-alpha)*weight + alpha*accepted['weights_ppm'][key]
                  if accepted is not None else PPM*weight for key, weight in prior.items()}
     assert sum(effective.values()) == PPM**2
+    empirical = any('interval_sample' in c for c in plan['candidates'])
     atoms = [(a, effective[c['candidate_id']]*a['mass_ppm'])
-             for c in plan['candidates'] for a in c['atoms']]
-    quantiles = {name: {'lower_us': _quantile(atoms, q, 'lower_us'),
+             for c in plan['candidates'] if 'atoms' in c for a in c['atoms']]
+    quantiles = _empirical_quantiles(plan['candidates'], effective) if empirical else {name: {'lower_us': _quantile(atoms, q, 'lower_us'),
                          'upper_us': _quantile(atoms, q, 'upper_us')}
                  for name, q in (('p10', 100_000), ('p50', 500_000), ('p90', 900_000))}
-    return {'fusion_schema_version': 1, 'policy': POLICY, 'plan': plan,
+    return {'fusion_schema_version': 1, 'policy': request['policy'], 'plan': plan,
             'local_input_sha256': hashlib.sha256(_canonical(plan).encode()).hexdigest(),
             'public_request': request, 'computed_at': _utc(clock),
             'advice_accepted': accepted is not None, 'ai_numerical_influence_applied': alpha > 0,
             'advice_origin_basis': 'caller_supplied_not_provider_attested',
-            'candidate_basis': 'caller_supplied_distribution_supports_not_fitted_here',
+            'candidate_basis': 'caller_supplied_interval_samples_not_population_fit' if empirical else 'caller_supplied_distribution_supports_not_fitted_here',
             'ai_blend_ppm': alpha, 'advice': accepted, 'fallback_reason': fallback,
             'effective_weight_numerators': effective, 'effective_weight_denominator': PPM**2,
-            'wait_quantile_envelopes_us': quantiles, 'quantile_method': 'inverse_mixture_cdf_interval_envelopes',
+            'wait_quantile_envelopes_us': quantiles, 'quantile_method': 'inverse_rational_cdf_envelope_mixture' if empirical else 'inverse_mixture_cdf_interval_envelopes',
+            'survival_conditioning_applied_here': empirical and plan['prediction_target'] == 'remaining',
             'unbounded_upper_support': any(v['upper_us'] is None for v in quantiles.values()),
             'current_input_guard_applied': current_public_input_sha256 is not None and current_observation_revision is not None,
             'input_currentness_verified': False, 'coverage_calibrated': False,
