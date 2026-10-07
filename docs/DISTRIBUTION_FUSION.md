@@ -1,6 +1,6 @@
 # 实时公共情景与分布融合
 
-源码候选 rc46 新增公共特征整理、候选分布算术与 AI 权重答复校验。供应商请求、历史模型到候选分布的自动转换、个人号码追踪、在线预测发布及误差校准仍待实现。当前真实认证标签为 0，`eta_available=false`；测试答复是自造的明确合成数据，不是 DeepSeek 实际输出。完整设计与研究来源见[实时模型](REALTIME_PREDICTION_MODEL.md)，验证事实见[交接历史](PROJECT_HANDOVER.md)。
+源码候选 rc46 新增公共特征整理、候选分布算术与 AI 权重答复校验。rc47已增加[有界DeepSeek供应商适配器](DEEPSEEK_ADAPTER.md)，默认不调用；真实供应商请求、历史模型到候选分布的自动转换、个人号码追踪、在线预测发布及误差校准仍待实现。当前真实认证标签为 0，`eta_available=false`；测试答复是自造的明确合成数据，不是 DeepSeek 实际输出。完整设计与研究来源见[实时模型](REALTIME_PREDICTION_MODEL.md)，验证事实见[交接历史](PROJECT_HANDOVER.md)。
 
 ## 计算怎样更新
 

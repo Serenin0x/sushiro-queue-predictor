@@ -44,6 +44,7 @@ from .baseline import BaselineError, read_plan as read_baseline_plan, write_base
 from .backtest import BacktestError, read_backtest_plan, write_backtest
 from .features import FeatureError, read_feature_plan, write_feature_dataset
 from .fusion import FusionError, read_plan as read_fusion_plan, read_advice, write_fusion
+from .deepseek import DeepSeekError, write_deepseek_fusion
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -709,6 +710,12 @@ def build_parser() -> argparse.ArgumentParser:
     fusion.add_argument("--input", required=True)
     fusion.add_argument("--advice")
     fusion.add_argument("--output", required=True)
+    deepseek = commands.add_parser("deepseek-fusion", help="受限DeepSeek公共权重与私有分布融合；默认不联网，无已校准ETA")
+    deepseek.add_argument("--input", required=True)
+    deepseek.add_argument("--output", required=True)
+    deepseek.add_argument("--budget-file")
+    deepseek.add_argument("--api-key-file")
+    deepseek.add_argument("--allow-paid-request", action="store_true")
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -1054,6 +1061,26 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "deepseek-fusion":
+            try:
+                paths = [Path(p).resolve() for p in
+                         (args.input, args.output, args.budget_file, args.api_key_file) if p is not None]
+                if len(set(paths)) != len(paths):
+                    raise DeepSeekError("deepseek_configuration_conflict")
+                plan = read_fusion_plan(args.input)
+                result = write_deepseek_fusion(plan, destination=args.output,
+                    budget_file=args.budget_file, key_file=args.api_key_file,
+                    allow_paid_request=args.allow_paid_request)
+                durable = result['durability_confirmed']
+                emit({"ok": durable, **result, **({} if durable else {"error_code": "deepseek_durability_unconfirmed"})})
+                return 0 if durable else 1
+            except (DeepSeekError, FusionError) as error:
+                network = getattr(error, 'network_performed', False)
+                emit({"ok": False, "error_code": error.error_code,
+                    "committed": getattr(error, 'committed', False), "durability_confirmed": False,
+                    "network_performed": network, "provider_called": network,
+                    "automatic_retry": False, "eta_available": False, "verified_training_labels": 0})
                 return 1
         if args.command == "fusion-research":
             try:

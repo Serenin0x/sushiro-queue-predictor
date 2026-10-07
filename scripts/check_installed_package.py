@@ -20,6 +20,57 @@ from sushiwait.cli import main
 from sushiwait.cli import _recovery_poll_target
 
 
+def check_deepseek_install():
+    """Exercise the installed adapter using a labelled synthetic transport."""
+    from sushiwait.deepseek import MODEL, run_deepseek
+    now=datetime.now(timezone.utc)
+    stamp=lambda seconds:(now+timedelta(seconds=seconds)).isoformat()
+    plan={'schema_version':1,'data_origin':'synthetic','model_version':'install-synthetic-v1',
+        'prediction_target':'new_join_total','conditioning':'new_join','ai_blend_ppm':500000,
+        'public_context':{'schema_version':1,'source':'crm_remote_v1_1','store_id':'900001',
+            'queue_type':'ordinary','observation_revision':1,'as_of':stamp(0),'expires_at':stamp(60),
+            'window_seconds':300,'max_local_age_seconds':90,'latest_queue_received_at':stamp(-5),
+            'latest_count_received_at':None,'features':[{'feature_id':'ordinary_removed_labels','value':1,'available_at':stamp(-5)}],
+            'source_freshness':'unknown','count_unit':'unknown','store_identity_verified':False,
+            'collector_running':True,'latest_queue_origin':'worker_commit'},
+        'candidates':[{'candidate_id':k,'atoms':[{'lower_us':v,'upper_us':v,'mass_ppm':1000000}]}
+                      for k,v in [('history',100),('fast',0)]],
+        'prior_weights_ppm':{'history':1000000,'fast':0}}
+    budget={'schema_version':1,'provider':'deepseek_official','model':MODEL,
+        'created_at':stamp(-1),'deadline_at':stamp(3600),'max_calls':1,
+        'max_reserved_tokens':20512,'max_reserved_cost_microunits':44096,
+        'max_prompt_tokens':20000,'max_output_tokens':512,'timeout_seconds':10,
+        'input_rate_microunits_per_million':2000000,'output_rate_microunits_per_million':8000000,
+        'price_basis':'caller_supplied_ceiling_not_verified'}
+    calls=[]
+    def transport(body,key,timeout):
+        calls.append(json.loads(body))
+        return json.dumps({'object':'chat.completion','model':MODEL,
+            'choices':[{'index':0,'finish_reason':'stop','message':{'role':'assistant','content':json.dumps({
+                'weights_ppm':{'history':0,'fast':1000000},'feature_ids':['ordinary_removed_labels'],
+                'reason_code':'rapid_display_turnover'})}}],
+            'usage':{'prompt_tokens':100,'completion_tokens':30,'total_tokens':130,
+                'prompt_cache_hit_tokens':0,'prompt_cache_miss_tokens':100}}).encode()
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp).resolve();ledger=root/'ledger';ledger.mkdir(mode=0o700)
+        output=root/'output';output.mkdir(mode=0o700)
+        for p,v in [(root/'plan.json',plan),(root/'key.json',{'schema_version':1,'purpose':'deepseek_official','api_key':'sk-SyntheticInstall'}),(ledger/'budget.json',budget)]:
+            p.write_text(json.dumps(v));p.chmod(0o600)
+        with patch('socket.socket',side_effect=AssertionError('deepseek_socket')) as sockets:
+            options={'budget_file':ledger/'budget.json','key_file':root/'key.json','allow_paid_request':True,
+                     'clock':lambda:now,'monotonic':lambda:0,'transport':transport}
+            first=run_deepseek(plan,**options);second=run_deepseek(plan,**options)
+            logs=io.StringIO()
+            with contextlib.redirect_stdout(logs):
+                assert main(['deepseek-fusion','--input',str(root/'plan.json'),'--output',str(output/'baseline.json')])==0
+        assert sockets.call_count==0 and len(calls)==1 and first['advice_accepted'] and second['advice_cache_hit']
+        assert first['wait_quantile_envelopes_us']['p50']['lower_us']==0 and not first['provider_called']
+        assert json.loads(logs.getvalue())['fallback_reason']=='deepseek_disabled' and str(root) not in logs.getvalue()
+        assert json.loads((output/'baseline.json').read_bytes())['eta_available'] is False
+        print(json.dumps({'installed_deepseek_ok':True,'synthetic_transport_calls':1,'deduplicated_calls':1,
+                         'provider_calls':0,'socket_calls':0,'billing_verified':False,'eta_available':False}))
+
+
 def check_campaign_install():
     """Use the installed CLI, real private files and an explicitly fake source."""
     from sushiwait.remote import RemoteClient, QUEUE_NAMES
@@ -156,10 +207,11 @@ def check() -> None:
     if Path(sushiwait.__file__).resolve().is_relative_to(args.source_root.resolve()):
         raise SystemExit("package_imported_from_checkout")
     check_personal_install()
+    check_deepseek_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')

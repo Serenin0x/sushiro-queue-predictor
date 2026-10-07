@@ -47,4 +47,4 @@
 
 最新四层实时数值方案与论文依据见[REALTIME_PREDICTION_MODEL](REALTIME_PREDICTION_MODEL.md)，供应商与官方价格/许可见[LLM_MODEL_CHOICES](LLM_MODEL_CHOICES.md)，扩店实际范围见[STORE_EXPANSION](STORE_EXPANSION.md)；当前仍未训练、调用或校准。
 
-rc46已实现[实时公共特征与候选分布融合](DISTRIBUTION_FUSION.md)，只读摘要不额外查询上游；尚未连接供应商、历史模型候选生成或在线ETA发布，实际验证以交接记录为准。
+rc46已实现[实时公共特征与候选分布融合](DISTRIBUTION_FUSION.md)，只读摘要不额外查询上游；rc47新增[有界DeepSeek适配器](DEEPSEEK_ADAPTER.md)，但真实供应商调用、历史模型候选生成和在线ETA发布仍待验证，实际验证以交接记录为准。
