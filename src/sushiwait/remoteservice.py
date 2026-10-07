@@ -6,13 +6,15 @@ does not create an unlimited daemon, renew credentials, or estimate call times.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from copy import deepcopy
 from datetime import datetime, timezone
+from importlib.resources import files
 import json
 import threading
 import time
 
-from .remote import MAX_RECORD, SOURCE, RemoteClient, RemoteStore, _id, _time, validate_record
+from .remote import MAX_RECORD, SOURCE, QUEUE_NAMES, RemoteClient, RemoteStore, _id, _time, validate_record
 from .client import _unique_json_object, _reject_json_constant
 from .remotetasks import RemoteTask, RemoteTaskError, collect_remote_task, public_status, task_config
 
@@ -23,6 +25,42 @@ class RemoteServiceError(ValueError):
 
 def _utc():
     return datetime.now(timezone.utc)
+
+
+MONITOR_POINTS = 360
+_MONITOR_FILES = {'/monitor': ('monitor.html', b'text/html; charset=utf-8'),
+    '/monitor.js': ('monitor.js', b'text/javascript; charset=utf-8'),
+    '/monitor.css': ('monitor.css', b'text/css; charset=utf-8')}
+_MONITOR_CSP = (b"default-src 'none'; script-src 'self'; style-src 'self'; "
+    b"connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+
+
+def _monitor_point(safe, previous, *, saved_history, max_gap):
+    """Summarize a committed pair without reusing old success as new data."""
+    queues, count = safe['queries']['groupqueues'], safe['queries']['storequeuecount']
+    prior = previous.get('groupqueues')
+    comparison = {'state': 'insufficient', 'interval_seconds': None, 'removed_labels': None}
+    if queues['ok'] and prior is not None and prior['ok']:
+        delta = (_time(queues['received_at']) - _time(prior['received_at'])).total_seconds()
+        comparison['interval_seconds'] = round(delta, 3)
+        if delta <= 0:
+            comparison['state'] = 'time_order_or_duplicate'
+        elif delta > max_gap:
+            comparison['state'] = 'gap'
+        else:
+            comparison['state'] = 'comparable_display_sets'
+            comparison['removed_labels'] = {name: len(set(prior['payload']['queues'][name])
+                - set(queues['payload']['queues'][name])) for name in QUEUE_NAMES}
+    return {'origin': 'saved_history' if saved_history else 'worker_commit',
+        'pair_ok': safe['ok'],
+        'queries': {name: {key: result[key] for key in
+            ('attempted', 'ok', 'error_code', 'http_status', 'started_at', 'received_at')}
+            for name, result in safe['queries'].items()},
+        'reported_count_raw': count['payload']['raw_count'] if count['ok'] else None,
+        'count_unit': 'unknown',
+        'display_sizes': {name: len(queues['payload']['queues'][name]) for name in QUEUE_NAMES}
+            if queues['ok'] else None,
+        'display_comparison': comparison}
 
 
 class LiveRemoteView:
@@ -37,6 +75,8 @@ class LiveRemoteView:
         self.stale_after = stale_after_seconds
         self.lock = threading.Lock()
         self.records = {store:{'latest':{},'successful':{},'origins':{}} for store in store_ids}
+        self.history = {store: deque(maxlen=MONITOR_POINTS) for store in store_ids}
+        self.evicted = {store: 0 for store in store_ids}
 
     def publish(self, record, *, saved_history=False):
         safe = validate_record(record)
@@ -50,6 +90,12 @@ class LiveRemoteView:
                 if (before and result['started_at'] is not None and before['started_at'] is not None
                         and _time(result['started_at']) < _time(before['started_at'])):
                     raise RemoteServiceError('remote_service_record_time_order')
+            if current['latest'] != safe['queries']:
+                point = _monitor_point(safe, current['latest'], saved_history=saved_history,
+                                       max_gap=self.stale_after)
+                if len(self.history[store]) == MONITOR_POINTS:
+                    self.evicted[store] += 1
+                self.history[store].append(point)
             current['latest'] = deepcopy(safe['queries'])
             for endpoint, result in safe['queries'].items():
                 if result['ok']:
@@ -87,6 +133,24 @@ class LiveRemoteView:
             'source_freshness':'unknown','source_update_time_verified':False,
             'response_store_identity_verified':False,'atomic_snapshot':False,
             'eta_available':False,'verified_training_labels':0,'network_performed_by_read':False}
+
+
+    def monitor_history(self, store_id, *, now, service_state, worker_alive):
+        if store_id not in self.records:
+            raise RemoteServiceError('remote_service_store_scope')
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+            raise RemoteServiceError('remote_service_clock_invalid')
+        with self.lock:
+            points = deepcopy(list(self.history[store_id]))
+            evicted = self.evicted[store_id]
+        return {'monitor_schema_version': 1, 'source': SOURCE, 'requested_store_id': store_id,
+            'generated_at': now.isoformat(), 'service_state': service_state, 'worker_alive': worker_alive,
+            'points': points, 'retained_points': len(points), 'max_points': MONITOR_POINTS,
+            'evicted_points_this_process': evicted, 'complete_history': False,
+            'history_semantics': 'bounded_committed_projection', 'comparison_max_gap_seconds': self.stale_after,
+            'count_unit': 'unknown', 'display_turnover_is_no_show_rate': False,
+            'source_freshness': 'unknown', 'response_store_identity_verified': False,
+            'eta_available': False, 'network_performed_by_read': False}
 
 
 class RemoteQueueService:
@@ -201,6 +265,11 @@ class RemoteQueueService:
         return self.view.snapshot(store_id,now=self.wall_clock(),service_state=state['service_state'],
             worker_alive=state['worker_alive'])
 
+    def monitor_history(self, store_id):
+        state = self.status()
+        return self.view.monitor_history(store_id, now=self.wall_clock(),
+            service_state=state['service_state'], worker_alive=state['worker_alive'])
+
 
 class RemoteASGI:
     """Fixed GET routes, no user-controlled upstream targets or business writes."""
@@ -225,7 +294,7 @@ class RemoteASGI:
                     await send({'type':'lifespan.shutdown.complete'});return
             return
         if scope['type'] != 'http':raise RemoteServiceError('remote_service_protocol_unsupported')
-        status,payload = 200,None
+        status,payload,asset = 200,None,None
         if scope.get('method') != 'GET':status,payload = 405,{'error_code':'method_not_allowed'}
         elif scope.get('query_string',b''):status,payload = 400,{'error_code':'query_parameters_not_supported'}
         else:
@@ -238,6 +307,15 @@ class RemoteASGI:
                 if path in ('/health','/api/v1/status'):
                     payload = self.service.status()
                     if path=='/health' and (payload['service_state']!='running' or not payload['worker_alive']):status = 503
+                elif path in _MONITOR_FILES:
+                    name, content_type = _MONITOR_FILES[path]
+                    asset = files('sushiwait').joinpath('web', name).read_bytes(), content_type
+                elif path.startswith('/api/v1/stores/') and path.endswith('/history'):
+                    store = path[len('/api/v1/stores/'):-len('/history')]
+                    if store not in self.service.view.stores:status,payload = 404,{'error_code':'store_not_in_scope'}
+                    else:
+                        try:payload = self.service.monitor_history(store)
+                        except RemoteServiceError:status,payload = 503,{'error_code':'remote_service_view_unavailable'}
                 elif path.startswith('/api/v1/stores/') and path.endswith('/queue'):
                     store = path[len('/api/v1/stores/'):-len('/queue')]
                     if store not in self.service.view.stores:status,payload = 404,{'error_code':'store_not_in_scope'}
@@ -245,9 +323,12 @@ class RemoteASGI:
                         try:payload = self.service.store_view(store)
                         except RemoteServiceError:status,payload = 503,{'error_code':'remote_service_view_unavailable'}
                 else:status,payload = 404,{'error_code':'route_not_found'}
-        body = json.dumps(payload,ensure_ascii=True,separators=(',',':'),allow_nan=False).encode()
-        headers = [(b'content-type',b'application/json; charset=utf-8'),(b'content-length',str(len(body)).encode()),
+        body, content_type = asset if asset is not None else (
+            json.dumps(payload,ensure_ascii=True,separators=(',',':'),allow_nan=False).encode(),
+            b'application/json; charset=utf-8')
+        headers = [(b'content-type',content_type),(b'content-length',str(len(body)).encode()),
             (b'cache-control',b'no-store'),(b'x-content-type-options',b'nosniff')]
+        if asset is not None:headers.append((b'content-security-policy',_MONITOR_CSP))
         if status==405:headers.append((b'allow',b'GET'))
         await send({'type':'http.response.start','status':status,'headers':headers})
         await send({'type':'http.response.body','body':body})

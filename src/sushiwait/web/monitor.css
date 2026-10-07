@@ -1,0 +1,27 @@
+:root { color-scheme: light dark; --bg:#f7f6f3; --card:#fff; --text:#222; --muted:#686866; --line:#deddd8; --red:#c82e39; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"PingFang SC",sans-serif; }
+main { max-width:1120px; padding:36px 24px; margin:auto; }
+.brand { color:var(--red); letter-spacing:.18em; font-weight:650; font-size:14px; }
+h1 { font-size:clamp(26px,4vw,38px); margin:14px 0; }
+h2 { font-size:16px; margin:0 0 12px; }
+p, small, footer { line-height:1.6; }
+header>p:not(.brand), small, footer, .charts article>p { color:var(--muted); }
+.controls { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:28px; }
+button,select { font:inherit; padding:10px 14px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); }
+button { cursor:pointer; } button:disabled { opacity:.5; cursor:wait; }
+button:focus-visible,select:focus-visible,summary:focus-visible { outline:2px solid var(--red); outline-offset:3px; }
+.cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:22px 0; }
+article,.numbers,details { background:var(--card); padding:22px; border-radius:12px; border:1px solid var(--line); }
+.cards p { font-size:24px; margin:8px 0; overflow-wrap:anywhere; }
+.cards small { display:block; font-size:12px; }
+.charts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:18px 0; }
+.charts article>p { font-size:13px; min-height:42px; }
+canvas { width:100%; height:220px; display:block; }
+.chart-note { font-variant-numeric:tabular-nums; }
+dl { display:grid; grid-template-columns:90px 1fr; gap:8px; font-size:14px; }
+dt,dd { margin:0; } dd { overflow-wrap:anywhere; }
+summary { cursor:pointer; } li { margin-top:8px; font-size:13px; overflow-wrap:anywhere; }
+footer { font-size:12px; margin-top:24px; }
+@media(max-width:760px) { .cards { grid-template-columns:repeat(2,minmax(0,1fr)); } .charts { grid-template-columns:1fr; } main { padding:24px 16px; } article { padding:18px; } }
+@media(prefers-color-scheme:dark) { :root { --bg:#151515; --card:#202020; --text:#eee; --muted:#aaa; --line:#383838; --red:#f06771; } }

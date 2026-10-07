@@ -68,6 +68,13 @@ def check():
         for _ in range(5):
             code,view=read(url,'/api/v1/stores/900001/queue')
             assert code==200 and view['eta_available'] is False and view['network_performed_by_read'] is False
+            code,history=read(url,'/api/v1/stores/900001/history')
+            assert code==200 and history['retained_points']==1 and not history['complete_history']
+            assert history['points'][0]['reported_count_raw']==1 and not history['network_performed_by_read']
+        for path,name in [('/monitor','monitor.html'),('/monitor.js','monitor.js'),('/monitor.css','monitor.css')]:
+            with opener.open(url+path,timeout=3) as response:
+                assert response.status==200 and "connect-src 'self'" in response.headers['content-security-policy']
+                assert response.read(16385)==(fixture.parent.parent/'src/sushiwait/web'/name).read_bytes()
         run('stop','--time','45',first);before=inspect_state();assert before['counter']==2
         second,url=start();two=wait(url,lambda v:v.get('service_state')=='completed',seconds=80)
         assert read(url,'/health')[0]==503
@@ -84,6 +91,9 @@ def check():
         assert read(url,'/health')[0]==503
         code,view=read(url,'/api/v1/stores/900001/queue')
         assert code==200 and view['fields']['groupqueues']['state']=='saved_history'
+        code,history=read(url,'/api/v1/stores/900001/history')
+        assert code==200 and history['retained_points']==2 and not history['worker_alive']
+        assert all(p['origin']=='saved_history' for p in history['points'])
         run('stop','--time','45',third);final=inspect_state()
         assert after['counter']==final['counter']==4 and after['hashes']==final['hashes']
         assert final['uid']==10001 and final['parent_mode']=='0o700'

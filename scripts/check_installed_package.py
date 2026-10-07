@@ -387,6 +387,23 @@ def check() -> None:
                                 or view['fields']['storequeuecount']['payload']!={'raw_count':0,'unit':'unknown'}
                                 or view['network_performed_by_read'] or view['eta_available']):
                             raise SystemExit('installed_remote_service_view_failed')
+                        replies=[]
+                        await app({'type':'http','method':'GET','path':'/api/v1/stores/3014/history','query_string':b''},receive_http,send_http)
+                        history=json.loads(replies[1]['body'])
+                        if (replies[0]['status']!=200 or history['retained_points']!=1
+                                or history['points'][0]['reported_count_raw']!=0
+                                or history['points'][0]['origin']!='worker_commit'
+                                or history['complete_history'] or history['network_performed_by_read']):
+                            raise SystemExit('installed_monitor_history_failed')
+                    from importlib.resources import files
+                    for path,name in (('/monitor','monitor.html'),('/monitor.js','monitor.js'),('/monitor.css','monitor.css')):
+                        replies=[]
+                        await app({'type':'http','method':'GET','path':path,'query_string':b''},receive_http,send_http)
+                        body=replies[1]['body']
+                        if (replies[0]['status']!=200 or body!=files('sushiwait').joinpath('web',name).read_bytes()
+                                or body!=(args.source_root/'src/sushiwait/web'/name).read_bytes()
+                                or b"connect-src 'self'" not in dict(replies[0]['headers'])[b'content-security-policy']):
+                            raise SystemExit('installed_monitor_assets_failed')
                 finally:
                     await inputs.put({'type':'lifespan.shutdown'})
                     await asyncio.wait_for(lifecycle,3)
@@ -402,6 +419,9 @@ def check() -> None:
             print(json.dumps({'installed_remote_service_asgi_ok':True,'service_saved_pairs':1,
                 'service_synthetic_http_attempts':2,'service_display_reads':5,'service_extra_upstream_requests':0,
                 'service_socket_calls':0,'service_query_credentials_accessed':False,'service_is_live_acceptance':False}))
+            print(json.dumps({'installed_collection_monitor_ok':True,'monitor_history_reads':5,
+                'monitor_assets_byte_equal':True,'monitor_asset_reads':3,'monitor_extra_upstream_requests':0,
+                'monitor_is_live_acceptance':False}))
             from sushiwait.remotewindow import RemoteWindowTask,remote_window_status
             window_db=Path(directory).resolve()/"synthetic-window.sqlite3"
             window_task=Path(directory).resolve()/"synthetic-window-task.json"

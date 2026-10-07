@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SUSHIWAIT · 采集统计</title>
+  <link rel="stylesheet" href="/monitor.css">
+  <script src="/monitor.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><p class="brand">SUSHIWAIT</p><h1>让排队数据看得见</h1>
+      <p>查看已保存的门店观测、展示号码变化和采集缺口。</p></header>
+    <div class="controls">
+      <label>门店 <select id="store" aria-label="选择采集门店"></select></label>
+      <button id="refresh" type="button">刷新统计</button>
+      <button id="pause" type="button">暂停页面更新</button>
+    </div>
+    <p id="message" role="status" aria-live="polite">正在连接采集服务…</p>
+    <section class="cards" aria-label="当前采集状态">
+      <article><h2>采集状态</h2><p id="state">—</p><small id="task">—</small></article>
+      <article><h2>本页观测</h2><p id="samples">—</p><small id="history-note">最多展示最近 360 组；不是完整历史</small></article>
+      <article><h2>最近成功响应年龄</h2><p id="age">—</p><small>指本机收到响应的时间，不代表源数据年龄</small></article>
+      <article><h2>窗口失败／缺口</h2><p id="failures">—</p><small>失败不补零，长缺口不连接曲线</small></article>
+    </section>
+    <section class="numbers"><h2>最近成功响应中的展示号码</h2>
+      <p id="numbers-state">暂无成功观测</p><dl id="numbers"></dl>
+      <small>展示集合不是完整队列；这些号码不是已经确认的“当前叫到”游标。</small></section>
+    <section class="charts" aria-label="统计曲线">
+      <article><h2>门店返回数量 · 单位未核实</h2><p>原始数量，暂不能作为等待分钟或现场桌数。</p>
+        <canvas id="count" role="img" aria-label="原始数量随响应时间变化"></canvas><p id="count-note" class="chart-note"></p></article>
+      <article><h2>堂食展示集合变化</h2><p>相邻有效响应中消失的不同号码数；不等于实际过号人数。</p>
+        <canvas id="ordinary" role="img" aria-label="堂食展示集合消失号码变化"></canvas><p id="ordinary-note" class="chart-note"></p></article>
+      <article><h2>预约展示集合变化</h2><p>预约队列单独观察，和堂食分开统计。</p>
+        <canvas id="reservation" role="img" aria-label="预约展示集合消失号码变化"></canvas><p id="reservation-note" class="chart-note"></p></article>
+      <article><h2>实际成功响应间隔 · 秒</h2><p>保留完整间隔，方便看见停采和断网造成的缺口。</p>
+        <canvas id="interval" role="img" aria-label="相邻成功响应的实际间隔"></canvas><p id="interval-note" class="chart-note"></p></article>
+    </section>
+    <details><summary>查看本窗口失败及较长缺口</summary><ul id="issues"></ul></details>
+    <footer>这是采集统计页，当前不提供预测时间、精确前方桌数或真实过号率。
+      页面每 5 秒读取已保存的副本，不增加寿司郎查询；采集结束后曲线保留为历史。</footer>
+  </main>
+</body>
+</html>

@@ -9,6 +9,10 @@
 !src/sushiwait/*.py
 !src/sushiwait/data/
 !src/sushiwait/data/*.json
+!src/sushiwait/web/
+!src/sushiwait/web/*.html
+!src/sushiwait/web/*.css
+!src/sushiwait/web/*.js
 !deploy/
 !deploy/Dockerfile
 !deploy/requirements-build.txt
