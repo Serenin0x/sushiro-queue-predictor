@@ -42,6 +42,7 @@ from .intake import IntakeError, OutcomeIntakeStore
 from .reviews import ReviewError, OutcomeReviewStore, read_review, draft_review
 from .baseline import BaselineError, read_plan as read_baseline_plan, write_baseline
 from .backtest import BacktestError, read_backtest_plan, write_backtest
+from .features import FeatureError, read_feature_plan, write_feature_dataset
 from .transport import sanitize_transport
 from .tasks import CollectionTask, TaskError, public_task, task_status
 from .adaptive import ScheduleError, schedule_from_file, run_adaptive
@@ -695,6 +696,14 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--input", required=True)
     backtest.add_argument("--output", required=True)
     backtest.add_argument("--max-revisions", type=int, default=10000)
+    features = commands.add_parser("outcome-feature-export", help="按当时已接收的门店观测对齐私有排队经历；不认证训练标签或ETA")
+    features.add_argument("--source-db", required=True)
+    features.add_argument("--reviews-db", required=True)
+    features.add_argument("--remote-db", required=True)
+    features.add_argument("--input", required=True)
+    features.add_argument("--output", required=True)
+    features.add_argument("--max-revisions", type=int, default=10000)
+    features.add_argument("--max-observations", type=int, default=10000)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -1040,6 +1049,34 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command == "outcome-feature-export":
+            from .remote import RemoteStore
+            try:
+                plan = read_feature_plan(args.input)
+                paths = [Path(p).resolve() for p in (args.source_db, args.reviews_db, args.remote_db,
+                                                     args.input, args.output)]
+                if len(set(paths)) != 5 or len({p.parent for p in paths[:3]}) != 3 or paths[4].parent in {p.parent for p in paths[:3]}:
+                    raise FeatureError("features_invalid_input")
+                if (type(args.max_revisions) is not int or not 1 <= args.max_revisions <= 10000
+                        or type(args.max_observations) is not int or not 1 <= args.max_observations <= 10000):
+                    raise FeatureError("features_invalid_plan")
+                with OutcomeIntakeStore(args.source_db, read_only=True) as source, \
+                        OutcomeReviewStore(args.reviews_db, read_only=True) as reviews, \
+                        RemoteStore(args.remote_db, read_only=True) as remote:
+                    result = write_feature_dataset(source=source, reviews=reviews, remote=remote, plan=plan,
+                        destination=args.output, max_revisions=args.max_revisions, max_observations=args.max_observations)
+                durable = result['durability_confirmed']
+                emit({"ok": durable, **result, **({} if durable else {"error_code": "features_durability_unconfirmed"})})
+                return 0 if durable else 1
+            except (FeatureError, IntakeError, ReviewError) as error:
+                emit({"ok": False, "error_code": error.error_code, "committed": getattr(error, "committed", False),
+                      "durability_confirmed": False, "network_performed": False, "eta_available": False,
+                      "verified_training_labels": 0, "model_fitted": False})
+                return 1
+            except (OSError, ValueError):
+                emit({"ok": False, "error_code": "features_remote_invalid", "committed": False,
+                      "network_performed": False, "eta_available": False, "verified_training_labels": 0})
                 return 1
         if args.command == "baseline-backtest":
             try:

@@ -35,11 +35,11 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/65105f86981488eb-dark.svg"><img src="assets/readme-labels/65105f86981488eb-light.svg" alt="看懂页面数字的含义" width="146" height="20"></picture></strong>：已核对堂食与预约展示数组，以及“已签到等待桌数”的客户端字段绑定和西单同次响应数值。列表与详情分别记录刷新情况，营业状态显示关闭时也可能有叫号。页面更新时间与门店源时间分开解释，避免把刷新动作当作数据刚刚更新。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史；新增只读历史回放，核对整条修订链并按声明的历史时刻选择结果，避免后来纠错覆盖早先版本。人工记录与合成样例分别统计；新增私有区间误差计算，可核对已记录预测与叫号区间的误差范围、覆盖情况，保留不确定性。新增[首次接收账本](docs/OUTCOME_INTAKE.md)，由程序单独记录收到每份修订的时刻，补录的旧经历不会被提前算入历史回放；重复提交保留原接收时间。新增[人工审核记录](docs/OUTCOME_REVIEWS.md)，为具体结果生成未批准草稿，保存人工结论及其接收时间；结果改过后须重新审核，晚到审核不会倒灌历史，冲突保持未确认。新增[历史区间研究基线](docs/HISTORY_BASELINE.md)，按同店、队列和日期匹配经历，计算新取号等待、已排队剩余等待和理想时间候选；保留上下界，资料不足明确缺失。新增[时间顺序检验](docs/BASELINE_BACKTEST.md)，每个历史时刻的训练只用此前已接收的资料，核对之后叫号区间的误差范围；保留冷启动和不同提前量。人工确认与事件真实性认证分开，回放不是当时真实预测日志，模型还需真实结果校准。 新增[本人排队号查询](docs/PERSONAL_QUEUE_ACCESS.md)，独立读取自己的号码、签到状态、人数与桌型，可一并保存状态历史；个人凭证和号单单独私有保存。缺少前方桌数或真实叫号事件时明确保留未知，不用号码差冒充精确排位。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d0c5c2c9d3a688e2-dark.svg"><img src="assets/readme-labels/d0c5c2c9d3a688e2-light.svg" alt="把已有排队经历留作预测依据" width="210" height="20"></picture></strong>：本机可以校验和保存自己记录的取号、签到、叫号、过号、取消与入座结果，保留不确定时间范围和完整修订历史；新增只读历史回放，核对整条修订链并按声明的历史时刻选择结果，避免后来纠错覆盖早先版本。人工记录与合成样例分别统计；新增私有区间误差计算，可核对已记录预测与叫号区间的误差范围、覆盖情况，保留不确定性。新增[首次接收账本](docs/OUTCOME_INTAKE.md)，由程序单独记录收到每份修订的时刻，补录的旧经历不会被提前算入历史回放；重复提交保留原接收时间。新增[人工审核记录](docs/OUTCOME_REVIEWS.md)，为具体结果生成未批准草稿，保存人工结论及其接收时间；结果改过后须重新审核，晚到审核不会倒灌历史，冲突保持未确认。新增[历史区间研究基线](docs/HISTORY_BASELINE.md)，按同店、队列和日期匹配经历，计算新取号等待、已排队剩余等待和理想时间候选；保留上下界，资料不足明确缺失。新增[时间顺序检验](docs/BASELINE_BACKTEST.md)，每个历史时刻的训练只用此前已接收的资料，核对之后叫号区间的误差范围；保留冷启动和不同提前量。人工确认与事件真实性认证分开，回放不是当时真实预测日志，模型还需真实结果校准。 新增[本人排队号查询](docs/PERSONAL_QUEUE_ACCESS.md)，独立读取自己的号码、签到状态、人数与桌型，可一并保存状态历史；个人凭证和号单单独私有保存。缺少前方桌数或真实叫号事件时明确保留未知，不用号码差冒充精确排位。 新增[经历与门店观测对齐](docs/OUTCOME_FEATURES.md)，将审核过的排队过程与预测当时已接收的队列变化、日期和数据质量组合为私有研究资料；后来补录不会提前进入特征，缺失保持可见。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/62455254a15761ec-dark.svg"><img src="assets/readme-labels/62455254a15761ec-light.svg" alt="让每一天有正确的日期身份" width="194" height="20"></picture></strong>：离线识别 2026 年普通工作日、普通周末、节假日与调休上班日，保留星期、月份和日历季节。历史回放会核对公告当时是否已发布，其他年份保留未知，为后续预测准备可靠日期依据。新增离线用餐时间策略，核对叫号偏移和临近用餐的 60／30 秒刷新目标；还能离线合并同店关注需求，按更紧迫的计划确定节奏，并及时重算窗口边界。新增有界自适应采集，按实际开始时间运行同店共享的 60／30 秒查询，并在窗口边界重算；已用安装包实测 60 秒切换到 30 秒、四次查询成功；这是闭店调度验证；新匿名来源已实际验证同店共享的60／30秒策略，四份成对查询/八次请求成功；固定周期采集新增[任务保存与恢复](docs/ANONYMOUS_TASKS.md)，未知槽位不重发，原预算不重置。新增[持久共享窗口](docs/ANONYMOUS_WINDOWS.md)，将背景采集与同店60／30秒计划一并保存，重启保持原期限和预算，未知结果留为缺口；长期实际稳定性与提醒继续验证。 新增[运行中计划更新](docs/MONITORING_PLAN_UPDATES.md)，用户计划可通过显式私有入口整组调整；后台重新合并同店60／30秒需求，原期限和预算保持，旧任务不升级；多用户入口与提醒继续开发。 新增[部署计划管理](docs/LINUX_PLAN_UPDATES.md)，运行中修改整组关注计划或恢复背景采集，自动生成版本；独立卷隔离计划与观测，后台是否接受可单独核对。 新增[多日采集计划](docs/MULTI_DAY_COLLECTION.md)，按明确天数自动接续正常窗口；跨日和重启保留同一总截止、预算与同店间隔，出现未知请求或失败如实停止，历史资料分段保留。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、1117 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/5d2490ac8d59802b-dark.svg"><img src="assets/readme-labels/5d2490ac8d59802b-light.svg" alt="在上线前检查数据处理" width="162" height="20"></picture></strong>：提供合成回放、1184 项本机代码检查、安装包验证及 GitHub 离线检查流程，覆盖号码保存、错误处理、来源隔离和旧数据库兼容；自动检查结果与真实接口验收分别记录。
 
 跨到期恢复的重复可靠性、部分字段单位、门店源时间、允许长期频率和全国覆盖仍未验收。目前的工具用于接入验证，预测能力尚未开放；有限展示号码的变化不会被当成真实过号率。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前开发候选为 **v0.2.0rc43**，新增[本人排队号查询](docs/PERSONAL_QUEUE_ACCESS.md)：个人状态与历史只读接入，独立私有会话、到期保护和安全保存；状态历史仅使用同次本人响应的票据标识。36项专项、完整1153项本机检查通过；打包与真实新会话验证另记交接记录。上一rc42的多日采集和rc41的部署计划管理保持。精确前方桌数、新取号队尾、真实叫号标签、预测与自动取号尚未验收，正式v0.2.0和v1.0.0尚未完成。
+当前开发候选为 **v0.2.0rc44**，新增[经历与门店观测对齐](docs/OUTCOME_FEATURES.md)：把审核结果、日期和当时已收到的门店观测组合成私有研究资料，保留时间上下界、失败和缺失。新增31项专项检查；完整检查、安装包和发布结果见交接记录。上一rc43的个人只读查询和rc42的有限多日采集保持。真实结果校准、精确前方桌数、新取号队尾、预测与自动取号尚未验收，正式v0.2.0和v1.0.0尚未完成。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/d96820671eda0ba8-dark.svg"><img src="assets/readme-labels/d96820671eda0ba8-light.svg" alt="2026-10-08 · v0.2.0rc44" width="179" height="20"></picture></strong>：让已审核的排队经历与当时门店观测对应起来，生成私有研究资料；后来收到的旧响应不倒灌历史，有限号码变化和未知单位计数分别保存。模型仍需真实叫号结果校准。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/a520f3ba2002dc14-dark.svg"><img src="assets/readme-labels/a520f3ba2002dc14-light.svg" alt="2026-10-07 · v0.2.0rc43" width="179" height="20"></picture></strong>：把“我的号单”接入预测资料准备：新增当前个人票据与状态历史只读查询，号码、签到、人数和桌型只入私有文件，失效会话提前停止。前方桌数、历史事件含义与新取号位置分别验证，避免仅凭号码差误判等待时间。
 

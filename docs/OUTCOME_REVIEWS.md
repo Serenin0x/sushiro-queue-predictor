@@ -51,3 +51,5 @@ sushiwait outcome-reviewed-cohort \
 报告仅含决策、确认/拒绝/不足/冲突/过时数量，不输出ID、源校验值、事件时间、门店行程或等待区间。私人小样本聚合不得自动公开或传给LLM。两个库共享读保护保持配合程序的稳定读取，报告不改文件、联网或访问凭证。
 
 availability_basis=local_source_and_review_first_receipts是本机时钟依据，不是外部可信时间或事件存证；historical_availability_verified=false、independent_time_attestation=false保持。确认声明为下一步证据审核和可追溯标签政策准备资料，不认证精度、过号率或等待时间。实际安装、检查、发布和现场结果分别记录在[交接历史](PROJECT_HANDOVER.md)。
+
+rc44新增[私有经历与门店观测对齐](OUTCOME_FEATURES.md)，完整扫描已封存的有界匿名资料，按本机首次接收与整对完成时刻筛选预测输入；事后重建不是实际预测日志，真实性、训练资格和ETA均未认证。正在运行库仍拒绝外部读取。

@@ -159,7 +159,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')
@@ -1061,6 +1061,49 @@ def check() -> None:
             print(json.dumps({'installed_baseline_backtest_ok':True,'synthetic_late_receipt_cases':1,
                 'synthetic_scored_cases':0,'source_and_review_files_unchanged':True,'backtest_socket_calls':0,
                 'backtest_credentials_accessed':False,'real_labels_admitted':0,'eta_available':False,'is_live_acceptance':False}))
+            feature_directory = Path(directory).resolve()/'private-features'
+            feature_directory.mkdir(mode=0o700)
+            feature_remote_directory = Path(directory).resolve()/'private-feature-remote'
+            feature_remote_directory.mkdir(mode=0o700)
+            feature_remote = feature_remote_directory/'observations.sqlite3'
+            issued = next(e for e in episode['events'] if e['event_type']=='issued')
+            old_response = (datetime.fromisoformat(issued['event_time_upper'])-timedelta(seconds=30)).isoformat()
+            # Old response times do not make a record received today available
+            # to a reconstructed prediction from 2020.
+            with patch('sushiwait.remote._utc',return_value=old_response), RemoteStore(feature_remote) as store:
+                store.append(RemoteClient(opener=RemoteFakeOpener()).snapshot(episode['store_id']))
+            feature_before = feature_remote.read_bytes()
+            feature_input, feature_output = feature_directory/'plan.json', feature_directory/'dataset.json'
+            feature_plan = {k:plan[k] for k in ('schema_version','as_of','data_origin','api_profile','store_id')}
+            feature_plan.update(queue_data_origin='synthetic',elapsed_seconds=[0],max_cases=100,
+                                window_seconds=120,max_gap_seconds=90)
+            feature_input.write_text(json.dumps(feature_plan));feature_input.chmod(0o600)
+            feature_logs = io.StringIO()
+            with patch('socket.socket',side_effect=AssertionError('unexpected_feature_network')) as feature_socket, \
+                    patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('unexpected_feature_auth')) as feature_auth, \
+                    patch('sushiwait.remote.RemoteClient',side_effect=AssertionError('unexpected_feature_client')) as feature_client, \
+                    patch('sushiwait.surgeguard._command',side_effect=AssertionError('unexpected_feature_native')) as feature_native, \
+                    contextlib.redirect_stdout(feature_logs):
+                if main(['outcome-feature-export','--source-db',intake_database,'--reviews-db',str(review_db),
+                         '--remote-db',str(feature_remote),'--input',str(feature_input),'--output',str(feature_output)])!=0:
+                    raise SystemExit('installed_feature_export_failed')
+            dataset=json.loads(feature_output.read_text());feature_summary=json.loads(feature_logs.getvalue())
+            queue=dataset['rows'][0]['features']['queue_observations'] if dataset['research_rows']==1 else {}
+            if (dataset['research_rows']!=1 or dataset['audit_diagnostics_not_features']['queue_rows_audited']!=1
+                    or queue.get('queue_availability')!='no_responses' or queue.get('display_sizes') is not None
+                    or queue.get('reported_count_raw') is not None or dataset['training_eligible']
+                    or dataset['verified_training_labels'] or dataset['eta_available'] or dataset['model_fitted']
+                    or not feature_summary['durability_confirmed'] or feature_output.stat().st_mode&0o777!=0o600
+                    or feature_socket.call_count or feature_auth.call_count or feature_client.call_count or feature_native.call_count
+                    or feature_before!=feature_remote.read_bytes() or review_before!=review_db.read_bytes()
+                    or intake_before!=hashlib.sha256(Path(intake_database).read_bytes()).digest()
+                    or any(v in feature_logs.getvalue() for v in
+                           (episode['episode_id'],episode['store_id'],str(feature_output),issued['event_time_upper']))):
+                raise SystemExit('installed_feature_semantics_failed')
+            print(json.dumps({'installed_feature_export_ok':True,'synthetic_research_rows':1,
+                'late_receipt_queue_payload_excluded':True,'all_three_databases_unchanged':True,
+                'feature_socket_calls':0,'feature_credentials_accessed':False,'feature_native_calls':0,
+                'real_labels_admitted':0,'eta_available':False,'model_fitted':False,'is_live_acceptance':False}))
             with contextlib.redirect_stdout(io.StringIO()):
                 if main(["outcome-check", "--synthetic-fixture", str(args.outcome_fixture)]) != 0:
                     raise SystemExit("installed_outcome_check_failed")
