@@ -59,3 +59,5 @@ rc38已实现[可调用的历史区间研究入口](HISTORY_BASELINE.md)，支�
 rc14新增[结果历史声明回放](OUTCOME_COHORT.md)，只读整份有界修订库、核对连续版本并按recorded_at声明选择历史版本；没有不可变实际接收时间，historical_availability_verified=false/训练标签0。它是资料审计，尚未实现真实性审核、预测特征导出或真实模型训练。
 
 最新四层实时数值方案与论文依据见[REALTIME_PREDICTION_MODEL](REALTIME_PREDICTION_MODEL.md)，供应商与官方价格/许可见[LLM_MODEL_CHOICES](LLM_MODEL_CHOICES.md)，扩店实际范围见[STORE_EXPANSION](STORE_EXPANSION.md)；当前仍未训练、调用或校准。
+
+rc46已实现[实时公共特征与候选分布融合](DISTRIBUTION_FUSION.md)，只读摘要不额外查询上游；尚未连接供应商、历史模型候选生成或在线ETA发布，实际验证以交接记录为准。

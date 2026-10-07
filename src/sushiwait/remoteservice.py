@@ -270,6 +270,19 @@ class RemoteQueueService:
         return self.view.monitor_history(store_id, now=self.wall_clock(),
             service_state=state['service_state'], worker_alive=state['worker_alive'])
 
+    def fusion_context(self, store_id):
+        from .fusion import context_from_history, FusionError
+        history = self.monitor_history(store_id)
+        try:
+            contexts = {queue: context_from_history(history, queue_type=queue, now=_time(history['generated_at']))
+                        for queue in ('ordinary', 'reservation')}
+        except FusionError:
+            raise RemoteServiceError('remote_service_fusion_context_invalid') from None
+        return {'fusion_context_schema_version': 1, 'source': SOURCE, 'requested_store_id': store_id,
+                'contexts': contexts, 'network_performed_by_read': False,
+                'verified_training_labels': 0, 'eta_available': False,
+                'revision_scope': 'writer_process_projection', 'display_turnover_is_no_show_rate': False}
+
 
 class RemoteASGI:
     """Fixed GET routes, no user-controlled upstream targets or business writes."""
@@ -315,6 +328,12 @@ class RemoteASGI:
                     if store not in self.service.view.stores:status,payload = 404,{'error_code':'store_not_in_scope'}
                     else:
                         try:payload = self.service.monitor_history(store)
+                        except RemoteServiceError:status,payload = 503,{'error_code':'remote_service_view_unavailable'}
+                elif path.startswith('/api/v1/stores/') and path.endswith('/fusion-context'):
+                    store = path[len('/api/v1/stores/'):-len('/fusion-context')]
+                    if store not in self.service.view.stores:status,payload = 404,{'error_code':'store_not_in_scope'}
+                    else:
+                        try:payload = self.service.fusion_context(store)
                         except RemoteServiceError:status,payload = 503,{'error_code':'remote_service_view_unavailable'}
                 elif path.startswith('/api/v1/stores/') and path.endswith('/queue'):
                     store = path[len('/api/v1/stores/'):-len('/queue')]

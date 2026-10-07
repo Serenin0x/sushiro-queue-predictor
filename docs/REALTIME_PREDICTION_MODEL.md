@@ -1,6 +1,6 @@
 # 历史初估、实时更新与大模型融合
 
-研究日期：2026-10-08。按用户 R34，输入已有号码后先利用历史资料估计，随后随真实叫号趋势更新，大模型参与状态判断和数值融合。这是待实现、待回测的模型设计；不是已训练模型或准确率承诺。当前认证真实结果为 0，`eta_available=false`。已有研究基线、时间顺序回放、日期和观测工具继续复用，见[预测验收](PREDICTION_EVALUATION.md)、[历史基线](HISTORY_BASELINE.md)、[结果特征](OUTCOME_FEATURES.md)。供应商选择见[模型与费用](LLM_MODEL_CHOICES.md)。
+研究日期：2026-10-08。按用户 R34，输入已有号码后先利用历史资料估计，随后随真实叫号趋势更新，大模型参与状态判断和数值融合。这是整体模型设计，仍待训练与回测；rc46已实现[公共特征与候选分布融合组件](DISTRIBUTION_FUSION.md)，其余生成、供应商与发布链路待接入，不是已训练模型或准确率承诺。当前认证真实结果为 0，`eta_available=false`。已有研究基线、时间顺序回放、日期和观测工具继续复用，见[预测验收](PREDICTION_EVALUATION.md)、[历史基线](HISTORY_BASELINE.md)、[结果特征](OUTCOME_FEATURES.md)。供应商选择见[模型与费用](LLM_MODEL_CHOICES.md)。
 
 ## 预测什么
 

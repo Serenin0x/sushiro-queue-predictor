@@ -159,7 +159,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-serve", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')
@@ -395,6 +395,43 @@ def check() -> None:
                                 or history['points'][0]['origin']!='worker_commit'
                                 or history['complete_history'] or history['network_performed_by_read']):
                             raise SystemExit('installed_monitor_history_failed')
+                        replies=[]
+                        await app({'type':'http','method':'GET','path':'/api/v1/stores/3014/fusion-context','query_string':b''},receive_http,send_http)
+                        context_packet=json.loads(replies[1]['body'])
+                        if (replies[0]['status']!=200 or not context_packet['contexts']['ordinary']['collector_running']
+                                or context_packet['contexts']['ordinary']['latest_queue_origin']!='worker_commit'
+                                or context_packet['contexts']['ordinary']['observation_revision']!=1
+                                or context_packet['network_performed_by_read'] or context_packet['eta_available']
+                                or '13-1' in replies[1]['body'].decode()):
+                            raise SystemExit('installed_fusion_context_failed')
+                    from sushiwait.fusion import public_request
+                    fusion_plan={'schema_version':1,'data_origin':'synthetic','model_version':'install-synthetic-v1',
+                        'prediction_target':'new_join_total','conditioning':'new_join','ai_blend_ppm':500000,
+                        'public_context':context_packet['contexts']['ordinary'],
+                        'candidates':[{'candidate_id':'history','atoms':[{'lower_us':100,'upper_us':100,'mass_ppm':1000000}]},
+                                      {'candidate_id':'fast','atoms':[{'lower_us':0,'upper_us':0,'mass_ppm':1000000}]}],
+                        'prior_weights_ppm':{'history':1000000,'fast':0}}
+                    request=public_request(fusion_plan)
+                    context=fusion_plan['public_context']
+                    reply={'schema_version':1,'public_input_sha256':request['public_input_sha256'],
+                        'observation_revision':1,'model_version':'install-synthetic-v1',
+                        'generated_at':context['as_of'],'expires_at':context['expires_at'],
+                        'weights_ppm':{'history':0,'fast':1000000},'feature_ids':['reported_count_raw'],
+                        'reason_code':'mixed_evidence'}
+                    folder=Path(directory).resolve()/'fusion';folder.mkdir(mode=0o700)
+                    plan_file,reply_file,result_file=folder/'plan.json',folder/'reply.json',folder/'result.json'
+                    for path,value in [(plan_file,fusion_plan),(reply_file,reply)]:
+                        path.write_text(json.dumps(value));path.chmod(0o600)
+                    before=(plan_file.read_bytes(),reply_file.read_bytes())
+                    with contextlib.redirect_stdout(io.StringIO()) as fusion_stdout:
+                        if main(['fusion-research','--input',str(plan_file),'--advice',str(reply_file),'--output',str(result_file)])!=0:
+                            raise SystemExit('installed_fusion_command_failed')
+                    summary=json.loads(fusion_stdout.getvalue());result=json.loads(result_file.read_bytes())
+                    if (result['wait_quantile_envelopes_us']['p50']!={'lower_us':0,'upper_us':0}
+                            or not summary['ai_numerical_influence_applied'] or summary['provider_called'] or summary['eta_available']
+                            or before!=(plan_file.read_bytes(),reply_file.read_bytes()) or result_file.stat().st_mode&0o777!=0o600
+                            or str(folder) in fusion_stdout.getvalue()):
+                        raise SystemExit('installed_fusion_semantics_failed')
                     from importlib.resources import files
                     for path,name in (('/monitor','monitor.html'),('/monitor.js','monitor.js'),('/monitor.css','monitor.css')):
                         replies=[]
@@ -422,6 +459,9 @@ def check() -> None:
             print(json.dumps({'installed_collection_monitor_ok':True,'monitor_history_reads':5,
                 'monitor_assets_byte_equal':True,'monitor_asset_reads':3,'monitor_extra_upstream_requests':0,
                 'monitor_is_live_acceptance':False}))
+            print(json.dumps({'installed_fusion_ok':True,'fusion_context_reads':5,
+                'synthetic_ai_weight_advice':True,'fusion_provider_calls':0,'fusion_extra_upstream_requests':0,
+                'fusion_is_live_acceptance':False,'eta_available':False}))
             from sushiwait.remotewindow import RemoteWindowTask,remote_window_status
             window_db=Path(directory).resolve()/"synthetic-window.sqlite3"
             window_task=Path(directory).resolve()/"synthetic-window-task.json"

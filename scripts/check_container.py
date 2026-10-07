@@ -71,6 +71,11 @@ def check():
             code,history=read(url,'/api/v1/stores/900001/history')
             assert code==200 and history['retained_points']==1 and not history['complete_history']
             assert history['points'][0]['reported_count_raw']==1 and not history['network_performed_by_read']
+            code,context=read(url,'/api/v1/stores/900001/fusion-context')
+            assert code==200 and context['contexts']['ordinary']['observation_revision']==1
+            assert context['contexts']['ordinary']['latest_queue_origin']=='worker_commit'
+            assert context['contexts']['ordinary']['collector_running'] and not context['network_performed_by_read']
+            assert not context['eta_available']
         for path,name in [('/monitor','monitor.html'),('/monitor.js','monitor.js'),('/monitor.css','monitor.css')]:
             with opener.open(url+path,timeout=3) as response:
                 assert response.status==200 and "connect-src 'self'" in response.headers['content-security-policy']
@@ -94,6 +99,9 @@ def check():
         code,history=read(url,'/api/v1/stores/900001/history')
         assert code==200 and history['retained_points']==2 and not history['worker_alive']
         assert all(p['origin']=='saved_history' for p in history['points'])
+        code,context=read(url,'/api/v1/stores/900001/fusion-context')
+        assert code==200 and not context['contexts']['ordinary']['collector_running']
+        assert context['contexts']['ordinary']['latest_queue_origin']=='saved_history'
         run('stop','--time','45',third);final=inspect_state()
         assert after['counter']==final['counter']==4 and after['hashes']==final['hashes']
         assert final['uid']==10001 and final['parent_mode']=='0o700'
