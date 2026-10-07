@@ -57,3 +57,5 @@ jobs:
         run: docker build -f deploy/Dockerfile -t sushiwait:check .
       - name: Check container HTTP and restart with synthetic upstream
         run: python3 scripts/check_container.py --image sushiwait:check
+      - name: Check running plan updates with synthetic upstream
+        run: python3 scripts/check_container_plans.py --image sushiwait:check

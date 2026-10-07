@@ -64,3 +64,7 @@ sushiwait remote-window-serve --db /private/tmp/queue-task/remote.sqlite3 \
 实际共7次HTTP展示读取；其中首对后连续5次读取的前后来源请求计数均为2，额外来源请求0。到期最后已知数据仍可读取、健康503，随后服务和工作者实际停止。终态再接入没有创建查询客户端，库、任务、种子字节不变。结束后只读质量工具核对3行、6次请求、完整检查点链，三文件不变且网络0；`continuous_collection_verified=false`，121秒不作为全天质量或源刷新验收。
 
 真实时间和接口证明计划修改能够影响后台查询节奏；没有认证真实用户计划、多用户权限、源数据更新时间、号码语义、预测误差或防过号效果。完整操作与包来源见交接E0268。
+
+## 容器部署管理员入口
+
+rc41增加[Linux计划管理](LINUX_PLAN_UPDATES.md)：独立私有卷、`init/publish/clear/status`，管理员只提交共享schema1文档，UUID4、声明时间及后继revision由工具生成。底层沿用本文件原子发布和冲突守卫，不增加用户HTTP写路由。发布摘要明确`worker_application_verified=false`，接受版本另查只读检查点；已有schema2任务不升级，原rc31全天窗口保持。Docker实测及软件结果追加交接记录，不将计划文件提交称用户用餐确认。

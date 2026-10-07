@@ -1,3 +1,3 @@
 """SushiWait read-only data validation toolkit."""
 
-__version__ = "0.2.0rc40"
+__version__ = "0.2.0rc41"

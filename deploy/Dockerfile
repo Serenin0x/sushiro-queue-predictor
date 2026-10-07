@@ -10,15 +10,16 @@ RUN python -m pip wheel . --no-deps --no-build-isolation --wheel-dir /wheels
 FROM python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY deploy/requirements-server.txt /opt/sushiwait/requirements-server.txt
+COPY deploy/plan_admin.py /opt/sushiwait/plan_admin.py
 COPY --from=build /wheels/ /wheels/
 RUN python -m pip install --no-cache-dir --only-binary=:all: --require-hashes -r /opt/sushiwait/requirements-server.txt \
     && python -m pip install --no-index --no-deps /wheels/*.whl \
     && python -m pip check \
     && rm -rf /wheels \
-    && mkdir /state \
+    && mkdir /state /plan-updates \
     && printf '{"schema_version":1,"plans":[]}\n' > /state/plans.json \
-    && chmod 700 /state && chmod 600 /state/plans.json \
-    && chown -R 10001:10001 /state
+    && chmod 700 /state /plan-updates && chmod 600 /state/plans.json \
+    && chown -R 10001:10001 /state /plan-updates
 USER 10001:10001
 WORKDIR /state
 EXPOSE 8765

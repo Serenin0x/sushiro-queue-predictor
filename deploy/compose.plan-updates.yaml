@@ -1,0 +1,34 @@
+# Explicit new schema3 project only. Initialize the private feed before up.
+services:
+  collector:
+    command:
+      - remote-window-serve
+      - --db
+      - /state/remote.sqlite3
+      - --task-file
+      - /state/task.json
+      - --plan-file
+      - /state/plans.json
+      - --plan-updates-file
+      - /plan-updates/current.json
+      - --store-id
+      - "3014"
+      - --store-id
+      - "3004"
+      - --store-id
+      - "2009"
+      - --base-interval
+      - "300"
+      - --duration
+      - "86400"
+      - --max-pairs
+      - "900"
+      - --resume-if-present
+      - --listen-host
+      - 0.0.0.0
+      - --port
+      - "8765"
+    volumes:
+      - plan_updates:/plan-updates
+volumes:
+  plan_updates:

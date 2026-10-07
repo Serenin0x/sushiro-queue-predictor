@@ -13,3 +13,4 @@
 !deploy/Dockerfile
 !deploy/requirements-build.txt
 !deploy/requirements-server.txt
+!deploy/plan_admin.py
