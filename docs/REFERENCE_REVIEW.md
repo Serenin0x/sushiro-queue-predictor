@@ -176,3 +176,10 @@ H5路线只在确实存在排队网页且普通浏览器能使用它时成立。
 正常下载v23的静态结构及本项目独立查询见交接E0213–E0220和[ANONYMOUS_QUEUES.md](ANONYMOUS_QUEUES.md)。取数路径直接以storeid调用两条官方CRM匿名查询；本项目原创客户端在不发送微信授权、Cookie或冒用应用身份时，三试点已有200及有界连续结果。两家官方正常UI近时号码相容，但数量含义、同次身份关联和源刷新时间仍未认证。
 
 检查到的小助手估时路径从内置41组数对拟合固定一元线性关系，按数量取整；未见该路径使用日期/时段、门店或LLM输入。来源/误差未知，不能等同本项目要求的预测验收。只总结方法事实，未公开第三方实现、内置数对、系数、真实原始样本或个人资料，不能据此扩大接口使用范围或复制无许可证代码。
+
+
+## 2026-10-07 个人票据线索的重新验证
+
+本轮重读此前锁定提交的[sushiro-cli状态查询](https://github.com/lmxx1234567/sushiro-cli/blob/982bebfb92fb57f017f9f27878cfd467f1da0410/internal/api/client.go)：旧查询带wechatId，要求netTicket/reservationTicket字段；[Ryujoxys接口实现](https://github.com/Ryujoxys/sushiro-overdose/blob/e273df046789773616c7851c0bea14d4546f47e5/internal/api/api.go)提供个人状态和取号/取消线索。后者有实现及作者的抓包声明，不是本项目端到端成绩；未复制实现或使用共享凭证。
+
+本人正常当前小程序的实际状态GET没有wechatId参数，另有statusHistory按ticketId查询；本项目核本人UI与返回一致后，各一次独立GET全200。返回的票据等待值、按桌型数量及状态历史值得研究，尚未证实精确个人排名或新取号队尾。历史本次只有WAITING，无时区时间戳，不能作为已叫号标签。用户最新明确授权本人自动取号正常测试，更新前文旧未授权限制；现有号单保留、没有新出票或取消。当前协议与接入范围见[PERSONAL_QUEUE_ACCESS](PERSONAL_QUEUE_ACCESS.md)、R29和E0280，不按旧地址猜写入。
