@@ -1,6 +1,6 @@
 # Linux 采集与号码服务部署
 
-候选 0.2.0rc39 提供 Docker 构建和 Compose 配置，将匿名采集、持久窗口和只读 HTTP 展示一起部署。软件检查、实际 Linux 容器、真实上游查询和云服务器是不同证据，实测追加于[交接记录](PROJECT_HANDOVER.md)。目前仍是最多三店、最多 72 小时的有界窗口，不称全国、无限守护或微信小程序已经上线。
+候选 0.2.0rc40 提供 Docker 构建和 Compose 配置，将匿名采集、持久窗口和只读 HTTP 展示一起部署。软件检查、实际 Linux 容器、真实上游查询和云服务器是不同证据，实测追加于[交接记录](PROJECT_HANDOVER.md)。目前仍是最多三店、最多 72 小时的有界窗口，不称全国、无限守护或微信小程序已经上线。
 
 ## 构建与运行
 
@@ -34,7 +34,7 @@ docker compose -f deploy/compose.yaml up -d
 ## 检查与云端验收
 
 ```sh
-python3 scripts/check_container.py --image sushiwait:0.2.0rc39
+python3 scripts/check_container.py --image sushiwait:0.2.0rc40
 ```
 
 检查真正启动 Linux 容器、通过宿主 HTTP 读取、停止并重建三次。上游传输明确合成：虚构门店 900001，两对/四次假请求，官方请求零；它不是实际门店或预测验证。核对私有权限、回环绑定、共享读取、恢复周期、原期限/预算、终态无查询与文件不变，最后只清理自己的测试容器与卷。合成启动脚本不进入部署镜像，不改变正常采集程序。
@@ -44,3 +44,9 @@ python3 scripts/check_container.py --image sushiwait:0.2.0rc39
 Docker Desktop Linux 虚拟机出口仍来自本机，不代表指定云服务器可访问官方源。云端上线还需明确主机，核对 TLS/DNS/网络、24/72 小时及跨日期质量、缺口、磁盘与备份，再配置经验证的 HTTPS 域名、访问控制和告警。微信前端及发布按 R18 和平台配置另验；本轮未租服务器、注册 AppID、开放公网或上线界面。
 
 依据：[Docker 运行与持久卷](https://docs.docker.com/engine/containers/run/)、[构建上下文](https://docs.docker.com/build/concepts/context/)、[Uvicorn 部署](https://uvicorn.dev/deployment/)。非 root 容器进程不等于 Docker 守护进程采用 rootless 模式；本项目未修改操作者 Docker 权限。
+
+## rc40部署标签与本机镜像核对
+
+2026-10-07恢复工作时发现Compose镜像标签及本文两处示例仍为rc39，尽管代码/VERSION已为rc40。仅修正为`sushiwait:0.2.0rc40`，不升级原采集任务、现有卷或改变部署参数；构建标签不是运行代码版本证明。
+
+本机实际重新构建的镜像ID为`sha256:579d7c6eb2fea789c40a2b099c5d2abcaa8914e0cf45c0373adf0deaa96e5cdb`；在无网络、只读根、UID10001的隔离容器中，安装版本rc40、43模块、README元数据及2026日期数据逐字节核对当前源码。既有13项部署检查0.052秒通过；实际静态容器检查63.607秒、恢复等待60.006秒，3次服务重建后期限/预算/终态文件保持，展示新增来源请求0。上游为合成2对4GET，官方请求0，未进行动态计划容器专测或租用生产服务器。详情见交接E0272。
