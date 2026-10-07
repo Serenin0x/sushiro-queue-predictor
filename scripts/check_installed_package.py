@@ -88,6 +88,60 @@ def check_campaign_install():
             'eta_available': False, 'is_live_acceptance': False}))
 
 
+def check_personal_install():
+    """Private ticket CLI with two fake GETs; no socket or native activity."""
+    from sushiwait import personal
+    now=datetime.now(timezone.utc)
+    claims={'iat':int(now.timestamp()),'exp':int((now+timedelta(hours=1)).timestamp())}
+    document={'schema_version':1,'purpose':personal.PURPOSE,'api_profile':'personal_gateway',
+        'revision':1,'observed_at':now.isoformat(),'app_id':'wx0000000000000000',
+        'authorization':'Bearer e30.'+base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip('=')+'.c2ln',
+        'app_client':'synthetic-client','app_code':'synthetic-code','user_agent':'Synthetic Agent',
+        'referer':'https://servicewechat.com/wx0000000000000000/1/page-frame.html',
+        'content_type':'application/json'}
+    requests=[]
+    class FakeResponse:
+        headers={}
+        def __init__(self,url):self.url=url
+        def geturl(self):return self.url
+        def getcode(self):return 200
+        def close(self):pass
+        def read(self,size):
+            value={'ticketStatusHistory':[{'status':'WAITING','timestamp':'2026-10-07T19:00:00'}]}
+            if self.url==personal.ORIGIN+personal.STATUS_PATH:
+                value={'netTicket':{'TICKET_TYPE':'MOBILE','STORE_INFO':{'id':900001},
+                    'TICKET_DETAIL':{'number':'A001','storeId':'900001','ticketId':900002,
+                        'status':'WAITING','checkedIn':True,'tableType':'T','numAdult':1,'numChild':0,
+                        'queueDate':'synthetic-date','queueTime':'synthetic-time','wait':31}},'reservationTicket':None}
+            return json.dumps(value).encode()
+    class FakeOpener:
+        def open(self,request,timeout):
+            requests.append(request);return FakeResponse(request.full_url)
+    real_client=personal.PersonalClient
+    with tempfile.TemporaryDirectory() as directory:
+        folder=Path(directory).resolve();folder.chmod(0o700)
+        context=folder/'context.json';context.write_text(json.dumps(document));context.chmod(0o600)
+        output=folder/'snapshot.json'
+        with patch('socket.socket',side_effect=AssertionError('personal_socket')) as sockets, \
+             patch('subprocess.Popen',side_effect=AssertionError('personal_child')) as children, \
+             patch('sushiwait.surge._read_summary',side_effect=AssertionError('personal_native')) as native, \
+             patch.object(personal,'PersonalClient',side_effect=lambda c:real_client(c,opener=FakeOpener())), \
+             contextlib.redirect_stdout(io.StringIO()) as stdout:
+            assert main(['personal-auth-status','--context-file',str(context)])==0
+            assert main(['personal-snapshot','--context-file',str(context),'--output-file',str(output),'--include-history'])==0
+            assert main(['personal-context-surge','--context-file',str(context),'--revision','2','--seconds','41'])==1
+        value=json.loads(output.read_text())
+        assert value['data_origin']=='custom_transport_unverified' and not value['eta_available']
+        assert value['ordinary_ticket']['number']=='A001' and value['history'][0]['timestamp_utc'] is None
+        assert output.stat().st_mode&0o777==0o600 and len(requests)==2
+        assert requests[1].full_url==personal.ORIGIN+personal.HISTORY_PATH+'?ticketId=900002'
+        assert all(request.get_method()=='GET' for request in requests)
+        assert not any(secret in stdout.getvalue() for secret in ('A001','900002',document['authorization']))
+        assert not sockets.called and not children.called and not native.called
+    print(json.dumps({'personal_installed_ok':True,'synthetic_gets':2,'socket_calls':0,
+        'native_calls':0,'business_writes':0,'verified_training_labels':0,'eta_available':False,'is_live_acceptance':False}))
+
+
 def check() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
@@ -101,6 +155,7 @@ def check() -> None:
         raise SystemExit("installed_version_mismatch")
     if Path(sushiwait.__file__).resolve().is_relative_to(args.source_root.resolve()):
         raise SystemExit("package_imported_from_checkout")
+    check_personal_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in

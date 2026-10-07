@@ -31,6 +31,7 @@ from .receiver import ReceiverError,read_receiver_token,run_receiver,validate_re
 from .delivery import DeliveryError,deliver_local,check_confirmation
 from .surge import SurgeError, receive_summary
 from .surgeguard import GuardError, run_guard
+from .personal import PersonalError, receive_personal_context, read_personal_context, write_personal_snapshot
 from .promotion import PromotionError, promote_context
 from .monitoring import MonitoringError, polling_policy
 from .shared_monitoring import SharedMonitoringError, read_plan_file, shared_polling_policy
@@ -443,6 +444,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="sushiwait", description="SUSHIWAIT 数据接入与结果记录工具")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    personal = commands.add_parser('personal-snapshot',help='查询本人当前普通号单与可选状态历史，仅存私有文件')
+    personal.add_argument('--context-file',required=True)
+    personal.add_argument('--output-file',required=True)
+    personal.add_argument('--include-history',action='store_true')
+    context = commands.add_parser('personal-context-surge',help='从正常个人状态请求摘要接入独立私有上下文；不启用调试')
+    context.add_argument('--context-file',required=True)
+    context.add_argument('--revision',type=int,required=True)
+    context.add_argument('--app-id',help='首次接入时绑定本人正常官方小程序的AppID；仅入私有文件')
+    context.add_argument('--seconds',type=int,default=35)
+    context = commands.add_parser('personal-auth-status',help='离线检查本人只读上下文的声明到期，不发送请求')
+    context.add_argument('--context-file',required=True)
     for name in ("remote-snapshot", "remote-collect", "remote-report", "remote-monitor"):
         command = commands.add_parser(name, help="独立匿名CRM排队来源；不使用微信凭证，不提供预测")
         command.add_argument("--db", required=True, help="独立私有库；父目录已存在且0700，不使用既有快照库")
@@ -755,6 +767,27 @@ def canonical_store_id(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in ('personal-snapshot','personal-context-surge','personal-auth-status'):
+        try:
+            if args.command=='personal-snapshot':
+                result=write_personal_snapshot(context_file=args.context_file,destination=args.output_file,
+                                               include_history=args.include_history)
+            elif args.command=='personal-context-surge':
+                result=receive_personal_context(context_file=args.context_file,revision=args.revision,
+                                                app_id=args.app_id,seconds=args.seconds,on_ready=emit)
+            else:
+                context=read_personal_context(args.context_file)
+                status=describe_authorization(context.authorization,now=_utc_clock())
+                result={'ok':True,'purpose':'personal_ticket_read_only','context_revision':context.revision,
+                    **status,'network_performed':False,'server_acceptance':'unverified','business_writes':0}
+            emit(result);return 0
+        except KeyboardInterrupt:
+            emit({'ok':False,'error_code':'personal_interrupted','business_writes':0});return 130
+        except PersonalError as error:
+            emit({'ok':False,'error_code':error.error_code,'committed':error.committed,
+                  'eta_available':False,'business_writes':0});return 1
+        except (OSError,ValueError,TypeError,KeyError,OverflowError):
+            emit({'ok':False,'error_code':'personal_response_invalid','business_writes':0});return 1
     if args.command == "remote-window-quality":
         from .remote import RemoteStore
         from .remotequality import terminal_checkpoint,window_quality_report
