@@ -164,8 +164,8 @@ def check():
         assert campaign['config']['duration_seconds'] == 141 and campaign['config']['max_pairs'] == 8
         assert before['counter'] == 8 and len(before['starts']) == 4
         intervals = [b - a for a, b in zip(before['starts'], before['starts'][1:])]
-        assert 64 <= intervals[0] < 85
-        assert all(29.99 <= interval < 35 for interval in intervals[1:])
+        assert 64 <= intervals[0] < 85, f'campaign_restart_interval_out_of_range: {intervals!r}'
+        assert all(29.99 <= interval < 35 for interval in intervals[1:]), f'campaign_poll_intervals_out_of_range: {intervals!r}'
         assert all(e['checkpoint_digest'] and e['database_digest'] for e in campaign['windows'])
         assert admin('clear')['revision'] == 4
         third, url = start()
