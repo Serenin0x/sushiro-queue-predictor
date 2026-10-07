@@ -20,3 +20,6 @@ last_poll_started_at必须由调用方提供该门店实际请求的开始时刻
 **输出仍须按私人计划资料处理。** 即使没有个人明细，聚合数量和边界时间也可能让人推测用餐安排，output_requires_private_handling=true。不能直接上传公开看板、传大模型或声称匿名化。输出保留scheduler_applied/polling_performed/network_performed/notification_sent/business_operation_performed=false、credentials_accessed=false、eta_available=false、true_no_show_rate=null与source_freshness=unknown。周期和due仅是请求需求，不证明允许额度、上游新鲜度或防过号保证；真正执行前还须凭证、互斥、允许频率和失败状态检查。
 
 18项专项最后0.009秒、完整456项4.789秒OK/无跳过，使用合成资料，覆盖同店合并/不同店隔离、精确边界与提前唤醒、开始时间锚定、长缺口不追赶、正负偏移、结束状态、门店/计划上限、严格JSON/权限/符号链接/超限、时间溢出与安全错误输出。策略无套接字、凭证读取或原生操作。最终21模块包、年度JSON与README逐字节匹配，checkout外隔离安装中的双计划/单店/30秒/一份目标及私人输出语义已通过，套接字0/凭证0/原生CLI0。实际公开/CI逐次记录见[完整交接](PROJECT_HANDOVER.md)E0115起；不是实际持续服务或用户前端验收。
+
+
+rc50增加[已有号自动更新](TICKET_TRACKING_LOOP.md)的专用短期需求及投影读取：同店合并、租期不超过300秒、整个计划有截止，未知到店不编造；写者新只读tracking-projection在本地同锁复制显示与历史，不能认证上游原子性。原真实限时任务版本／预算保持，集成、安装与精确CI分别见交接记录。

@@ -142,6 +142,93 @@ def check_tracking_install():
         'verified_training_labels':0,'eta_available':False}))
 
 
+def check_tracker_loop_install():
+    """Execute installed automatic CLI plus genuine private compute threads."""
+    from uuid import uuid4
+    from sushiwait.tracking import create_session
+    from sushiwait.trackerloop import TrackingCoordinator, run_tracking
+    from sushiwait.remoteservice import LiveRemoteView
+    from sushiwait.remote import RemoteClient, QUEUE_NAMES
+    now = datetime.now(timezone.utc)
+    stamp = lambda second: (now+timedelta(seconds=second)).isoformat()
+    clock = [1.0]; reads = []
+    class Response:
+        headers = {}
+        def __init__(self, request): self.request = request
+        def geturl(self): return self.request.full_url
+        def getcode(self): return 200
+        def close(self): pass
+        def read(self, size):
+            return json.dumps({k:['13','14'] for k in QUEUE_NAMES}
+                if 'groupqueues?' in self.request.full_url else 5).encode()[:size]
+    class Transport:
+        def open(self, request, timeout): return Response(request)
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp).resolve(); root.chmod(0o700)
+        states=[root/'first', root/'second']
+        for state in states: state.mkdir(mode=0o700)
+        feed_dir=root/'feed'; feed_dir.mkdir(mode=0o700); feed=feed_dir/'plans.json'
+        series=str(uuid4())
+        ticket={'schema_version':1,'episode_id':str(uuid4()),'data_origin':'synthetic','api_profile':'miniapp_gateway',
+            'store_id':'900001','queue_type':'ordinary','number':'13','issued_at':stamp(-300),'party_size':None,
+            'table_type':'unknown','checked_in':None,'created_at':stamp(-1),'deadline_at':stamp(3600),
+            'desired_arrival_at':None,'call_offset_minutes':0,'minimum_samples':1,'max_updates':20}
+        for state in states: create_session({**ticket,'episode_id':str(uuid4())},directory=state,now=now)
+        view=LiveRemoteView(['900001'],stale_after_seconds=360)
+        with patch('sushiwait.remote._utc',return_value=stamp(0)):
+            view.publish(RemoteClient(opener=Transport()).snapshot('900001'))
+        def reader(store):
+            reads.append(store)
+            return view.tracking_projection(store,now=now+timedelta(seconds=clock[0]),
+                                            service_state='running',worker_alive=True)
+        running=[]
+        def constructor(*args,**kw):
+            kw.update(clock=lambda:now+timedelta(seconds=clock[0]),monotonic=lambda:clock[0])
+            value=TrackingCoordinator(*args,**kw);running.append(value);return value
+        class Stop:
+            def is_set(self): return False
+            def wait(self,seconds):
+                for f in list(running[-1].futures.values()): f.result(timeout=3)
+                running[-1]._reap();clock[0]+=seconds
+        def run(coordinator,**kw): return run_tracking(coordinator,stop=Stop(),**kw)
+        args=['ticket-track-run','--store-id','900001','--plan-output',str(feed),'--plan-series-id',series]
+        for state in states: args+=['--state-dir',str(state)]
+        output=io.StringIO()
+        with patch('socket.socket',side_effect=AssertionError('tracker_install_socket')) as sockets, \
+                patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('tracker_install_credentials')) as auth, \
+                patch('sushiwait.trackerloop.TrackingCoordinator',side_effect=constructor), \
+                patch('sushiwait.trackerloop.RemoteProjectionReader',return_value=reader), \
+                patch('sushiwait.trackerloop.run_tracking',side_effect=run),contextlib.redirect_stdout(output):
+            assert main(args+['--prepare-plans-only'])==0
+            assert main(args+['--collector-url','http://127.0.0.1:12345','--duration','60','--max-cycles','2'])==0
+        assert reads==['900001','900001']
+        assert all((state/'prediction-0001.json').exists() for state in states)
+        assert all(p.stat().st_mode&0o777==0o600 for state in states for p in state.iterdir())
+        assert not any(p in output.getvalue() for p in (str(root),series,ticket['issued_at']))
+        assert sockets.call_count==auth.call_count==0
+        clock[0]=31
+        def candidate(prep):
+            return {'schema_version':2,'data_origin':'synthetic','model_version':'install-tracker-loop-v1',
+                'prediction_target':'remaining','conditioning':'call_not_observed_after_elapsed','ai_blend_ppm':0,
+                'public_context':prep['receipt']['observation']['public_context'],
+                'candidates':[{'candidate_id':'history','interval_sample':{'elapsed_us':331_000_000,
+                    'intervals':[[600_000_000,660_000_000,1]]}}],'prior_weights_ppm':{'history':1_000_000}}
+        c=TrackingCoordinator([states[0]],stores=['900001'],reader=reader,candidate_builder=candidate,
+            clock=lambda:now+timedelta(seconds=clock[0]),monotonic=lambda:clock[0])
+        try:
+            c.cycle()
+            for f in list(c.futures.values()): f.result(timeout=3)
+            c._reap()
+            value=json.loads((states[0]/'prediction-0002.json').read_bytes())
+            assert value['fusion']['wait_quantile_envelopes_us']['p50']=={'lower_us':269_000_000,'upper_us':329_000_000}
+            assert value['polling_request']['requested_interval_seconds']==30 and not value['eta_available']
+        finally: c.close()
+    print(json.dumps({'installed_tracker_loop_ok':True,'actual_automatic_cli_modes':2,
+        'same_store_reader_coalesced':True,'genuine_compute_threads':True,'conditional_distribution_applied':True,
+        'local_projection_reads':3,'socket_calls':0,'official_query_credentials_accessed':False,
+        'provider_calls':0,'notification_sent':False,'verified_training_labels':0,'eta_available':False}))
+
+
 def check_campaign_install():
     """Use the installed CLI, real private files and an explicitly fake source."""
     from sushiwait.remote import RemoteClient, QUEUE_NAMES
@@ -280,10 +367,11 @@ def check() -> None:
     check_personal_install()
     check_deepseek_install()
     check_tracking_install()
+    check_tracker_loop_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')

@@ -62,3 +62,6 @@ sushiwait remote-serve \
 HTTP层遵循[ASGI lifespan规范](https://asgi.readthedocs.io/en/latest/specs/lifespan.html)的启动/退出事件，显式失败时不假报启动完成；[Uvicorn lifespan说明](https://uvicorn.dev/concepts/lifespan/)指出每个worker各自初始化，故保持单工作者并以任务/数据库锁阻止第二实例。可选依赖版本及许可核对见[PyPI 0.53.0](https://pypi.org/project/uvicorn/0.53.0/)，不是对它为最新版本的声明。配置参考[官方设置](https://uvicorn.dev/settings/)，实际安装版本的联动验证单独记录。
 
 后续继续持久共享调度、真正长时窗口、实际服务器和跨日期质量，再取得可追溯叫号结果及误差评估；原两种预测、偏移、防过号和异常加速、LLM、前端与授权自动操作需求没有缩小。完整背景、版本和逐次操作见[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md)。
+
+
+rc50增加[已有号自动更新](TICKET_TRACKING_LOOP.md)的专用短期需求及投影读取：同店合并、租期不超过300秒、整个计划有截止，未知到店不编造；写者新只读tracking-projection在本地同锁复制显示与历史，不能认证上游原子性。原真实限时任务版本／预算保持，集成、安装与精确CI分别见交接记录。

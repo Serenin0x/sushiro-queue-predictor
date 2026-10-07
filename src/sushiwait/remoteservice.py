@@ -73,7 +73,7 @@ class LiveRemoteView:
         for store in store_ids:_id(store)
         self.stores = tuple(store_ids)
         self.stale_after = stale_after_seconds
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.records = {store:{'latest':{},'successful':{},'origins':{}} for store in store_ids}
         self.history = {store: deque(maxlen=MONITOR_POINTS) for store in store_ids}
         self.evicted = {store: 0 for store in store_ids}
@@ -151,6 +151,22 @@ class LiveRemoteView:
             'count_unit': 'unknown', 'display_turnover_is_no_show_rate': False,
             'source_freshness': 'unknown', 'response_store_identity_verified': False,
             'eta_available': False, 'network_performed_by_read': False}
+
+    def tracking_projection(self, store_id, *, now, service_state, worker_alive):
+        """Copy display and history under one local projection lock.
+
+        This prevents mixed local commits; the two upstream GETs remain
+        non-atomic, with unknown source freshness and store identity.
+        """
+        with self.lock:
+            options = dict(now=now, service_state=service_state, worker_alive=worker_alive)
+            return {'tracking_projection_schema_version': 1, 'source': SOURCE,
+                'requested_store_id': store_id, 'generated_at': now.isoformat(),
+                'view': self.snapshot(store_id, **options),
+                'history': self.monitor_history(store_id, **options),
+                'local_projection_atomic': True, 'upstream_snapshot_atomic': False,
+                'network_performed_by_read': False, 'source_freshness': 'unknown',
+                'eta_available': False, 'verified_training_labels': 0}
 
 
 class RemoteQueueService:
@@ -283,6 +299,11 @@ class RemoteQueueService:
                 'verified_training_labels': 0, 'eta_available': False,
                 'revision_scope': 'writer_process_projection', 'display_turnover_is_no_show_rate': False}
 
+    def tracking_projection(self, store_id):
+        state = self.status()
+        return self.view.tracking_projection(store_id, now=self.wall_clock(),
+            service_state=state['service_state'], worker_alive=state['worker_alive'])
+
 
 class RemoteASGI:
     """Fixed GET routes, no user-controlled upstream targets or business writes."""
@@ -334,6 +355,12 @@ class RemoteASGI:
                     if store not in self.service.view.stores:status,payload = 404,{'error_code':'store_not_in_scope'}
                     else:
                         try:payload = self.service.fusion_context(store)
+                        except RemoteServiceError:status,payload = 503,{'error_code':'remote_service_view_unavailable'}
+                elif path.startswith('/api/v1/stores/') and path.endswith('/tracking-projection'):
+                    store = path[len('/api/v1/stores/'):-len('/tracking-projection')]
+                    if store not in self.service.view.stores:status,payload = 404,{'error_code':'store_not_in_scope'}
+                    else:
+                        try:payload = self.service.tracking_projection(store)
                         except RemoteServiceError:status,payload = 503,{'error_code':'remote_service_view_unavailable'}
                 elif path.startswith('/api/v1/stores/') and path.endswith('/queue'):
                     store = path[len('/api/v1/stores/'):-len('/queue')]

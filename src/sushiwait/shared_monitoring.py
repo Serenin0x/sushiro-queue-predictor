@@ -17,7 +17,56 @@ class SharedMonitoringError(ValueError):
 
 
 _PLAN_FIELDS = frozenset({'store_id', 'desired_arrival_at', 'call_offset_minutes',
-                         'plan_status', 'earliest_call_at', 'accelerated_display_turnover'})
+                         'plan_status', 'earliest_call_at', 'accelerated_display_turnover',
+                         'polling_request', 'plan_expires_at'})
+
+
+def _plan_policy(plan, *, as_of, base_interval):
+    """Private, short-lived demand; no fabricated arrival for an unknown time."""
+    lease = plan.get('polling_request')
+    current = _time(as_of)
+    expired = plan.get('plan_expires_at') is not None and _time(plan['plan_expires_at']) <= current
+    if 'plan_expires_at' in plan and plan['plan_expires_at'] is None:
+        raise SharedMonitoringError('shared_monitor_invalid_input')
+    if lease is not None:
+        if (type(lease) is not dict or set(lease) != {'interval_seconds', 'expires_at'}
+                or type(lease['interval_seconds']) is not int
+                or lease['interval_seconds'] not in (30, 60, base_interval)):
+            raise SharedMonitoringError('shared_monitor_invalid_input')
+        expiry = _time(lease['expires_at'])
+        if expiry > current + timedelta(seconds=300):
+            raise SharedMonitoringError('shared_monitor_invalid_input')
+    elif 'polling_request' in plan:
+        raise SharedMonitoringError('shared_monitor_invalid_input')
+    status = plan.get('plan_status', 'waiting')
+    if plan['desired_arrival_at'] is None:
+        if (lease is None or status not in ('waiting', 'called', 'no_show', 'cancelled', 'ended')
+                or set(plan) & {'earliest_call_at', 'accelerated_display_turnover'}
+                or type(plan.get('call_offset_minutes', 0)) is not int
+                or plan.get('call_offset_minutes', 0) != 0):
+            raise SharedMonitoringError('shared_monitor_invalid_input')
+        active = status == 'waiting' and not expired
+        policy = {'requested_interval_seconds': base_interval if active else None,
+            'accelerated_display_turnover_input': False, 'monitor_horizon_at': None,
+            'reestimate_requested': False}
+    else:
+        policy = polling_policy(**{key: value for key, value in plan.items()
+            if key not in ('store_id', 'polling_request', 'plan_expires_at')},
+            as_of=as_of, base_interval=base_interval)
+        if expired:
+            policy['requested_interval_seconds'] = None
+            policy['reestimate_requested'] = False
+    if lease is not None and current < expiry and policy['requested_interval_seconds'] is not None:
+        policy['requested_interval_seconds'] = min(policy['requested_interval_seconds'], lease['interval_seconds'])
+        policy['reestimate_requested'] = policy['requested_interval_seconds'] == 30
+    transitions = []
+    if policy['requested_interval_seconds'] is not None:
+        if lease is not None and expiry > current:
+            transitions.append(expiry)
+        if plan.get('plan_expires_at') is not None and not expired:
+            transitions.append(_time(plan['plan_expires_at']))
+    policy['request_transition_at'] = min(transitions, default=None)
+    return policy
 
 
 def _store(value: object) -> str:
@@ -46,8 +95,7 @@ def shared_polling_policy(document: dict, *, as_of: str, base_interval: int) -> 
                     or not {'store_id', 'desired_arrival_at'} <= set(plan)):
                 raise SharedMonitoringError('shared_monitor_invalid_input')
             store_id = _store(plan['store_id'])
-            policy = polling_policy(**{key: value for key, value in plan.items() if key != 'store_id'},
-                                    as_of=as_of, base_interval=base_interval)
+            policy = _plan_policy(plan, as_of=as_of, base_interval=base_interval)
             grouped.setdefault(store_id, []).append(policy)
             if len(grouped) > 3:
                 raise SharedMonitoringError('shared_monitor_store_limit')
@@ -71,7 +119,11 @@ def shared_polling_policy(document: dict, *, as_of: str, base_interval: int) -> 
                        if store_id in last else current)
                 transitions = []
                 for policy in active:
+                    if policy['request_transition_at'] is not None:
+                        transitions.append(policy['request_transition_at'])
                     if policy['accelerated_display_turnover_input']:
+                        continue
+                    if policy['monitor_horizon_at'] is None:
                         continue
                     horizon = _time(policy['monitor_horizon_at'])
                     for minutes in (30, 15):

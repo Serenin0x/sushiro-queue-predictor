@@ -137,6 +137,12 @@ def publish_update(source, destination, *, stores, base_interval, clock=lambda: 
     if os.path.abspath(source) == os.path.abspath(destination):
         raise PlanUpdateError('plan_update_path_conflict')
     update = read_update(source, stores=stores, base_interval=base_interval, now=clock())
+    return publish_document(update, destination, stores=stores, base_interval=base_interval, clock=clock)
+
+
+def publish_document(update, destination, *, stores, base_interval, clock=lambda: datetime.now(timezone.utc)):
+    """Publish a generated whole plan set using the same private atomic writer."""
+    update = validate_update(update, stores=stores, base_interval=base_interval, now=clock())
     body = json.dumps(update, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
     parent_fd = fd = None
     temporary = None

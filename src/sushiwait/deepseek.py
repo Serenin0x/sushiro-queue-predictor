@@ -381,6 +381,7 @@ def run_deepseek(plan, *, budget_file=None, key_file=None, allow_paid_request=Fa
         if current_request is not None and current_request() != request:
             error = FusionError('fusion_superseded_input')
             error.network_performed = attempted and transport is None
+            error.provider_request_attempted = attempted
             raise error
 
     try:

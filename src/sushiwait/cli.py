@@ -752,6 +752,24 @@ def build_parser() -> argparse.ArgumentParser:
     track.add_argument('--declared-at', required=True)
     track = commands.add_parser('ticket-track-status', help='查看私有追踪的版本与过期状态；不显示号码')
     track.add_argument('--state-dir', required=True)
+    loop = commands.add_parser('ticket-track-run', help='有界自动读取本机采集投影并更新私人追踪；无产品UI或通知')
+    loop.add_argument('--state-dir', action='append', required=True)
+    loop.add_argument('--store-id', action='append', required=True)
+    loop.add_argument('--collector-url')
+    loop.add_argument('--duration', type=int, default=3600)
+    loop.add_argument('--max-cycles', type=int, default=720)
+    loop.add_argument('--read-interval', type=int, default=5)
+    loop.add_argument('--base-interval', type=int, default=300)
+    loop.add_argument('--source-db')
+    loop.add_argument('--reviews-db')
+    loop.add_argument('--model-version', default='reviewed-history-intervals-v1')
+    loop.add_argument('--ai-blend-ppm', type=int, default=0)
+    loop.add_argument('--plan-output')
+    loop.add_argument('--plan-series-id')
+    loop.add_argument('--prepare-plans-only', action='store_true')
+    loop.add_argument('--allow-paid-request', action='store_true')
+    loop.add_argument('--budget-file')
+    loop.add_argument('--key-file')
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -1098,6 +1116,41 @@ def main(argv: list[str] | None = None) -> int:
             except SharedMonitoringError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
                 return 1
+        if args.command == 'ticket-track-run':
+            from .trackerloop import TrackingCoordinator, RemoteProjectionReader, TrackerLoopError, run_tracking
+            coordinator = None
+            try:
+                if (not 1 <= args.duration <= 21600 or not 1 <= args.max_cycles <= 4320
+                        or args.prepare_plans_only and not args.plan_output
+                        or not args.prepare_plans_only and not args.collector_url):
+                    raise TrackerLoopError('tracker_loop_invalid_configuration')
+                def no_read(_):
+                    raise TrackerLoopError('tracker_loop_projection_unavailable')
+                reader = RemoteProjectionReader(args.collector_url) if args.collector_url else no_read
+                coordinator = TrackingCoordinator(args.state_dir, stores=args.store_id, reader=reader,
+                    base_interval=args.base_interval, read_interval=args.read_interval,
+                    source_db=args.source_db, reviews_db=args.reviews_db,
+                    model_version=args.model_version, ai_blend_ppm=args.ai_blend_ppm,
+                    plan_output=args.plan_output, plan_series_id=args.plan_series_id,
+                    allow_paid_request=args.allow_paid_request, budget_file=args.budget_file, key_file=args.key_file)
+                if args.prepare_plans_only:
+                    result = coordinator.publish_demands()
+                    emit({'ok': True, 'prepared_plan_revision': result['revision'], **coordinator.summary()})
+                else:
+                    result = run_tracking(coordinator, duration_seconds=args.duration,
+                                          max_cycles=args.max_cycles, emit=emit)
+                    emit(result)
+                    return 0 if result['ok'] else 1
+                return 0
+            except KeyboardInterrupt:
+                emit({'ok': False, 'error_code': 'tracker_loop_interrupted'}); return 130
+            except Exception as error:
+                emit({'ok': False, 'error_code': getattr(error, 'error_code', 'tracker_loop_input_or_storage_error'),
+                    'official_collection_requests_by_tracker': 0, 'business_writes': 0,
+                    'notification_sent': False, 'eta_available': False}); return 1
+            finally:
+                if coordinator is not None:
+                    coordinator.close()
         if args.command.startswith('ticket-track-'):
             try:
                 state = Path(args.state_dir).resolve()
