@@ -119,6 +119,8 @@ class TrackingCoordinator:
     """
     def __init__(self, directories, *, stores, reader, base_interval=300, read_interval=5,
                  source_db=None, reviews_db=None, candidate_builder=None,
+                 sealed_remote_db=None, landmark_seconds=None, realtime_window_seconds=1800,
+                 realtime_neighbors=20, realtime_minimum_episodes=8,
                  model_version='reviewed-history-intervals-v1', ai_blend_ppm=0,
                  plan_output=None, plan_series_id=None, allow_paid_request=False,
                  budget_file=None, key_file=None, transport=None, trend_profile_files=None,
@@ -133,6 +135,11 @@ class TrackingCoordinator:
                     or type(allow_paid_request) is not bool
                     or bool(source_db) != bool(reviews_db)
                     or source_db and candidate_builder is not None
+                    or sealed_remote_db is not None and not source_db
+                    or landmark_seconds is not None and sealed_remote_db is None
+                    or not _integer(realtime_window_seconds,30,3600)
+                    or not _integer(realtime_minimum_episodes,1,100)
+                    or not _integer(realtime_neighbors,realtime_minimum_episodes,100)
                     or (plan_output is None) != (plan_series_id is None)
                     or allow_paid_request and (budget_file is None or key_file is None)):
                 raise ValueError
@@ -146,8 +153,13 @@ class TrackingCoordinator:
             if (type(profiles) is not list or len(profiles) > 3
                     or type(archives) is not list or len(archives) > 3):
                 raise ValueError
+            landmarks = [0,300,600,1200,1800,2700,3600,5400] if landmark_seconds is None else landmark_seconds
+            if (type(landmarks) is not list or not 1 <= len(landmarks) <= 16
+                    or any(not _integer(v,0,172800) for v in landmarks)
+                    or any(b<=a for a,b in zip(landmarks,landmarks[1:]))):
+                raise ValueError
             external = [Path(os.path.abspath(p)) for p in
-                [source_db, reviews_db, plan_output, budget_file, key_file]+profiles+archives if p is not None]
+                [source_db, reviews_db, sealed_remote_db, plan_output, budget_file, key_file]+profiles+archives if p is not None]
             if (len(set(external)) != len(external)
                     or any(p.is_relative_to(d) or d.is_relative_to(p.parent)
                            for p in external for d in self.directories)
@@ -159,6 +171,14 @@ class TrackingCoordinator:
                 _uuid(plan_series_id)
             self.stores, self.reader, self.base, self.read_interval = stores[:], reader, base_interval, read_interval
             self.source_db, self.reviews_db, self.candidate_builder = source_db, reviews_db, candidate_builder
+            if sealed_remote_db is not None:
+                if len({Path(p).absolute().parent for p in (source_db,reviews_db,sealed_remote_db)}) != 3:
+                    raise ValueError
+                from .remote import RemoteStore
+                with RemoteStore(sealed_remote_db,read_only=True):pass
+            self.sealed_remote_db, self.landmarks = sealed_remote_db, landmarks[:]
+            self.realtime_window = realtime_window_seconds
+            self.realtime_neighbors, self.realtime_minimum = realtime_neighbors, realtime_minimum_episodes
             self.model_version, self.ai_blend = model_version, ai_blend_ppm
             self.plan_output, self.series = plan_output, plan_series_id
             self.paid, self.budget, self.key, self.transport = allow_paid_request, budget_file, key_file, transport
@@ -229,8 +249,36 @@ class TrackingCoordinator:
             if self.source_db:
                 with OutcomeIntakeStore(self.source_db, read_only=True) as source, \
                         OutcomeReviewStore(self.reviews_db, read_only=True) as reviews:
-                    result = calculate_prediction(preparation, source=source, reviews=reviews,
-                                                  now=self.clock(), **options)
+                    realtime = None
+                    ticket = preparation['ticket'];obs = preparation['receipt']['observation']
+                    if self.sealed_remote_db is not None and ticket['issued_at'] is not None and obs['current_display_evidence']:
+                        from .remote import RemoteStore
+                        from .realtimefusion import build_realtime_fusion
+                        historical_plan = {'schema_version':1,'as_of':obs['as_of'],
+                            'data_origin':ticket['data_origin'],'api_profile':ticket['api_profile'],
+                            'store_id':ticket['store_id'],'queue_type':ticket['queue_type'],
+                            'party_size':ticket['party_size'],'table_type':ticket['table_type'],
+                            'mode':'remaining','minimum_samples':ticket['minimum_samples'],
+                            'target_episode_id':ticket['episode_id'],'issued_at':ticket['issued_at'],'call_not_observed':True}
+                        feature_plan = {k:historical_plan[k] for k in ('schema_version','as_of','data_origin','api_profile','store_id')}
+                        feature_plan.update(queue_data_origin='synthetic' if ticket['data_origin']=='synthetic' else 'live',
+                            elapsed_seconds=self.landmarks,max_cases=100,
+                            window_seconds=obs['public_context']['window_seconds'],max_gap_seconds=360)
+                        with RemoteStore(self.sealed_remote_db,read_only=True) as remote:
+                            realtime = build_realtime_fusion(source=source,reviews=reviews,remote=remote,
+                                plan=historical_plan,feature_plan=feature_plan,context=obs['public_context'],
+                                model_version=self.model_version,ai_blend_ppm=self.ai_blend,now=self.clock(),
+                                neighbors=self.realtime_neighbors,minimum_episodes=self.realtime_minimum)
+                    if realtime is not None and realtime['fusion_plan'] is not None:
+                        result = calculate_prediction(preparation,fusion_plan=realtime['fusion_plan'],now=self.clock(),**options)
+                        result['history'] = realtime['history']
+                    else:
+                        result = calculate_prediction(preparation, source=source, reviews=reviews,
+                                                      now=self.clock(), **options)
+                    if realtime is not None:
+                        result['realtime_research'] = {k:realtime[k] for k in ('policy','model_input_sha256',
+                            'research_realtime_model_fitted','realtime_candidate_added','unavailable_reason',
+                            'matched_group','selected_independent_episodes','options')}
             else:
                 plan = self.candidate_builder(deepcopy(preparation)) if self.candidate_builder and \
                     preparation['ticket']['issued_at'] is not None and \
@@ -263,6 +311,7 @@ class TrackingCoordinator:
                 if not updated['research_prediction_available']:
                     raise TrackingError('tracking_superseded')
                 updated['history'] = result['history']
+                if 'realtime_research' in result:updated['realtime_research'] = result['realtime_research']
                 updated['fusion']['fallback_reason'] = provider['fallback_reason']
                 updated['provider_adapter_summary'] = {key: provider[key] for key in
                     ('provider', 'provider_model', 'provider_request_attempted', 'network_performed',
@@ -398,7 +447,7 @@ class TrackingCoordinator:
         profile = self.trend_profiles.get(ticket['store_id'])
         archive = self.trend_archives.get(ticket['store_id'])
         window = (archive['scope']['window_seconds'] if archive else
-                  profile['window_seconds'] if profile else 600)
+                  profile['window_seconds'] if profile else self.realtime_window if self.sealed_remote_db else 600)
         context = context_from_history(frame['history'], queue_type=ticket['queue_type'],
             now=self.clock(), window_seconds=window,
             max_local_age_seconds=360, ttl_seconds=60)

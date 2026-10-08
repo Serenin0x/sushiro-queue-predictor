@@ -483,8 +483,9 @@ def _bound_fusion(preparation, plan, *, now):
         if (plan['public_context'] != receipt['observation']['public_context']
                 or plan['schema_version'] != 2 or plan['prediction_target'] != 'remaining'
                 or plan['data_origin'] != ('synthetic' if ticket['data_origin'] == 'synthetic' else 'research')
-                or any('interval_sample' not in c or c['interval_sample']['elapsed_us'] != elapsed
-                       for c in plan['candidates'])):
+                or any((c['interval_sample']['elapsed_us'] != elapsed if 'interval_sample' in c else
+                        c['conditional_interval_sample']['conditioned_elapsed_us'] != elapsed
+                        if 'conditional_interval_sample' in c else True) for c in plan['candidates'])):
             raise ValueError
         return plan
     except Exception:

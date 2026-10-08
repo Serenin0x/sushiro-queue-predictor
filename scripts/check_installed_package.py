@@ -428,6 +428,94 @@ def check_personal_install():
         'native_calls':0,'business_writes':0,'verified_training_labels':0,'eta_available':False,'is_live_acceptance':False}))
 
 
+def check_realtime_models_install():
+    """Actual installed CLI/source fits; all claims and observations synthetic."""
+    from dataclasses import asdict
+    from uuid import uuid4
+    from sushiwait.intake import OutcomeIntakeStore
+    from sushiwait.reviews import OutcomeReviewStore,draft_review
+    from sushiwait.remote import RemoteResult,RemoteStore,QUEUE_NAMES,SOURCE
+    from sushiwait.realtimefusion import build_realtime_fusion
+    from sushiwait.fusion import fuse,public_request
+    base=datetime(2026,10,6,4,30,tzinfo=timezone.utc)
+    stamp=lambda second:(base+timedelta(seconds=second)).isoformat()
+    with tempfile.TemporaryDirectory() as name:
+        root=Path(name).resolve();root.chmod(0o700)
+        for d in ('source','reviews','remote','output'):(root/d).mkdir(mode=0o700)
+        src,rev,db=[root/d/(d+'.sqlite3') for d in ('source','reviews','remote')]
+        for index,(issued,wait) in enumerate(((320,900),(330,900),(620,120),(630,120))):
+            events=[]
+            for kind,lo,hi in (('issued',issued,issued),('called',issued+wait,issued+wait+60)):
+                events.append({'event_id':str(uuid4()),'event_type':kind,'event_time_lower':stamp(lo),
+                    'event_time_upper':stamp(hi),'observed_at':stamp(hi),
+                    'evidence_kind':'synthetic','verification_status':'unverified'})
+            ep={'schema_version':1,'episode_id':str(uuid4()),'revision':1,'supersedes_revision':None,
+                'store_id':'900001','api_profile':'miniapp_gateway','data_origin':'synthetic',
+                'queue_type':'ordinary','party_size':2,'table_type':'unknown',
+                'recorded_at':stamp(issued+wait+61),'events':events}
+            with OutcomeIntakeStore(src) as source:source.append(ep)
+            draft=root/'output'/('review-'+str(index)+'.json')
+            with OutcomeIntakeStore(src,read_only=True) as source:draft_review(source,ep,draft)
+            review=json.loads(draft.read_bytes());review.update(decision='accept',reason_code='confirmed_call_interval',
+                issued_time_bounds_checked=True,called_time_bounds_checked=True,store_and_queue_checked=True)
+            with OutcomeIntakeStore(src,read_only=True) as source,OutcomeReviewStore(rev) as reviews:
+                reviews.append(review,source=source)
+        with RemoteStore(db) as remote:
+            for fast,times in ((False,(200,230,260,290,310)),(True,(500,530,560,590,610))):
+                for index,t in enumerate(times):
+                    queues={key:[] for key in QUEUE_NAMES};queues['storeQueue']=[str(index) if fast else '999','888']
+                    q=RemoteResult('groupqueues',True,True,{'queues':queues},None,200,stamp(t),stamp(t),0)
+                    c=RemoteResult('storequeuecount',True,True,{'raw_count':10,'unit':'unknown'},None,200,stamp(t),stamp(t),0)
+                    record={'schema_version':1,'source':SOURCE,'data_origin':'live','requested_store_id':'900001',
+                        'response_store_identity_verified':False,'ok':True,'queries':{'groupqueues':asdict(q),'storequeuecount':asdict(c)},
+                        'atomic_snapshot':False,'source_update_time_verified':False,'source_freshness':'unknown',
+                        'eta_available':False,'complete_queue_cursor_available':False,'verified_training_labels':0}
+                    with patch('sushiwait.remoteintake._clock',return_value=base+timedelta(seconds=t+1)):
+                        remote.append(record)
+        now=datetime.now(timezone.utc);at=now.isoformat()
+        plan={'schema_version':1,'as_of':at,'data_origin':'synthetic','api_profile':'miniapp_gateway',
+            'store_id':'900001','queue_type':'ordinary','party_size':2,'table_type':'unknown',
+            'mode':'new_join','minimum_samples':1,'target_episode_id':None}
+        features={k:plan[k] for k in ('schema_version','as_of','data_origin','api_profile','store_id')}
+        features.update(queue_data_origin='synthetic',elapsed_seconds=[0],max_cases=100,window_seconds=120,max_gap_seconds=90)
+        context={'schema_version':1,'source':SOURCE,'store_id':'900001','queue_type':'ordinary',
+            'observation_revision':1,'as_of':at,'expires_at':(now+timedelta(seconds=60)).isoformat(),
+            'window_seconds':120,'max_local_age_seconds':90,'latest_queue_received_at':at,'latest_count_received_at':at,
+            'source_freshness':'unknown','count_unit':'unknown','store_identity_verified':False,
+            'collector_running':True,'latest_queue_origin':'worker_commit','features':[
+                {'feature_id':key,'value':value,'available_at':at} for key,value in
+                [('ordinary_removed_labels',4),('ordinary_comparable_pairs',4),('ordinary_observed_milliseconds',110000),
+                 ('reported_count_raw',10),('groupqueues_failures',0)]]}
+        before=[p.read_bytes() for p in (src,rev,db)]
+        with patch('socket.socket',side_effect=AssertionError('network')) as sockets:
+            with OutcomeIntakeStore(src,read_only=True) as source,OutcomeReviewStore(rev,read_only=True) as reviews,RemoteStore(db,read_only=True) as remote:
+                fast=build_realtime_fusion(source=source,reviews=reviews,remote=remote,plan=plan,
+                    feature_plan=features,context=context,neighbors=1,minimum_episodes=1,now=now)
+                slow_context=json.loads(json.dumps(context));slow_context['features'][0]['value']=0
+                slow=build_realtime_fusion(source=source,reviews=reviews,remote=remote,plan=plan,
+                    feature_plan=features,context=slow_context,neighbors=1,minimum_episodes=1,now=now)
+            assert fast['research_realtime_model_fitted'] and slow['research_realtime_model_fitted']
+            assert fast['research_quantiles_us']['p50']['upper_us']<slow['research_quantiles_us']['p50']['lower_us']
+            public=json.dumps(public_request(fast['fusion_plan'],now=now))
+            assert 'intervals' not in public and all(r['episode_id'] not in public for r in fast['selected_private_rows'])
+            inputs=[]
+            for title,value in (('plan',plan),('features',features),('context',context)):
+                path=root/'output'/(title+'.json');path.write_text(json.dumps(value));path.chmod(0o600);inputs.append(path)
+            destination=root/'output/realtime.json'
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                assert main(['realtime-fusion-research','--source-db',str(src),'--reviews-db',str(rev),
+                    '--remote-db',str(db),'--input',str(inputs[0]),'--feature-plan',str(inputs[1]),
+                    '--context-file',str(inputs[2]),'--output',str(destination),'--neighbors','1','--minimum-episodes','1'])==0
+            assert json.loads(out.getvalue())['research_realtime_model_fitted']
+            assert destination.stat().st_mode&0o777==0o600 and not sockets.call_count
+        assert before==[p.read_bytes() for p in (src,rev,db)]
+    print(json.dumps({'installed_realtime_models_ok':True,'actual_realtime_cli_modes':1,
+        'actual_private_sources':3,'independent_synthetic_episodes':4,'trend_changes_wait_numerically':True,
+        'training_rows_stay_private':True,'source_databases_unchanged':True,'socket_calls':0,
+        'provider_calls':0,'verified_training_labels':0,'eta_available':False}))
+
+
+
 def check() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
@@ -446,10 +534,11 @@ def check() -> None:
     check_tracking_install()
     check_tracker_loop_install()
     check_trend_profiles_install()
+    check_realtime_models_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')

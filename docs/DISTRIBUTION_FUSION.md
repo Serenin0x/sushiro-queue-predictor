@@ -53,3 +53,5 @@ rc48增加[历史区间候选桥接](HISTORY_FUSION.md)，按截止可用的审�
 rc49增加[手动已有号私有追踪](MANUAL_TICKET_TRACKING.md)：结合本人声明、当前分队列展示和条件历史分布，单目录锁核对最新版本后原子提交；已展示／后来状态未知请求30秒刷新。当前是后台库与CLI、研究区间；自动轮询编排、同店计划接入、实际模型供应商、提醒与真实误差仍未验收。
 
 rc51加入[相似日期展示变化参考](TREND_PROFILES.md)：不重叠历史窗口按实际可比时长归一化，过滤采样节奏，保留日期／时段回退层级与同值排序区间；四项公共数值特征可进入自动追踪及受限AI输入。这里仍无实时等待候选拟合、真实过号标签或概率校准，不把排序直接换算为等待分钟。
+
+rc53沿用schema2，新增realtime候选和conditional_interval_sample：conditioned_elapsed_us绑定当前已等时长，intervals已为条件剩余区间，CDF直接按次数计算、不再减时间；与旧总等待interval_sample混合时后者独立执行一次条件。两种elapsed必须相同，公开请求不包含这些私有区间。详见[实时邻域模型](REALTIME_NEIGHBORS.md)。

@@ -728,6 +728,17 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--model-version", default="reviewed-history-intervals-v1")
     history.add_argument("--ai-blend-ppm", type=int, default=0)
     history.add_argument("--max-revisions", type=int, default=10000)
+    realtime = commands.add_parser('realtime-fusion-research', help='独立经历的实时邻域剩余分布与历史融合；未校准ETA')
+    for field in ('source-db','reviews-db','remote-db','input','feature-plan','context-file','output'):
+        realtime.add_argument('--'+field, required=True)
+    realtime.add_argument('--neighbors', type=int, default=20)
+    realtime.add_argument('--minimum-episodes', type=int, default=8)
+    realtime.add_argument('--maximum-elapsed-difference-seconds', type=int, default=300)
+    realtime.add_argument('--maximum-standardized-distance', type=int, default=3)
+    realtime.add_argument('--realtime-weight-ppm', type=int, default=500000)
+    realtime.add_argument('--ai-blend-ppm', type=int, default=0)
+    realtime.add_argument('--max-revisions', type=int, default=10000)
+    realtime.add_argument('--max-observations', type=int, default=10000)
     track = commands.add_parser('ticket-track-init', help='保存手动已有号的私有有界会话；不取号')
     track.add_argument('--ticket-file', required=True)
     track.add_argument('--state-dir', required=True)
@@ -762,6 +773,11 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument('--base-interval', type=int, default=300)
     loop.add_argument('--source-db')
     loop.add_argument('--reviews-db')
+    loop.add_argument('--sealed-remote-db')
+    loop.add_argument('--landmark-seconds', action='append', type=int)
+    loop.add_argument('--realtime-window-seconds', type=int, default=1800)
+    loop.add_argument('--realtime-neighbors', type=int, default=20)
+    loop.add_argument('--realtime-minimum-episodes', type=int, default=8)
     loop.add_argument('--model-version', default='reviewed-history-intervals-v1')
     loop.add_argument('--ai-blend-ppm', type=int, default=0)
     loop.add_argument('--plan-output')
@@ -1214,6 +1230,9 @@ def main(argv: list[str] | None = None) -> int:
                 coordinator = TrackingCoordinator(args.state_dir, stores=args.store_id, reader=reader,
                     base_interval=args.base_interval, read_interval=args.read_interval,
                     source_db=args.source_db, reviews_db=args.reviews_db,
+                    sealed_remote_db=args.sealed_remote_db, landmark_seconds=args.landmark_seconds,
+                    realtime_window_seconds=args.realtime_window_seconds,
+                    realtime_neighbors=args.realtime_neighbors,realtime_minimum_episodes=args.realtime_minimum_episodes,
                     model_version=args.model_version, ai_blend_ppm=args.ai_blend_ppm,
                     plan_output=args.plan_output, plan_series_id=args.plan_series_id,
                     allow_paid_request=args.allow_paid_request, budget_file=args.budget_file, key_file=args.key_file,
@@ -1291,6 +1310,36 @@ def main(argv: list[str] | None = None) -> int:
                     'network_performed': False, 'provider_called': False, 'business_writes': 0,
                     'notification_sent': False, 'verified_training_labels': 0, 'eta_available': False})
                 return 1
+        if args.command == 'realtime-fusion-research':
+            from .realtimefusion import RealtimeFusionError, write_realtime_fusion
+            from .remote import RemoteStore
+            try:
+                paths = [Path(p).resolve() for p in (args.source_db,args.reviews_db,args.remote_db,
+                    args.input,args.feature_plan,args.context_file,args.output)]
+                if (len(set(paths))!=7 or len({p.parent for p in paths[:3]})!=3
+                        or paths[-1].parent in {p.parent for p in paths[:3]}):
+                    raise RealtimeFusionError('realtime_model_invalid_input')
+                plan = read_baseline_plan(args.input)
+                features_plan = read_feature_plan(args.feature_plan)
+                context = read_fusion_context(args.context_file)
+                with OutcomeIntakeStore(args.source_db,read_only=True) as source, \
+                        OutcomeReviewStore(args.reviews_db,read_only=True) as reviews, \
+                        RemoteStore(args.remote_db,read_only=True) as remote:
+                    result = write_realtime_fusion(source=source,reviews=reviews,remote=remote,
+                        plan=plan,feature_plan=features_plan,context=context,destination=args.output,
+                        neighbors=args.neighbors,minimum_episodes=args.minimum_episodes,
+                        maximum_elapsed_difference_seconds=args.maximum_elapsed_difference_seconds,
+                        maximum_standardized_distance=args.maximum_standardized_distance,
+                        realtime_weight_ppm=args.realtime_weight_ppm,ai_blend_ppm=args.ai_blend_ppm,
+                        max_revisions=args.max_revisions,max_observations=args.max_observations)
+                durable = result['durability_confirmed']
+                emit({'ok':durable,**result,**({} if durable else {'error_code':'realtime_model_durability_unconfirmed'})})
+                return 0 if durable else 1
+            except Exception as error:
+                code = getattr(error,'error_code','realtime_model_failed')
+                emit({'ok':False,'error_code':code,'committed':getattr(error,'committed',False),
+                    'durability_confirmed':False,'network_performed':False,'provider_called':False,
+                    'eta_available':False,'verified_training_labels':0});return 1
         if args.command == "history-fusion-research":
             try:
                 from .baseline import read_plan as read_history_plan

@@ -24,7 +24,7 @@ EMPIRICAL_POLICY = 'public_empirical_interval_cdf_mixture_v2'
 PPM = 1_000_000
 MAX_WAIT_US = 172_800_000_000
 MAX_BYTES = 16_384
-CANDIDATE_IDS = frozenset({'history', 'steady', 'fast', 'slow'})
+CANDIDATE_IDS = frozenset({'history', 'steady', 'fast', 'slow', 'realtime'})
 FEATURE_IDS = frozenset({'ordinary_removed_labels', 'ordinary_comparable_pairs',
     'reservation_removed_labels', 'reservation_comparable_pairs', 'reported_count_raw',
     'longest_gap_seconds', 'groupqueues_failures', 'storequeuecount_failures',
@@ -156,19 +156,22 @@ def validate_plan(value, *, now=None):
         elapsed_values = set()
         for candidate in candidates:
             if (type(candidate) is not dict or set(candidate) not in
-                    ({'candidate_id', 'atoms'}, {'candidate_id', 'interval_sample'})
+                    ({'candidate_id', 'atoms'}, {'candidate_id', 'interval_sample'},
+                     {'candidate_id', 'conditional_interval_sample'})
                     or type(candidate['candidate_id']) is not str
                     or candidate['candidate_id'] not in CANDIDATE_IDS or candidate['candidate_id'] in seen):
                 raise ValueError
             seen.add(candidate['candidate_id'])
-            if 'interval_sample' in candidate:
-                if value['schema_version'] != 2:
+            if 'interval_sample' in candidate or 'conditional_interval_sample' in candidate:
+                direct = 'conditional_interval_sample' in candidate
+                if value['schema_version'] != 2 or direct and value['prediction_target'] != 'remaining':
                     raise ValueError
-                sample = candidate['interval_sample']
-                if (type(sample) is not dict or set(sample) != {'elapsed_us', 'intervals'}
+                sample = candidate['conditional_interval_sample' if direct else 'interval_sample']
+                elapsed_key = 'conditioned_elapsed_us' if direct else 'elapsed_us'
+                if (type(sample) is not dict or set(sample) != {elapsed_key, 'intervals'}
                         or type(sample['intervals']) is not list or not 1 <= len(sample['intervals']) <= 128):
                     raise ValueError
-                elapsed = sample['elapsed_us']
+                elapsed = sample[elapsed_key]
                 if value['prediction_target'] == 'remaining':
                     if not _integer(elapsed, 0, MAX_WAIT_US):
                         raise ValueError
@@ -185,7 +188,7 @@ def validate_plan(value, *, now=None):
                         raise ValueError
                     pairs.add((row[0], row[1])); total += row[2]
                     definite += row[2] if elapsed is not None and row[0] > elapsed else 0
-                if total > 10_000 or elapsed is not None and definite == 0:
+                if total > 10_000 or not direct and elapsed is not None and definite == 0:
                     raise ValueError
                 continue
             if type(candidate['atoms']) is not list or not 1 <= len(candidate['atoms']) <= 32:
@@ -204,8 +207,8 @@ def validate_plan(value, *, now=None):
         prior = _weights(value['prior_weights_ppm'], seen)
         safe = {**deepcopy(value), 'public_context': context, 'prior_weights_ppm': prior}
         for candidate in safe['candidates']:
-            if 'interval_sample' in candidate:
-                candidate['interval_sample']['intervals'].sort(key=lambda row: (row[0], row[1] is None, row[1] or 0))
+            if 'interval_sample' in candidate or 'conditional_interval_sample' in candidate:
+                candidate['conditional_interval_sample' if 'conditional_interval_sample' in candidate else 'interval_sample']['intervals'].sort(key=lambda row: (row[0], row[1] is None, row[1] or 0))
         if len(_canonical(safe).encode()) > MAX_BYTES:
             raise ValueError
         return safe
@@ -421,8 +424,9 @@ def _cdf_bounds(candidate, t):
         lower = sum(a['mass_ppm'] for a in rows if a['upper_us'] is not None and a['upper_us'] <= t)
         upper = sum(a['mass_ppm'] for a in rows if a['lower_us'] <= t)
         return Fraction(lower, PPM), Fraction(upper, PPM)
-    sample = candidate['interval_sample']
-    rows, elapsed = sample['intervals'], sample['elapsed_us']
+    direct = 'conditional_interval_sample' in candidate
+    sample = candidate['conditional_interval_sample' if direct else 'interval_sample']
+    rows, elapsed = sample['intervals'], None if direct else sample['elapsed_us']
     if elapsed is None:
         total = sum(n for _, _, n in rows)
         return (Fraction(sum(n for _, u, n in rows if u is not None and u <= t), total),
@@ -445,8 +449,9 @@ def _empirical_quantiles(candidates, effective):
                 if row['upper_us'] is not None:
                     points.add(row['upper_us'])
         else:
-            sample = candidate['interval_sample']
-            elapsed = sample['elapsed_us'] or 0
+            direct = 'conditional_interval_sample' in candidate
+            sample = candidate['conditional_interval_sample' if direct else 'interval_sample']
+            elapsed = 0 if direct else sample['elapsed_us'] or 0
             for lower, upper, _ in sample['intervals']:
                 points.add(max(0, lower-elapsed))
                 if upper is not None:
@@ -496,7 +501,7 @@ def fuse(plan, *, advice=None, now=None, current_public_input_sha256=None,
     effective = {key: (PPM-alpha)*weight + alpha*accepted['weights_ppm'][key]
                  if accepted is not None else PPM*weight for key, weight in prior.items()}
     assert sum(effective.values()) == PPM**2
-    empirical = any('interval_sample' in c for c in plan['candidates'])
+    empirical = any('interval_sample' in c or 'conditional_interval_sample' in c for c in plan['candidates'])
     atoms = [(a, effective[c['candidate_id']]*a['mass_ppm'])
              for c in plan['candidates'] if 'atoms' in c for a in c['atoms']]
     quantiles = _empirical_quantiles(plan['candidates'], effective) if empirical else {name: {'lower_us': _quantile(atoms, q, 'lower_us'),
@@ -511,7 +516,9 @@ def fuse(plan, *, advice=None, now=None, current_public_input_sha256=None,
             'ai_blend_ppm': alpha, 'advice': accepted, 'fallback_reason': fallback,
             'effective_weight_numerators': effective, 'effective_weight_denominator': PPM**2,
             'wait_quantile_envelopes_us': quantiles, 'quantile_method': 'inverse_rational_cdf_envelope_mixture' if empirical else 'inverse_mixture_cdf_interval_envelopes',
-            'survival_conditioning_applied_here': empirical and plan['prediction_target'] == 'remaining',
+            'survival_conditioning_applied_here': any('interval_sample' in c and c['interval_sample']['elapsed_us'] is not None
+                and effective[c['candidate_id']] > 0 for c in plan['candidates']),
+            'direct_conditional_samples_present': any('conditional_interval_sample' in c for c in plan['candidates']),
             'unbounded_upper_support': any(v['upper_us'] is None for v in quantiles.values()),
             'current_input_guard_applied': current_public_input_sha256 is not None and current_observation_revision is not None,
             'input_currentness_verified': False, 'coverage_calibrated': False,
