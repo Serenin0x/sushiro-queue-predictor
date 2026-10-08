@@ -289,6 +289,7 @@ class TrendProfileTests(unittest.TestCase):
             trend_profile_files=[file],clock=lambda:helper.now)
         self.addCleanup(coordinator.close)
         coordinator.cycle()
+        helper.finish(coordinator)
         with TrackingSession(helper.state) as session:
             _,receipt,_=session.load(now=helper.now)
         ids={f['feature_id'] for f in receipt['observation']['public_context']['features']}

@@ -121,7 +121,8 @@ class TrackingCoordinator:
                  source_db=None, reviews_db=None, candidate_builder=None,
                  model_version='reviewed-history-intervals-v1', ai_blend_ppm=0,
                  plan_output=None, plan_series_id=None, allow_paid_request=False,
-                 budget_file=None, key_file=None, transport=None, trend_profile_files=None, clock=_now,
+                 budget_file=None, key_file=None, transport=None, trend_profile_files=None,
+                 trend_archive_files=None, clock=_now,
                  monotonic=time.monotonic):
         try:
             if (type(directories) is not list or not 1 <= len(directories) <= MAX_SESSIONS
@@ -141,10 +142,12 @@ class TrackingCoordinator:
             if len(set(self.directories)) != len(self.directories):
                 raise ValueError
             profiles = [] if trend_profile_files is None else trend_profile_files
-            if type(profiles) is not list or len(profiles) > 3:
+            archives = [] if trend_archive_files is None else trend_archive_files
+            if (type(profiles) is not list or len(profiles) > 3
+                    or type(archives) is not list or len(archives) > 3):
                 raise ValueError
             external = [Path(os.path.abspath(p)) for p in
-                [source_db, reviews_db, plan_output, budget_file, key_file]+profiles if p is not None]
+                [source_db, reviews_db, plan_output, budget_file, key_file]+profiles+archives if p is not None]
             if (len(set(external)) != len(external)
                     or any(p.is_relative_to(d) or d.is_relative_to(p.parent)
                            for p in external for d in self.directories)
@@ -167,6 +170,14 @@ class TrackingCoordinator:
                 if profile['store_id'] not in stores or profile['store_id'] in self.trend_profiles:
                     raise ValueError
                 self.trend_profiles[profile['store_id']] = profile
+            from .trendarchive import read_archive
+            self.trend_archives = {}
+            for path in archives:
+                archive = read_archive(path, now=clock())
+                store = archive['scope']['store_id']
+                if store not in stores or store in self.trend_profiles or store in self.trend_archives:
+                    raise ValueError
+                self.trend_archives[store] = archive
             episodes = []
             for directory in self.directories:
                 with TrackingSession(directory) as session:
@@ -365,16 +376,18 @@ class TrackingCoordinator:
                 if not valid:
                     raise TrackerLoopError('tracker_loop_invalid_projection')
                 frames[store] = frame
+            references = {}
             for directory, (ticket, latest, _, prediction) in active.items():
                 with self.gate:
-                    self._advance(directory, ticket, latest, prediction, frames[ticket['store_id']])
+                    self._advance(directory, ticket, latest, prediction, frames[ticket['store_id']],
+                                  reference_cache=references)
             self.publish_demands()
             self.counts['cycles'] += 1
             return self.summary(active_sessions=len(active))
         finally:
             self.cycle_lock.release()
 
-    def _advance(self, directory, ticket, latest, prediction, frame):
+    def _advance(self, directory, ticket, latest, prediction, frame, *, reference_cache=None):
         # Gate only local private commits, never projection HTTP or AI.
         with TrackingSession(directory) as session:
             ticket, latest, terminal = session.load(now=self.clock())
@@ -383,9 +396,34 @@ class TrackingCoordinator:
         if terminal is not None or self.clock() >= _time(ticket['deadline_at']):
             return
         profile = self.trend_profiles.get(ticket['store_id'])
+        archive = self.trend_archives.get(ticket['store_id'])
+        window = (archive['scope']['window_seconds'] if archive else
+                  profile['window_seconds'] if profile else 600)
         context = context_from_history(frame['history'], queue_type=ticket['queue_type'],
-            now=self.clock(), window_seconds=profile['window_seconds'] if profile else 600,
+            now=self.clock(), window_seconds=window,
             max_local_age_seconds=360, ttl_seconds=60)
+        if archive is not None:
+            from .trendarchive import select_profile
+            from .trendprofiles import _calendar
+            values = {f['feature_id']:f['value'] for f in context['features']}
+            prefix = ticket['queue_type']
+            milliseconds = values.get(prefix+'_observed_milliseconds')
+            pairs = values.get(prefix+'_comparable_pairs')
+            cadence = [milliseconds,pairs] if milliseconds and pairs else None
+            calendar = _calendar(context['as_of'], context['as_of'])
+            key = (archive['archive_sha256'],
+                int(_time(context['as_of']).timestamp())//window,
+                tuple(calendar[k] for k in ('day_type','weekday','hour','month','season','holiday_name')),
+                tuple(cadence) if cadence else None)
+            profile = reference_cache.get(key) if reference_cache is not None else None
+            if profile is None:
+                profile = select_profile(archive, reference_for=context['as_of'],
+                    cadence=cadence, now=self.clock())
+                if reference_cache is not None:reference_cache[key] = profile
+            # Selection is derived now; prepare a fresh context from this same
+            # atomically copied frame after its creation, without a second GET.
+            context = context_from_history(frame['history'], queue_type=ticket['queue_type'],
+                now=self.clock(), window_seconds=window, max_local_age_seconds=360, ttl_seconds=60)
         if profile is not None:
             from .trendprofiles import enrich_context
             context, _ = enrich_context(profile, context, now=self.clock())

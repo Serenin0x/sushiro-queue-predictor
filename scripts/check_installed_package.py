@@ -196,11 +196,27 @@ def check_trend_profiles_install():
             assert result['trend_score']['reference_days'] == 2
             assert all(p.stat().st_mode & 0o777 == 0o600 for p in (profile, scored))
             assert str(root) not in out.getvalue() and not sockets.call_count
+            archived = root/'archive.json'; selected = root/'selected.json'; updated = root/'archive-score.json'
+            with patch('sushiwait.trendarchive._now', return_value=base):
+                assert main(['trend-archive-add', '--profile-file', str(profile), '--output', str(archived)]) == 0
+                assert main(['trend-archive-select', '--archive-file', str(archived), '--reference-for', base.isoformat(),
+                    '--output', str(selected)]) == 0
+                assert main(['trend-score', '--profile-file', str(selected), '--context-file', str(input_file),
+                    '--output', str(updated)]) == 0
+            subset = json.loads(selected.read_bytes()); archive_score = json.loads(updated.read_bytes())
+            assert subset['trend_profile_schema_version'] == 2 and len(subset['samples']) == 8
+            assert archive_score['trend_score']['rank_lower_ppm'] == 1000000
+            assert all(p.stat().st_mode & 0o777 == 0o600 for p in (archived, selected, updated))
+            assert str(root) not in out.getvalue() and not sockets.call_count
         assert before == db.read_bytes()
     print(json.dumps({'installed_trend_profiles_ok': True, 'actual_trend_cli_modes': 2,
         'synthetic_reference_windows': 8, 'calendar_distinct_days': 2, 'ranks_applied_numerically': True,
         'private_source_unchanged': True, 'socket_calls': 0, 'provider_calls': 0,
         'historical_availability_verified': False, 'true_no_show_rate': None, 'eta_available': False}))
+    print(json.dumps({'installed_trend_archive_ok': True, 'actual_archive_cli_modes': 2,
+        'selected_profile_schema_version': 2, 'complete_source_windows': 8, 'selected_windows': 8,
+        'numeric_rank_applied': True, 'source_database_unchanged': True,
+        'socket_calls': 0, 'provider_calls': 0, 'eta_available': False}))
 
 
 def check_tracker_loop_install():
@@ -433,7 +449,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')

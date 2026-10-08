@@ -771,6 +771,7 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument('--budget-file')
     loop.add_argument('--key-file')
     loop.add_argument('--trend-profile-file', action='append')
+    loop.add_argument('--trend-archive-file', action='append')
     trend = commands.add_parser('trend-profile', help='从已封存门店观测建立日期/时段周转参考；不是过号率或ETA')
     trend.add_argument('--remote-db', required=True)
     trend.add_argument('--store-id', required=True)
@@ -789,6 +790,19 @@ def build_parser() -> argparse.ArgumentParser:
     trend.add_argument('--output', required=True)
     trend.add_argument('--minimum-windows', type=int, default=8)
     trend.add_argument('--minimum-days', type=int, default=2)
+    archive = commands.add_parser('trend-archive-add', help='汇入明确封存参考，保存新私有长期档案，不替换旧资料')
+    archive.add_argument('--profile-file', action='append', required=True)
+    archive.add_argument('--archive-file')
+    archive.add_argument('--output', required=True)
+    archive = commands.add_parser('trend-archive-select', help='从完整长期参考选择相似日期窗口，不查询上游或输出等待时间')
+    archive.add_argument('--archive-file', required=True)
+    archive.add_argument('--reference-for', required=True)
+    archive.add_argument('--cadence-ms', type=int, default=300000)
+    archive.add_argument('--maximum-windows', type=int, default=96)
+    archive.add_argument('--maximum-per-day', type=int, default=8)
+    archive.add_argument('--minimum-windows', type=int, default=8)
+    archive.add_argument('--minimum-days', type=int, default=2)
+    archive.add_argument('--output', required=True)
     report = commands.add_parser("report", help="查看本地采样数量、失败数和时间范围")
     report.add_argument("--db", default=DEFAULT_DB)
     task_report = commands.add_parser("task-status", help="只读私有采集任务的安全摘要；不查门店或凭证")
@@ -1164,6 +1178,28 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as error:
                 emit({'ok':False,'error_code':getattr(error,'error_code','trend_profile_operation_failed'),
                     'committed':getattr(error,'committed',False),'eta_available':False,'network_performed':False}); return 1
+        if args.command in ('trend-archive-add', 'trend-archive-select'):
+            try:
+                from . import trendarchive as archive_ops
+                from . import trendprofiles as archive_profiles
+                if args.command == 'trend-archive-add' and not 1 <= len(args.profile_file) <= 16:
+                    raise ValueError
+                previous = archive_ops.read_archive(args.archive_file) if args.archive_file else None
+                if args.command == 'trend-archive-add':
+                    profiles = [archive_profiles.read_profile(path) for path in args.profile_file]
+                    value = archive_ops.append_profiles(profiles, archive=previous)
+                    result = archive_ops.write_archive(value, args.output)
+                else:
+                    value = archive_ops.select_profile(previous, reference_for=args.reference_for,
+                        cadence=[args.cadence_ms,1], maximum_windows=args.maximum_windows,
+                        maximum_per_day=args.maximum_per_day, minimum_windows=args.minimum_windows,
+                        minimum_days=args.minimum_days)
+                    result = archive_profiles.write_profile(value, args.output)
+                emit({'ok':True, **result});return 0
+            except Exception as error:
+                emit({'ok':False,'error_code':getattr(error,'error_code','trend_archive_operation_failed'),
+                    'committed':getattr(error,'committed',False),'eta_available':False,
+                    'network_performed':False});return 1
         if args.command == 'ticket-track-run':
             from .trackerloop import TrackingCoordinator, RemoteProjectionReader, TrackerLoopError, run_tracking
             coordinator = None
@@ -1181,7 +1217,7 @@ def main(argv: list[str] | None = None) -> int:
                     model_version=args.model_version, ai_blend_ppm=args.ai_blend_ppm,
                     plan_output=args.plan_output, plan_series_id=args.plan_series_id,
                     allow_paid_request=args.allow_paid_request, budget_file=args.budget_file, key_file=args.key_file,
-                    trend_profile_files=args.trend_profile_file)
+                    trend_profile_files=args.trend_profile_file, trend_archive_files=args.trend_archive_file)
                 if args.prepare_plans_only:
                     result = coordinator.publish_demands()
                     emit({'ok': True, 'prepared_plan_revision': result['revision'], **coordinator.summary()})

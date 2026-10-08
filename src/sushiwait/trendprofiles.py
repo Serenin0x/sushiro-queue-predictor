@@ -26,6 +26,14 @@ MAX_WINDOWS = 96
 _FIELDS = {'trend_profile_schema_version', 'policy', 'source', 'store_id', 'created_at',
     'history_cutoff', 'window_seconds', 'max_gap_seconds', 'minimum_pairs',
     'minimum_coverage_ppm', 'samples', 'profile_sha256', 'availability_basis'}
+_GROUPS = (('day_type_weekday_hour_month', ('day_type','weekday','hour','month')),
+    ('day_type_weekday_hour_season', ('day_type','weekday','hour','season')),
+    ('day_type_hour_season', ('day_type','hour','season')),
+    ('day_type_hour', ('day_type','hour')), ('day_type', ('day_type',)))
+_SELECTION = {'policy','archive_sha256','archive_revision','archive_imports_known',
+    'archive_rows_known','reference_for','cadence','matched_group','matching_windows',
+    'matching_days','selected_windows','selected_days','maximum_windows','maximum_per_day',
+    'minimum_windows','minimum_days'}
 
 
 class TrendProfileError(ValueError):
@@ -50,8 +58,9 @@ def _digest(profile):
 def validate_profile(value, *, now=None):
     try:
         now = _now() if now is None else now
-        if (type(value) is not dict or set(value) != _FIELDS
-                or not _int(value['trend_profile_schema_version'], 1, 1)
+        if (type(value) is not dict or set(value) != _FIELDS|(
+                    {'selection'} if value.get('trend_profile_schema_version') == 2 else set())
+                or not _int(value['trend_profile_schema_version'], 1, 2)
                 or value['policy'] != POLICY or value['source'] != SOURCE
                 or value['availability_basis'] not in ('local_first_receipt', 'sealed_response_reconstruction')
                 or not _int(value['window_seconds'], 120, 3600)
@@ -78,11 +87,61 @@ def validate_profile(value, *, now=None):
                     or any(not _int(v, 0, 2**31-1) for v in row[3:])):
                 raise ValueError
             previous = at
+        if value['trend_profile_schema_version'] == 2:
+            _validate_selection(value)
         if value['profile_sha256'] != _digest(value) or len(_canonical(value).encode()) > 16_384:
             raise ValueError
         return deepcopy(value)
     except Exception:
         raise TrendProfileError() from None
+
+
+def _validate_selection(value):
+    meta = value['selection']
+    if (type(meta) is not dict or set(meta) != _SELECTION
+            or meta['policy'] != 'complete_archive_date_balanced_v1'
+            or type(meta['archive_sha256']) is not str or len(meta['archive_sha256']) != 64
+            or any(c not in '0123456789abcdef' for c in meta['archive_sha256'])
+            or not _int(meta['archive_revision'], 1, 2**31-1)
+            or not _int(meta['archive_imports_known'], 0, 512)
+            or not _int(meta['archive_rows_known'], 0, 24576)
+            or _time(meta['reference_for']) != _time(value['history_cutoff'])
+            or not _int(meta['maximum_windows'], 2, MAX_WINDOWS)
+            or not _int(meta['maximum_per_day'], 1, MAX_WINDOWS)
+            or not _int(meta['minimum_windows'], 2, meta['maximum_windows'])
+            or not _int(meta['minimum_days'], 1, meta['maximum_windows'])
+            or not _int(meta['matching_windows'], 0, meta['archive_rows_known'])
+            or not _int(meta['matching_days'], 0, meta['matching_windows'])
+            or not _int(meta['selected_windows'], 0, meta['maximum_windows'])
+            or meta['selected_windows'] != len(value['samples'])
+            or not _int(meta['selected_days'], 0, meta['selected_windows'])):
+        raise ValueError
+    cadence = meta['cadence']
+    if cadence is not None and (type(cadence) is not list or len(cadence) != 2
+            or not _int(cadence[0], 1, value['window_seconds']*1000)
+            or not _int(cadence[1], 1, 10000)):
+        raise ValueError
+    counts = {}
+    at = _time(meta['reference_for'])
+    current = _calendar(at.isoformat(), value['created_at'])
+    keys = dict(_GROUPS).get(meta['matched_group'])
+    for row in value['samples']:
+        cal = _calendar(row[0], value['created_at'])
+        counts[cal['date']] = counts.get(cal['date'], 0)+1
+        if (keys is None or cadence is None or current['day_type'] == 'unknown'
+                or _time(row[0]) > at-timedelta(seconds=value['window_seconds'])
+                or cal['holiday_name'] != current['holiday_name']
+                or any(current[key] is None or cal[key] != current[key] for key in keys)
+                or not Fraction(4,5) <= Fraction(row[2],row[1])/Fraction(*cadence) <= Fraction(5,4)):
+            raise ValueError
+    if (len(counts) != meta['selected_days'] or any(n>meta['maximum_per_day'] for n in counts.values())
+            or meta['matching_windows'] < meta['selected_windows']
+            or meta['matching_days'] < meta['selected_days']
+            or keys is None and (meta['matched_group'] is not None or meta['selected_windows']
+                or meta['matching_windows'] or meta['matching_days'])
+            or keys is not None and (meta['selected_windows'] < meta['minimum_windows']
+                or meta['selected_days'] < meta['minimum_days'])):
+        raise ValueError
 
 
 def read_profile(path, *, now=None):
@@ -214,15 +273,18 @@ def score_context(profile, context, *, now=None, minimum_windows=8, minimum_days
         current = _calendar(context['as_of'], context['as_of'])
         if current['day_type'] == 'unknown':
             return {**result, 'unavailable_reason': 'calendar_type_unknown'}
+        if profile['trend_profile_schema_version'] == 2:
+            selection = profile['selection']
+            keys = dict(_GROUPS).get(selection['matched_group'])
+            target = _calendar(selection['reference_for'], context['as_of'])
+            if keys is not None and (target['holiday_name'] != current['holiday_name']
+                    or any(target[key] != current[key] for key in keys)):
+                return {**result, 'unavailable_reason': 'reference_target_changed'}
         start = _time(context['as_of'])-timedelta(seconds=context['window_seconds'])
         cadence = Fraction(duration, pairs)
         rows = [(row, _calendar(row[0], context['as_of'])) for row in profile['samples']
             if _time(row[0]) <= start and Fraction(4,5) <= Fraction(row[2],row[1])/cadence <= Fraction(5,4)]
-        groups = [('day_type_weekday_hour_month', ('day_type','weekday','hour','month')),
-            ('day_type_weekday_hour_season', ('day_type','weekday','hour','season')),
-            ('day_type_hour_season', ('day_type','hour','season')),
-            ('day_type_hour', ('day_type','hour')), ('day_type', ('day_type',))]
-        for name, keys in groups:
+        for name, keys in _GROUPS:
             selected = [(row, calendar) for row, calendar in rows
                 if calendar['holiday_name'] == current['holiday_name']
                 and all(current[key] is not None and calendar[key] == current[key] for key in keys)]
