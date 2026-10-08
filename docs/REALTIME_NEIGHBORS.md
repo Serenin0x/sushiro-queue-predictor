@@ -71,3 +71,5 @@ sushiwait realtime-fusion-research \
 新模型必须与纯历史、历史加实时、历史加实时加AI在相同时间切分上比较。同一episode全部更新一起划分，不能随机拆行使同一顾客同时进入训练与测试。时间和分组评估问题参考[官方交叉验证说明](https://scikit-learn.org/stable/modules/cross_validation.html)与[TimeSeriesSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html)；现有库的首次接收仍需另外约束，不能直接套工具类后宣布消除泄漏。
 
 本轮尚无新的时间顺序真实回测、误差校准、可靠位置、真实快慢情景或模型选择收益。原理想时间全网格、未来实时情景预测、60／30秒防过号、送达提醒、产品页面、全国与正式服务器继续完整目标，没有因这个研究基线而删除。
+
+rc54新增[同案例时间回测](REALTIME_BACKTEST.md)：保持保存历史来源与停采状态，由独立回放路径比较历史／实时／融合；实时默认路径继续拒绝保存历史，没有打开活库或调用供应商。真实结果与实际AI收益仍待校准。

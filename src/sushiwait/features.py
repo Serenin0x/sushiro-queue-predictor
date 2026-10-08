@@ -167,6 +167,8 @@ def _queue_features(history, *, store_id, at, window_seconds, max_gap_seconds):
         'queue_response_age_seconds': queue['last_success_response_age_seconds'],
         'count_availability': count['availability'],
         'count_response_age_seconds': count['last_success_response_age_seconds'],
+        'queue_response_counts': queue['response_counts'],
+        'count_response_counts': count['response_counts'],
         'display_sizes': {key: {'array_length': len(queue_payload['queues'][key]),
             'distinct_labels': len(set(queue_payload['queues'][key]))} for key in QUEUE_NAMES}
             if queue_payload is not None else None,

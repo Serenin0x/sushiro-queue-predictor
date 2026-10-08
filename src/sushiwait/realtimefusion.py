@@ -65,9 +65,12 @@ def _historical_vector(row, queue, window):
     return vector, covered/pairs, count is not None
 
 
-def _current_vector(plan, context, *, now):
+def _current_vector(plan, context, *, now, sealed_replay=False):
     at = _time(context['as_of']);received = context['latest_queue_received_at']
-    if (not context['collector_running'] or context['latest_queue_origin'] != 'worker_commit'
+    provenance_ok = (not context['collector_running'] and context['latest_queue_origin'] == 'saved_history'
+        and now == at) if sealed_replay else (
+        context['collector_running'] and context['latest_queue_origin'] == 'worker_commit')
+    if (not provenance_ok
             or received is None or now >= _time(context['expires_at'])
             or (now-_time(received)).total_seconds() > context['max_local_age_seconds']):
         return None
@@ -106,7 +109,7 @@ def build_realtime_fusion(*, source, reviews, remote, plan, feature_plan, contex
         neighbors=20, minimum_episodes=8, maximum_elapsed_difference_seconds=300,
         maximum_standardized_distance=3, realtime_weight_ppm=500_000,
         model_version=MODEL, ai_blend_ppm=0, max_revisions=10_000,
-        max_observations=10_000, now=None):
+        max_observations=10_000, now=None, sealed_replay=False):
     """Fit/query independent-episode empirical neighbors plus static history.
 
     Data preparation audits complete sealed sources. Only a completed episode
@@ -118,7 +121,8 @@ def build_realtime_fusion(*, source, reviews, remote, plan, feature_plan, contex
     try:
         plan = validate_plan(plan, now=clock)
         feature_plan = validate_feature_plan(feature_plan, now=clock)
-        if (plan['mode'] not in ('new_join','remaining')
+        if (type(sealed_replay) is not bool or sealed_replay and ai_blend_ppm != 0
+                or plan['mode'] not in ('new_join','remaining')
                 or any(type(v) is not int for v in (neighbors, minimum_episodes,
                     maximum_elapsed_difference_seconds, maximum_standardized_distance, realtime_weight_ppm))
                 or not 1 <= minimum_episodes <= neighbors <= 100
@@ -133,9 +137,13 @@ def build_realtime_fusion(*, source, reviews, remote, plan, feature_plan, contex
             model_version=model_version, ai_blend_ppm=ai_blend_ppm, max_revisions=max_revisions)
         # A history miss still validates and canonicalizes the public context.
         context = history['public_context']
+        if sealed_replay and (context['collector_running']
+                or context['latest_queue_origin'] not in ('saved_history','unavailable')
+                or _time(context['as_of']) != clock):
+            raise RealtimeFusionError('realtime_model_scope_mismatch')
         dataset = build_feature_dataset(source=source, reviews=reviews, remote=remote,
             plan=feature_plan, max_revisions=max_revisions, max_observations=max_observations)
-        current = _current_vector(plan,context,now=clock)
+        current = _current_vector(plan,context,now=clock,sealed_replay=sealed_replay)
         queue = 'storeQueue' if plan['queue_type']=='ordinary' else 'reservationQueue'
         eligible = []
         if current is not None:
@@ -223,6 +231,7 @@ def build_realtime_fusion(*, source, reviews, remote, plan, feature_plan, contex
             'scale_method':'episode_mad_then_range_then_elapsed_band_or_unit',
             'survival_basis':'definite_historical_survival_after_age_transport',
             'nearby_landmark_age_transport_applied':plan['mode']=='remaining' and bool(selected),
+            'current_context_basis':'cutoff_known_sealed_replay' if sealed_replay else 'live_writer_projection',
             'landmark_covariates_at_exact_target_elapsed_verified':False,
             'neighbor_ranking_uses_outcome_values':False,'ties_included':True,
             'options':{'neighbors':neighbors,'minimum_episodes':minimum_episodes,
@@ -230,6 +239,7 @@ def build_realtime_fusion(*, source, reviews, remote, plan, feature_plan, contex
                 'maximum_standardized_distance':maximum_standardized_distance,'realtime_weight_ppm':realtime_weight_ppm},
             'model_input_sha256':hashlib.sha256(_canonical({'policy':POLICY,'plan':plan,
                 'context':context,'model_version':model_version,'ai_blend_ppm':ai_blend_ppm,
+                'sealed_replay':sealed_replay,
                 'options':[neighbors,minimum_episodes,maximum_elapsed_difference_seconds,
                     maximum_standardized_distance,realtime_weight_ppm],
                 'selected':selected,'scales':[[s.numerator,s.denominator] for s in scales]}).encode()).hexdigest(),

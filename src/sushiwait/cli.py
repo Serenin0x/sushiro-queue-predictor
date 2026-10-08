@@ -728,6 +728,11 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--model-version", default="reviewed-history-intervals-v1")
     history.add_argument("--ai-blend-ppm", type=int, default=0)
     history.add_argument("--max-revisions", type=int, default=10000)
+    replay = commands.add_parser('realtime-backtest', help='按历史接收时点公平比较历史、实时和融合误差；不调用供应商')
+    for field in ('source-db','reviews-db','remote-db','input','output'):
+        replay.add_argument('--'+field, required=True)
+    replay.add_argument('--max-revisions', type=int, default=10000)
+    replay.add_argument('--max-observations', type=int, default=10000)
     realtime = commands.add_parser('realtime-fusion-research', help='独立经历的实时邻域剩余分布与历史融合；未校准ETA')
     for field in ('source-db','reviews-db','remote-db','input','feature-plan','context-file','output'):
         realtime.add_argument('--'+field, required=True)
@@ -1309,6 +1314,28 @@ def main(argv: list[str] | None = None) -> int:
                     'committed': getattr(error, 'committed', False), 'durability_confirmed': False,
                     'network_performed': False, 'provider_called': False, 'business_writes': 0,
                     'notification_sent': False, 'verified_training_labels': 0, 'eta_available': False})
+                return 1
+        if args.command == 'realtime-backtest':
+            from .realtimebacktest import RealtimeBacktestError, read_plan as read_replay_plan, write_realtime_backtest
+            from .remote import RemoteStore
+            try:
+                paths = [Path(p).resolve() for p in (args.source_db,args.reviews_db,args.remote_db,args.input,args.output)]
+                if (len(set(paths))!=5 or len({p.parent for p in paths[:3]})!=3
+                        or paths[-1].parent in {p.parent for p in paths[:3]}):
+                    raise RealtimeBacktestError('realtime_backtest_invalid_input')
+                plan = read_replay_plan(args.input)
+                with OutcomeIntakeStore(args.source_db,read_only=True) as source, \
+                        OutcomeReviewStore(args.reviews_db,read_only=True) as reviews, \
+                        RemoteStore(args.remote_db,read_only=True) as remote:
+                    result = write_realtime_backtest(source=source,reviews=reviews,remote=remote,
+                        plan=plan,destination=args.output,max_revisions=args.max_revisions,max_observations=args.max_observations)
+                durable = result['durability_confirmed']
+                emit({'ok':durable,**result,**({} if durable else {'error_code':'realtime_backtest_durability_unconfirmed'})})
+                return 0 if durable else 1
+            except Exception as error:
+                emit({'ok':False,'error_code':getattr(error,'error_code','realtime_backtest_failed'),
+                    'committed':getattr(error,'committed',False),'durability_confirmed':False,
+                    'provider_called':False,'network_performed':False,'verified_training_labels':0,'eta_available':False})
                 return 1
         if args.command == 'realtime-fusion-research':
             from .realtimefusion import RealtimeFusionError, write_realtime_fusion

@@ -56,3 +56,5 @@ sushiwait outcome-feature-export \
 后续要先取得正常真实取号和叫号证据、认证字段及记录实际预测输入，再按时间和独立排队过程切分训练/验证/校准资料。分位数模型、日期分组误差、LLM 外部事实作用和防过号效果均须独立回测。这份文件准备研究输入，不能代替这些验收。
 
 相关契约见 [数据规范](DATASET_DESIGN.md)、[首次接收](OUTCOME_INTAKE.md)、[审核声明](OUTCOME_REVIEWS.md)、[匿名首次接收](ANONYMOUS_INTAKE.md)、[展示变化](ANONYMOUS_SIGNALS.md)及[完整交接](PROJECT_HANDOVER.md)。
+
+rc54研究行保留窗口内队列和数量的响应分类计数，用于[实时回测](REALTIME_BACKTEST.md)识别窗口失败，不将后来恢复成功掩盖为完整无失败窗口。诊断中的扫描总量仍不进入模型。

@@ -516,6 +516,75 @@ def check_realtime_models_install():
 
 
 
+def check_realtime_backtest_install():
+    from datetime import datetime,timedelta,timezone
+    from dataclasses import asdict
+    from unittest.mock import patch
+    from uuid import uuid4
+    from sushiwait.intake import OutcomeIntakeStore
+    from sushiwait.reviews import OutcomeReviewStore,draft_review
+    from sushiwait.remote import RemoteStore,RemoteResult,QUEUE_NAMES,SOURCE
+    import contextlib,io
+    with tempfile.TemporaryDirectory(prefix='sushiwait-installed-replay-') as tmp:
+        root=Path(tmp).resolve();root.chmod(0o700)
+        for name in ('source','reviews','remote','output'):(root/name).mkdir(mode=0o700)
+        src=root/'source/source.sqlite3';rev=root/'reviews/reviews.sqlite3';db=root/'remote/remote.sqlite3'
+        base=(datetime.now(timezone.utc)-timedelta(days=2)).replace(hour=4,minute=30,second=0,microsecond=0)
+        def stamp(t):return (base+timedelta(seconds=t)).isoformat()
+        for index,(issued,wait,receipt) in enumerate(((320,900,1600),(330,900,1600),(340,900,1600),
+                (620,120,1600),(630,120,1600),(2000,120,2250))):
+            events=[]
+            for name,lo,hi in (('issued',issued,issued),('called',issued+wait,issued+wait+60)):
+                events.append({'event_id':str(uuid4()),'event_type':name,'event_time_lower':stamp(lo),
+                    'event_time_upper':stamp(hi),'observed_at':stamp(hi),'evidence_kind':'synthetic','verification_status':'unverified'})
+            ep={'schema_version':1,'episode_id':str(uuid4()),'revision':1,'supersedes_revision':None,
+                'store_id':'900001','api_profile':'miniapp_gateway','data_origin':'synthetic',
+                'queue_type':'ordinary','party_size':2,'table_type':'unknown','recorded_at':stamp(issued+wait+61),'events':events}
+            with OutcomeIntakeStore(src) as source,patch('sushiwait.intake._clock',return_value=base+timedelta(seconds=receipt)):
+                source.append(ep)
+            draft=root/'output'/('review-'+str(index)+'.json')
+            with OutcomeIntakeStore(src,read_only=True) as source,patch('sushiwait.reviews._clock',return_value=base+timedelta(seconds=receipt+1)):
+                draft_review(source,ep,draft)
+            review=json.loads(draft.read_bytes());review.update(decision='accept',reason_code='confirmed_call_interval',
+                issued_time_bounds_checked=True,called_time_bounds_checked=True,store_and_queue_checked=True)
+            with OutcomeIntakeStore(src,read_only=True) as source,OutcomeReviewStore(rev) as reviews, \
+                    patch('sushiwait.reviews._clock',return_value=base+timedelta(seconds=receipt+2)):
+                reviews.append(review,source=source)
+        with RemoteStore(db) as remote:
+            for fast,times in ((False,(200,230,260,290,310,340,370)),
+                    (True,(500,530,560,590,610,640,670)),(True,(1880,1910,1940,1970,1990,2020,2050))):
+                for index,t in enumerate(times):
+                    queues={k:[] for k in QUEUE_NAMES};queues['storeQueue']=[str(index) if fast else '999','888']
+                    q=RemoteResult('groupqueues',True,True,{'queues':queues},None,200,stamp(t),stamp(t),0)
+                    c=RemoteResult('storequeuecount',True,True,{'raw_count':10,'unit':'unknown'},None,200,stamp(t),stamp(t),0)
+                    record={'schema_version':1,'source':SOURCE,'data_origin':'live','requested_store_id':'900001',
+                        'response_store_identity_verified':False,'ok':True,'queries':{'groupqueues':asdict(q),'storequeuecount':asdict(c)},
+                        'atomic_snapshot':False,'source_update_time_verified':False,'source_freshness':'unknown',
+                        'eta_available':False,'complete_queue_cursor_available':False,'verified_training_labels':0}
+                    with patch('sushiwait.remoteintake._clock',return_value=base+timedelta(seconds=t+1)):remote.append(record)
+        plan={'schema_version':1,'as_of':stamp(2500),'data_origin':'synthetic','queue_data_origin':'synthetic',
+            'api_profile':'miniapp_gateway','store_id':'900001','elapsed_seconds':[0,30],'max_cases':100,
+            'window_seconds':120,'max_gap_seconds':90,'minimum_samples':1,'neighbors':1,'minimum_episodes':1,
+            'maximum_elapsed_difference_seconds':300,'maximum_standardized_distance':3,'realtime_weight_ppm':500000}
+        input_path=root/'output/plan.json';input_path.write_text(json.dumps(plan));input_path.chmod(0o600)
+        output=root/'output/replay.json';before=[p.read_bytes() for p in (src,rev,db)]
+        with patch('socket.socket',side_effect=AssertionError('network')) as sockets,contextlib.redirect_stdout(io.StringIO()) as out:
+            assert main(['realtime-backtest','--source-db',str(src),'--reviews-db',str(rev),'--remote-db',str(db),
+                '--input',str(input_path),'--output',str(output)])==0
+        safe=json.loads(out.getvalue());result=json.loads(output.read_bytes())
+        assert safe['paired_comparison_available'] and result['attempted_cases']==12
+        assert sum(e['paired_against_history']['realtime_only']['paired_cases'] for e in result['evaluations_by_elapsed_seconds'])==2
+        assert all(not c['context_collector_running'] for c in result['cases'])
+        assert sum(e['paired_against_history']['realtime_only']['definitely_lower_absolute_error_cases'] for e in result['evaluations_by_elapsed_seconds'])==2
+        assert before==[p.read_bytes() for p in (src,rev,db)] and not sockets.call_count
+        assert output.stat().st_mode&0o777==0o600 and not result['ai_variant_evaluated'] and not result['eta_available']
+    print(json.dumps({'installed_realtime_backtest_ok':True,'actual_cli_modes':1,'actual_private_sources':3,
+        'independent_synthetic_episodes':6,'reconstructed_prediction_cases':12,'elapsed_groups':2,
+        'paired_cases':2,'numeric_interval_errors_scored':True,'cold_start_cases_retained':True,
+        'saved_history_not_claimed_running':True,'source_databases_unchanged':True,
+        'socket_calls':0,'provider_calls':0,'verified_training_labels':0,'eta_available':False}))
+
+
 def check() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
@@ -535,10 +604,11 @@ def check() -> None:
     check_tracker_loop_install()
     check_trend_profiles_install()
     check_realtime_models_install()
+    check_realtime_backtest_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("realtime-backtest", "realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')
