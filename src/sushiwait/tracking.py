@@ -584,6 +584,105 @@ def calculate_prediction(preparation, *, source=None, reviews=None, fusion_plan=
         'output_requires_private_handling': True}
 
 
+def _validate_prediction(preparation, result, *, clock):
+    """Recheck a frozen result without using later training observations."""
+    ticket, latest = preparation['ticket'], preparation['receipt']
+    fields = {'policy', 'tracking_version', 'ticket_sha256', 'expected_receipt_sha256',
+        'observation_sha256', 'computed_at', 'research_prediction_available', 'unavailable_reason',
+        'display', 'history', 'fusion_plan', 'fusion', 'monitoring_policy', 'base_interval_seconds',
+        'polling_request', 'research_call_time_envelopes', 'earliest_call_estimate_verified',
+        'survival_basis', 'number_used_as_verified_position', 'provider_called', 'notification_sent',
+        'scheduler_applied', 'business_writes', 'verified_training_labels', 'eta_available',
+        'output_requires_private_handling'}
+    optional = {'realtime_research', 'provider_adapter_summary'}
+    if (type(result) is not dict or not fields <= set(result) or set(result)-fields-optional
+            or any(type(result[k]) is not dict for k in optional if k in result)
+            or result['earliest_call_estimate_verified'] is not False
+            or result['number_used_as_verified_position'] is not False
+            or result['output_requires_private_handling'] is not True
+            or result['survival_basis'] != 'ongoing_caller_declaration_not_verified_by_public_feed'):
+        raise TrackingError('tracking_invalid_prediction')
+    if (type(result) is not dict or result.get('tracking_version') != latest['tracking_version']
+            or type(result['tracking_version']) is not int or result.get('ticket_sha256') != _hash(ticket)
+            or result.get('expected_receipt_sha256') != _hash(latest)
+            or result.get('observation_sha256') != latest['observation_sha256']
+            or not _time(latest['observation']['as_of']) <= _time(result['computed_at']) <= clock
+            or result.get('eta_available') is not False or result.get('provider_called') is not False
+            or result.get('display') != latest['display'] or result.get('policy') != POLICY
+            or type(result.get('research_prediction_available')) is not bool
+            or result.get('notification_sent') is not False or result.get('scheduler_applied') is not False
+            or type(result.get('business_writes')) is not int or result['business_writes'] != 0
+            or type(result.get('verified_training_labels')) is not int or result['verified_training_labels'] != 0
+            or not _integer(result.get('base_interval_seconds'), 60, 3600)):
+        raise TrackingError('tracking_invalid_prediction')
+    if result['research_prediction_available']:
+        plan = _bound_fusion(preparation, result['fusion_plan'], now=_time(result['computed_at']))
+        accepted = result['fusion'].get('advice')
+        if accepted is not None:
+            request = result['fusion']['public_request']
+            accepted = {**accepted, 'schema_version': 1,
+                'public_input_sha256': request['public_input_sha256'],
+                'observation_revision': request['context']['observation_revision'],
+                'model_version': request['model_version']}
+        rebuilt = fuse(plan, advice=accepted, now=_time(result['computed_at']))
+        for key in ('local_input_sha256', 'public_request', 'advice_accepted', 'ai_numerical_influence_applied',
+                    'effective_weight_numerators', 'wait_quantile_envelopes_us', 'plan', 'advice'):
+            if result['fusion'].get(key) != rebuilt[key]:
+                raise TrackingError('tracking_invalid_prediction')
+        if rebuilt['advice_accepted'] and clock >= _time(rebuilt['advice']['expires_at']):
+            raise TrackingError('tracking_superseded')
+        call_times = {key: {bound: _utc(_time(latest['observation']['as_of'])+timedelta(microseconds=value))
+                       if value is not None else None for bound, value in limits.items()}
+                      for key, limits in rebuilt['wait_quantile_envelopes_us'].items()}
+        if result.get('research_call_time_envelopes') != call_times:
+            raise TrackingError('tracking_invalid_prediction')
+    elif result.get('fusion') is not None or result.get('fusion_plan') is not None:
+        raise TrackingError('tracking_invalid_prediction')
+    elif result.get('research_call_time_envelopes') is not None or result.get('unavailable_reason') not in (
+            'issued_time_unknown', 'current_display_evidence_unavailable', 'public_context_expired',
+            'elapsed_wait_outside_model_support', 'history_not_supplied', 'insufficient_matching_history'):
+        raise TrackingError('tracking_invalid_prediction')
+    expected_polling = None
+    if ticket['desired_arrival_at'] is not None:
+        early = result['research_call_time_envelopes']['p10']['lower_us'] if result['research_prediction_available'] else None
+        expected_polling = polling_policy(desired_arrival_at=ticket['desired_arrival_at'],
+            call_offset_minutes=ticket['call_offset_minutes'], as_of=result['computed_at'],
+            earliest_call_at=early, base_interval=result['base_interval_seconds'])
+    if result.get('monitoring_policy') != expected_polling:
+        raise TrackingError('tracking_invalid_prediction')
+    if result.get('polling_request') != _poll_request(latest['display'], expected_polling,
+            result['base_interval_seconds'], result['computed_at']):
+        raise TrackingError('tracking_invalid_prediction')
+    # Do not commit a once-valid numerical prediction after its context TTL.
+    if result['research_prediction_available'] and clock >= _time(latest['observation']['public_context']['expires_at']):
+        raise TrackingError('tracking_superseded')
+
+
+def _unpack_prediction(value, *, now):
+    """Legacy numerical records remain usable, but have no publication receipt."""
+    try:
+        if type(value) is not dict:
+            raise ValueError
+        if 'publication_receipt' not in value:
+            return value, None
+        result = {k:v for k,v in value.items() if k != 'publication_receipt'}
+        receipt = value['publication_receipt']
+        if (type(receipt) is not dict or set(receipt) != {'schema_version', 'policy',
+                'first_received_at', 'result_sha256', 'independent_time_attestation'}
+                or type(receipt['schema_version']) is not int or receipt['schema_version'] != 1
+                or receipt['policy'] != 'program_clock_before_atomic_publication_v1'
+                or receipt['independent_time_attestation'] is not False
+                or receipt['result_sha256'] != _hash(result)):
+            raise ValueError
+        received = _time(receipt['first_received_at'])
+        if (_utc(received) != receipt['first_received_at']
+                or not _time(result['computed_at']) <= received <= now):
+            raise ValueError
+        return result, receipt
+    except Exception:
+        raise TrackingError('tracking_invalid_ledger') from None
+
+
 def publish_prediction(*, directory, preparation, result, now=None):
     """The current-version compare and durable no-overwrite commit share a lock."""
     clock = _now() if now is None else now
@@ -597,67 +696,25 @@ def publish_prediction(*, directory, preparation, result, now=None):
                 or _hash(latest) != preparation['expected_receipt_sha256']
                 or latest != preparation['receipt']):
             raise TrackingError('tracking_superseded')
-        if (type(result) is not dict or result.get('tracking_version') != latest['tracking_version']
-                or type(result['tracking_version']) is not int or result.get('ticket_sha256') != _hash(ticket)
-                or result.get('expected_receipt_sha256') != _hash(latest)
-                or result.get('observation_sha256') != latest['observation_sha256']
-                or not _time(latest['observation']['as_of']) <= _time(result['computed_at']) <= clock
-                or result.get('eta_available') is not False or result.get('provider_called') is not False
-                or result.get('display') != latest['display'] or result.get('policy') != POLICY
-                or type(result.get('research_prediction_available')) is not bool
-                or result.get('notification_sent') is not False or result.get('scheduler_applied') is not False
-                or type(result.get('business_writes')) is not int or result['business_writes'] != 0
-                or type(result.get('verified_training_labels')) is not int or result['verified_training_labels'] != 0
-                or not _integer(result.get('base_interval_seconds'), 60, 3600)):
-            raise TrackingError('tracking_invalid_prediction')
-        if result['research_prediction_available']:
-            plan = _bound_fusion(preparation, result['fusion_plan'], now=_time(result['computed_at']))
-            accepted = result['fusion'].get('advice')
-            if accepted is not None:
-                request = result['fusion']['public_request']
-                accepted = {**accepted, 'schema_version': 1,
-                    'public_input_sha256': request['public_input_sha256'],
-                    'observation_revision': request['context']['observation_revision'],
-                    'model_version': request['model_version']}
-            rebuilt = fuse(plan, advice=accepted, now=_time(result['computed_at']))
-            for key in ('local_input_sha256', 'public_request', 'advice_accepted', 'ai_numerical_influence_applied',
-                        'effective_weight_numerators', 'wait_quantile_envelopes_us', 'plan', 'advice'):
-                if result['fusion'].get(key) != rebuilt[key]:
-                    raise TrackingError('tracking_invalid_prediction')
-            if rebuilt['advice_accepted'] and clock >= _time(rebuilt['advice']['expires_at']):
-                raise TrackingError('tracking_superseded')
-            call_times = {key: {bound: _utc(_time(latest['observation']['as_of'])+timedelta(microseconds=value))
-                           if value is not None else None for bound, value in limits.items()}
-                          for key, limits in rebuilt['wait_quantile_envelopes_us'].items()}
-            if result.get('research_call_time_envelopes') != call_times:
-                raise TrackingError('tracking_invalid_prediction')
-        elif result.get('fusion') is not None or result.get('fusion_plan') is not None:
-            raise TrackingError('tracking_invalid_prediction')
-        elif result.get('research_call_time_envelopes') is not None or result.get('unavailable_reason') not in (
-                'issued_time_unknown', 'current_display_evidence_unavailable', 'public_context_expired',
-                'elapsed_wait_outside_model_support', 'history_not_supplied', 'insufficient_matching_history'):
-            raise TrackingError('tracking_invalid_prediction')
-        expected_polling = None
-        if ticket['desired_arrival_at'] is not None:
-            early = result['research_call_time_envelopes']['p10']['lower_us'] if result['research_prediction_available'] else None
-            expected_polling = polling_policy(desired_arrival_at=ticket['desired_arrival_at'],
-                call_offset_minutes=ticket['call_offset_minutes'], as_of=result['computed_at'],
-                earliest_call_at=early, base_interval=result['base_interval_seconds'])
-        if result.get('monitoring_policy') != expected_polling:
-            raise TrackingError('tracking_invalid_prediction')
-        if result.get('polling_request') != _poll_request(latest['display'], expected_polling,
-                result['base_interval_seconds'], result['computed_at']):
-            raise TrackingError('tracking_invalid_prediction')
-        # Do not commit a once-valid numerical prediction after its context TTL.
-        if result['research_prediction_available'] and clock >= _time(latest['observation']['public_context']['expires_at']):
-            raise TrackingError('tracking_superseded')
+        _validate_prediction(preparation, result, clock=clock)
         name = f"prediction-{latest['tracking_version']:04d}.json"
         if name in os.listdir(session.fd):
-            old = session._read(name)
+            old, _ = _unpack_prediction(session._read(name), now=clock)
             if old == result:
                 return _safe_receipt(result, idempotent=True, durable=session._confirm_durable())
             raise TrackingError('tracking_prediction_conflict')
-        publication = session._write(name, result)
+        # Caller input cannot supply this receipt. The program assigns its clock
+        # while holding the same publication lock, immediately before one atomic
+        # file commit. This is not a signature or a post-fsync time attestation.
+        received = _now() if now is None else now
+        if received < clock or received >= _time(ticket['deadline_at']):
+            raise TrackingError('tracking_superseded')
+        _validate_prediction(preparation, result, clock=received)
+        stored = {**result, 'publication_receipt': {'schema_version': 1,
+            'policy': 'program_clock_before_atomic_publication_v1',
+            'first_received_at': _utc(received), 'result_sha256': _hash(result),
+            'independent_time_attestation': False}}
+        publication = session._write(name, stored)
         return _safe_receipt(result, durable=publication['durability_confirmed'])
 
 
@@ -690,7 +747,8 @@ def session_status(*, directory, now=None):
         present = bool(latest and f"prediction-{latest['tracking_version']:04d}.json" in os.listdir(session.fd))
         state = 'unavailable'
         if present:
-            prediction = session._read(f"prediction-{latest['tracking_version']:04d}.json")
+            prediction, _ = _unpack_prediction(
+                session._read(f"prediction-{latest['tracking_version']:04d}.json"), now=clock)
             if prediction.get('expected_receipt_sha256') != _hash(latest):
                 raise TrackingError('tracking_invalid_ledger')
             state = 'research_only' if prediction['research_prediction_available'] else 'unavailable'

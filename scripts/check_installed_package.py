@@ -585,6 +585,66 @@ def check_realtime_backtest_install():
         'socket_calls':0,'provider_calls':0,'verified_training_labels':0,'eta_available':False}))
 
 
+def check_monitor_hub_install():
+    """Start the installed hub CLI, read two local fixtures, end at its deadline."""
+    import http.client
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+    calls = []
+    def fixture(store, good):
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args): pass
+            def do_GET(self):
+                calls.append((store, self.path))
+                value = {'store_ids':[store], 'service_state':'running' if good else 'failed',
+                    'worker_alive':good, 'task':{'recorded_http_attempts':20 if good else 7},
+                    'network_performed_by_read':False,'eta_available':False} if self.path=='/api/v1/status' else {
+                    'requested_store_id':store,'network_performed_by_read':False,'eta_available':False}
+                raw=json.dumps(value).encode();self.send_response(200)
+                self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+        server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        thread=threading.Thread(target=server.serve_forever);thread.start()
+        return server,thread
+    fixtures=[fixture('900001',False),fixture('900002',True)]
+    child=None
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve();root.chmod(0o700)
+            config={'schema_version':1,'deadline_at':(datetime.now(timezone.utc)+timedelta(seconds=4)).isoformat(),
+                'workers':[{'endpoint':f'http://127.0.0.1:{server.server_address[1]}',
+                    'stores':{store:name}} for (server,_),store,name in zip(fixtures,['900001','900002'],['第一店','第二店'])]}
+            p=root/'hub.json';p.write_text(json.dumps(config));p.chmod(0o600)
+            child=subprocess.Popen([sys.executable,'-I','-m','sushiwait','collection-hub-serve',
+                '--config-file',str(p),'--port','0'],cwd=root,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            ready=json.loads(child.stdout.readline());assert ready['monitor_hub_ready'] and ready['stores']==2
+            port=int(ready['url'].split(':')[2].split('/')[0])
+            def get(path):
+                c=http.client.HTTPConnection('127.0.0.1',port,timeout=3)
+                try:
+                    c.request('GET',path);r=c.getresponse();raw=r.read();assert r.status==200
+                    return raw,r.headers
+                finally:c.close()
+            page,headers=get('/monitor');assert '观察 2 家门店'.encode() in page
+            js,_=get('/monitor.js');assert b'/status`:' in js
+            assert headers['Cache-Control']=='no-store' and "connect-src 'self'" in headers['Content-Security-Policy']
+            assert not calls
+            first=json.loads(get('/api/v1/status')[0]);second=json.loads(get('/api/v1/stores/900002/status')[0])
+            assert first['service_state']=='failed' and first['task']['recorded_http_attempts']==7
+            assert second['service_state']=='running' and second['task']['recorded_http_attempts']==20
+            assert first['store_ids']==['900001','900002'] and second['store_names']['900002']=='第二店'
+            assert json.loads(get('/api/v1/stores/900002/history')[0])['requested_store_id']=='900002'
+            assert len(calls)==3 and not second['collector_started_by_hub']
+            _,stderr=child.communicate(timeout=10)
+            assert child.returncode==0 and not stderr
+    finally:
+        if child is not None and child.poll() is None:child.terminate();child.communicate(timeout=5)
+        for server,thread in fixtures:server.shutdown();server.server_close();thread.join(5)
+    print(json.dumps({'installed_monitor_hub_ok':True,'actual_installed_cli_server':True,
+        'synthetic_local_workers':2,'local_projection_reads':3,'selected_worker_state_and_budget_preserved':True,
+        'static_asset_added_worker_reads':0,'deadline_exit_verified':True,'official_http_requests':0,
+        'provider_calls':0,'collector_starts':0,'eta_available':False}))
+
+
 def check() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
@@ -605,11 +665,14 @@ def check() -> None:
     check_trend_profiles_install()
     check_realtime_models_install()
     check_realtime_backtest_install()
+    check_monitor_hub_install()
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
             ("realtime-backtest", "realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
+    if 'collection-hub-serve' not in help_result.stdout:
+        raise SystemExit('installed_monitor_hub_command_missing')
     if 'monitor-plans-publish' not in help_result.stdout:
         raise SystemExit('installed_plan_updates_command_missing')
     bridge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",

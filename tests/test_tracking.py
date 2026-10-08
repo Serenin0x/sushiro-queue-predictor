@@ -349,6 +349,53 @@ class TrackingTests(unittest.TestCase):
             publish_prediction(directory=self.state, preparation=prep, result=result, now=BASE+timedelta(seconds=61))
         self.assertEqual(caught.exception.error_code, 'tracking_superseded')
 
+    def test_publication_clock_is_program_assigned_and_idempotence_keeps_first_receipt(self):
+        from sushiwait.tracking import _hash, _unpack_prediction
+        _, prep, at = self.observe(); value = self.prediction(prep, at)
+        first = BASE+timedelta(seconds=2)
+        with patch('sushiwait.tracking._now', return_value=first):
+            publish_prediction(directory=self.state, preparation=prep, result=value)
+        body = (self.state/'prediction-0001.json').read_bytes()
+        result, receipt = _unpack_prediction(json.loads(body), now=first)
+        self.assertEqual(result, value)
+        self.assertEqual(receipt['first_received_at'], _utc(first))
+        self.assertEqual(receipt['result_sha256'], _hash(value))
+        self.assertFalse(receipt['independent_time_attestation'])
+        publish_prediction(directory=self.state, preparation=prep, result=value, now=BASE+timedelta(seconds=3))
+        self.assertEqual((self.state/'prediction-0001.json').read_bytes(), body)
+        self.assertNotIn('publication_receipt', value)
+
+    def test_caller_publication_receipt_cannot_override_program_clock(self):
+        _, prep, at = self.observe(); value = self.prediction(prep, at)
+        value['publication_receipt'] = {'first_received_at': stamp(-100)}
+        with self.assertRaises(TrackingError):
+            publish_prediction(directory=self.state, preparation=prep, result=value, now=at)
+        self.assertFalse((self.state/'prediction-0001.json').exists())
+
+    def test_legacy_prediction_idempotence_does_not_backfill_publication_time(self):
+        from sushiwait.tracking import _unpack_prediction
+        _, prep, at = self.observe(); value = self.prediction(prep, at)
+        with TrackingSession(self.state) as session:
+            session._write('prediction-0001.json', value)
+        original = (self.state/'prediction-0001.json').read_bytes()
+        result = publish_prediction(directory=self.state, preparation=prep, result=value, now=at)
+        self.assertTrue(result['idempotent'])
+        self.assertEqual((self.state/'prediction-0001.json').read_bytes(), original)
+        self.assertIsNone(_unpack_prediction(json.loads(original), now=at)[1])
+
+    def test_altered_publication_receipt_or_result_is_rejected(self):
+        from sushiwait.tracking import _unpack_prediction
+        _, prep, at = self.observe(); value = self.prediction(prep, at)
+        publish_prediction(directory=self.state, preparation=prep, result=value, now=at)
+        original = json.loads((self.state/'prediction-0001.json').read_bytes())
+        for change in ('future', 'fake_digest', 'auth_claim', 'changed_result'):
+            bad = deepcopy(original)
+            if change == 'future': bad['publication_receipt']['first_received_at'] = stamp(500)
+            if change == 'fake_digest': bad['publication_receipt']['result_sha256'] = '0'*64
+            if change == 'auth_claim': bad['publication_receipt']['independent_time_attestation'] = True
+            if change == 'changed_result': bad['base_interval_seconds'] = 600
+            with self.assertRaises(TrackingError): _unpack_prediction(bad, now=at)
+
     def test_valid_advice_can_expire_before_context_and_block_publication(self):
         self.observe(0, labels=('10',)); _, prep, at = self.observe(30, labels=('11',))
         plan = self.candidate(prep, fast=True); request = public_request(plan, now=at)

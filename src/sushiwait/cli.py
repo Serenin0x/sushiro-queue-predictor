@@ -536,6 +536,9 @@ def build_parser() -> argparse.ArgumentParser:
             campaign.add_argument("--listen-host", choices=("127.0.0.1", "0.0.0.0"), default="127.0.0.1")
     campaign_status = commands.add_parser("remote-campaign-status", help="只读多日采集检查点；不打开数据库、不联网")
     campaign_status.add_argument("--root", required=True)
+    hub = commands.add_parser('collection-hub-serve', help='把多个本机采集批次汇入同一观察台；不查询寿司郎、不启动采集')
+    hub.add_argument('--config-file', required=True)
+    hub.add_argument('--port', type=int, default=51930)
     plans_publish=commands.add_parser("monitor-plans-publish",help="私有计划修订原子发布；不查询、不取号、不发送提醒")
     plans_publish.add_argument("--input",required=True)
     plans_publish.add_argument("--output",required=True)
@@ -946,6 +949,23 @@ def main(argv: list[str] | None = None) -> int:
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':error.error_code});return 2
         except (OSError,ValueError,TypeError,KeyError,OverflowError,sqlite3.Error):
             emit({'ok':False,'source':'crm_remote_v1_1','error_code':'remote_signal_input_or_storage_error'});return 2
+    if args.command == 'collection-hub-serve':
+        from .monitorhub import read_config as read_hub_config, serve_hub
+        try:
+            config = read_hub_config(args.config_file)
+            serve_hub(config, port=args.port, ready=lambda port: emit({'monitor_hub_ready': True,
+                'url': f'http://127.0.0.1:{port}/monitor', 'workers': len(config['workers']),
+                'stores': sum(len(w['stores']) for w in config['workers']),
+                'upstream_network_performed_by_hub': False, 'collector_started_by_hub': False,
+                'eta_available': False}))
+            return 0
+        except KeyboardInterrupt:
+            return 0
+        except Exception as error:
+            emit({'ok': False, 'error_code': getattr(error, 'error_code', 'monitor_hub_unavailable'),
+                'upstream_network_performed_by_hub': False, 'collector_started_by_hub': False,
+                'eta_available': False})
+            return 1
     if args.command=="monitor-plans-publish":
         from .planupdates import publish_update,PlanUpdateError
         try:
