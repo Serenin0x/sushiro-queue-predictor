@@ -65,6 +65,15 @@ class DailyTests(unittest.TestCase):
     def test_empty_date_is_missing_not_zero_called(self):
         d=self.view().detail('900001','2026-10-09',now=BASE)
         self.assertIsNone(d['summary']);self.assertIsNone(d['actual_called_count']);self.assertEqual(d['points'],[])
+    def test_call_reference_uses_first_position_preserving_unsorted_three_labels(self):
+        v=self.view();v.publish(self.record(labels=('13','12','14','99')),key=('db',1),run='a')
+        v.publish(self.record(60,labels=()),key=('db',2),run='a')
+        d=v.detail('900001','2026-10-06',now=BASE+timedelta(seconds=120))
+        self.assertEqual(d['points'][0]['call_reference_labels']['storeQueue'],'13')
+        self.assertEqual(d['points'][0]['queues']['storeQueue'],['13','12','14'])
+        self.assertIsNone(d['points'][1]['call_reference_labels']['storeQueue'])
+        self.assertFalse(d['first_label_is_confirmed_call'])
+        self.assertEqual(d['call_reference_semantics'],'user_assumed_first_displayed_label')
     def test_actual_campaign_worker_daily_routes_add_no_requests(self):
         with tempfile.TemporaryDirectory() as folder:
             parent=Path(folder).resolve();root=parent/'campaign';root.mkdir(mode=0o700);plan=parent/'plans.json';plan.write_text('{"schema_version":1,"plans":[]}');plan.chmod(0o600)

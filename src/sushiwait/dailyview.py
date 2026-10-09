@@ -95,6 +95,8 @@ class DailyView:
             point={'request_started_at':stamp,'queue_received_at':group['received_at'],
                 'count_received_at':count['received_at'],'pair_ok':safe['ok'],'scheduled_pause':paused,
                 'queues':{q:group['payload']['queues'][q][:3] for q in QUEUE_NAMES} if group['ok'] else None,
+                'call_reference_labels':{q:(group['payload']['queues'][q][0] if group['payload']['queues'][q] else None)
+                    for q in QUEUE_NAMES} if group['ok'] else None,
                 'display_sizes':{q:len(group['payload']['queues'][q]) for q in QUEUE_NAMES} if group['ok'] else None,
                 'count_raw':count['payload']['raw_count'] if count['ok'] else None,
                 'comparison_state':comparison,'interval_seconds':elapsed,'removed_labels':removed,
@@ -148,5 +150,7 @@ class DailyView:
             'generated_at':_now(now),'summary':summary,'points':[json.loads(s) for s in encoded],
             'returned_graph_points':len(encoded),'graph_truncated':truncated or bool(summary and summary['graph_truncated']),
             'labels_per_array_in_graph':3,'full_source_arrays_persisted':True,
+            'call_reference_semantics':'user_assumed_first_displayed_label',
+            'first_label_is_confirmed_call':False,
             'display_turnover_is_no_show_rate':False,'actual_called_count':None,
             'network_performed_by_read':False,'eta_available':False}

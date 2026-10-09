@@ -16,7 +16,7 @@ import stat
 
 from .capture import _open_parent, _check_parent
 from .credentials import _identity, _private_file, _read_private_file
-from .remote import SOURCE, RemoteClient, RemoteStore
+from .remote import SOURCE, MAX_RECORD, RemoteClient, RemoteStore, validate_record
 from .remotetasks import RemoteTask, RemoteTaskError, _at, _now, _json, _integer
 from .remotewindow import (
     MAX_DURATION, MAX_PAIRS, RemoteWindowTask, PersistentWindowSchedule,
@@ -42,7 +42,10 @@ def _name(index):
 
 def campaign_config(root, plan_file, store_ids, base_interval=300,
                     duration_seconds=7 * 86400, window_seconds=86400,
-                    max_pairs=6300, *, now, plan_updates_file=None, business_hours=None):
+                    max_pairs=6300, *, now, plan_updates_file=None, business_hours=None,
+                    transient_recovery_limit=0):
+    if not _integer(transient_recovery_limit, 0, 3):
+        raise RemoteTaskError('remote_campaign_invalid_recovery_limit')
     root = os.path.abspath(root)
     plan = os.path.abspath(plan_file)
     update = None if plan_updates_file is None else os.path.abspath(plan_updates_file)
@@ -65,6 +68,8 @@ def campaign_config(root, plan_file, store_ids, base_interval=300,
     if business_hours is not None:
         from .businesshours import validate_hours
         result['business_hours'] = validate_hours(business_hours)
+    if transient_recovery_limit:
+        result['transient_recovery_limit'] = transient_recovery_limit
     return result
 
 
@@ -72,11 +77,20 @@ def _hash_ok(value):
     return type(value) is str and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
 
 
-def _decode_campaign(body):
+def _decode_campaign(body, *, _recovery_limit=0):
     try:
         if len(body) > 16 * 1024:
             raise ValueError
         value = _json(body)
+        if type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] == 3:
+            c = value.get('config')
+            if type(c) is not dict or not _integer(c.get('transient_recovery_limit'), 1, 3):
+                raise ValueError
+            base = deepcopy(value)
+            limit = base['config'].pop('transient_recovery_limit')
+            base['schema_version'] = 2 if 'business_hours' in base['config'] else 1
+            _decode_campaign(json.dumps(base,separators=(',',':')).encode(), _recovery_limit=limit)
+            return value
         if type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] == 2:
             from .businesshours import validate_hours
             if type(value.get('config')) is not dict or 'business_hours' not in value['config']:
@@ -91,7 +105,7 @@ def _decode_campaign(body):
                         or not _integer(s.get('successful'),0,s.get('cursor',-1))):
                     raise ValueError
                 s['successful'] += s.pop('scheduled_pauses')
-            _decode_campaign(json.dumps(base,separators=(',',':')).encode())
+            _decode_campaign(json.dumps(base,separators=(',',':')).encode(), _recovery_limit=_recovery_limit)
             return value
         if (type(value) is not dict or set(value) != {'schema_version', 'source', 'config',
                 'created_at', 'deadline_at', 'updated_at', 'state', 'end_reason', 'windows', 'plan_context'}
@@ -130,6 +144,7 @@ def _decode_campaign(body):
         if type(windows) is not list or len(windows) > MAX_WINDOWS:
             raise ValueError
         consumed = 0
+        failures = 0
         previous = created
         for index, entry in enumerate(windows, 1):
             if type(entry) is not dict or set(entry) != _ENTRY_KEYS or entry['name'] != _name(index):
@@ -153,6 +168,9 @@ def _decode_campaign(body):
                     or (s['state'] == 'completed') != (s['end_reason'] is not None)
                     or s['pending'] and s['cursor'] >= entry['max_pairs']):
                 raise ValueError
+            failures += s['failed']
+            recovered_boundary = bool(_recovery_limit and s['failed'] and not s['uncertain']
+                                      and failures <= _recovery_limit)
             starts = entry['starts']
             if (type(starts) is not dict or set(starts) - set(c['store_ids'])
                     or any(not start <= _at(t) <= end for t in starts.values())):
@@ -162,7 +180,8 @@ def _decode_campaign(body):
                     or archived and (not _hash_ok(entry['checkpoint_digest']) or not _hash_ok(entry['database_digest'])
                         or s['state'] not in ('completed', 'failed') and not (s['state'] == 'ready' and s['uncertain']) or s['pending'])
                     or not archived and index != len(windows)
-                    or index < len(windows) and (s['end_reason'] != 'deadline' or s['failed'] or s['uncertain'])):
+                    or index < len(windows) and not recovered_boundary
+                        and (s['end_reason'] != 'deadline' or s['failed'] or s['uncertain'])):
                 raise ValueError
             consumed += s['cursor'] + int(s['pending'])
             previous = end
@@ -219,6 +238,10 @@ def campaign_status(value):
             'status_semantics': 'last_published_campaign_checkpoint',
             'accepted_plan_revision': value['plan_context']['revision'] if value['plan_context'] else None,
             'source_freshness': 'unknown', 'eta_available': False, 'verified_training_labels': 0}
+    limit = c.get('transient_recovery_limit', 0)
+    result.update(automatic_failure_retry=bool(limit), maximum_transient_recoveries=limit,
+        transient_recoveries_used=sum(e['summary']['failed'] for e in value['windows'][:-1]),
+        recovery_does_not_replay_failed_query=True)
     if 'business_hours' in c:
         result.update(business_hours_enabled=True,business_hours_source='user_assumed',business_hours_verified=False,
             scheduled_pause_slots=sum(e['summary']['scheduled_pauses'] for e in value['windows']))
@@ -265,7 +288,7 @@ class RemoteCampaign(RemoteTask):
     @staticmethod
     def initial_value(config, now):
         created = _now(now)
-        return {'schema_version': 2 if 'business_hours' in config else 1, 'source': SOURCE, 'config': deepcopy(config),
+        return {'schema_version': 3 if 'transient_recovery_limit' in config else 2 if 'business_hours' in config else 1, 'source': SOURCE, 'config': deepcopy(config),
                 'created_at': created,
                 'deadline_at': _now(_at(created) + timedelta(seconds=config['duration_seconds'])),
                 'updated_at': created, 'state': 'active', 'end_reason': None,
@@ -366,6 +389,34 @@ class RemoteCampaign(RemoteTask):
                      end_reason=reason, updated_at=_now(now))
         self._commit(value)
 
+    def _recovery_due(self, entry, failures):
+        """Only a verified closed failed window can authorize a new window.
+
+        Failed records and their immutable archive stay intact. A new sample
+        after backoff uses the original campaign deadline and remaining budget.
+        """
+        limit = self.value['config'].get('transient_recovery_limit', 0)
+        if not limit or not 1 <= failures <= limit or not entry['summary']['failed']:
+            return None
+        self._archive(entry)
+        path = Path(self.value['config']['root']) / entry['name'] / 'remote.sqlite3'
+        with RemoteStore(path, read_only=True) as database:
+            database._guard()
+            row = database.db.execute('SELECT CASE WHEN length(CAST(payload_json AS BLOB))<=? '
+                'THEN payload_json END FROM remote_samples ORDER BY id DESC LIMIT 1', (MAX_RECORD,)).fetchone()
+            if row is None or row[0] is None:
+                raise RemoteTaskError('remote_campaign_missing_failure_record')
+            record = validate_record(_json(row[0]))
+        if record['ok'] or record['requested_store_id'] not in self.value['config']['store_ids']:
+            raise RemoteTaskError('remote_campaign_failure_record_conflict')
+        failed = [q for q in record['queries'].values() if q['attempted'] and not q['ok']]
+        if len(failed) != 1:
+            return None
+        q = failed[0]
+        transient = q['error_code'] in {'timeout', 'network_error', 'tls_error'} or (
+            q['error_code'] == 'http_error' and q['http_status'] in {502, 503, 504})
+        return _at(entry['updated_at']) + timedelta(seconds=60 * 2 ** (failures - 1)) if transient else None
+
     def collect(self, *, wall_clock, monotonic_clock, sleep, emit, should_stop=lambda: False,
                 client_factory=RemoteClient, restore=lambda _: None):
         c = self.value['config']
@@ -373,6 +424,7 @@ class RemoteCampaign(RemoteTask):
             self.restore_history(restore)
         parent_mono = monotonic_clock() + max(0, (_at(self.value['deadline_at']) - wall_clock()).total_seconds())
         carried_mono = {}
+        recovery_due = {}
         restart_mono = monotonic_clock() if self.loaded else None
         while self.value['state'] == 'active' and not should_stop():
             self._namespace_guard()
@@ -383,8 +435,8 @@ class RemoteCampaign(RemoteTask):
             current = entries[-1] if entries and entries[-1]['checkpoint_digest'] is None else None
             if current is None:
                 status = campaign_status(self.value)
-                if status['failed_pairs'] or status['uncertain_pair_slots']:
-                    self._finish('query_failed' if status['failed_pairs'] else 'uncertain_attempt', now)
+                if status['uncertain_pair_slots']:
+                    self._finish('uncertain_attempt', now)
                     break
                 if status['completed_pair_slots'] >= c['max_pairs']:
                     self._finish('budget', now)
@@ -395,7 +447,21 @@ class RemoteCampaign(RemoteTask):
                 if monotonic_clock() >= parent_mono:
                     self._finish('monotonic_duration', now)
                     break
-                if entries and entries[-1]['summary']['end_reason'] != 'deadline':
+                due = None
+                if entries and entries[-1]['summary']['failed']:
+                    name = entries[-1]['name']
+                    if name not in recovery_due:
+                        recovery_due[name] = self._recovery_due(entries[-1], status['failed_pairs'])
+                    due = recovery_due[name]
+                if entries and entries[-1]['summary']['failed'] and due is None:
+                    self._finish('query_failed', now)
+                    break
+                if due is not None and now < due:
+                    sleep(min(1, (due - now).total_seconds(), max(0, parent_mono-monotonic_clock())))
+                    continue
+                if due is not None:
+                    self._archive(entries[-1])
+                if entries and not entries[-1]['summary']['failed'] and entries[-1]['summary']['end_reason'] != 'deadline':
                     reason = 'window_budget' if entries[-1]['summary']['end_reason'] == 'budget' else 'window_monotonic_duration'
                     self._finish(reason, now)
                     break
@@ -461,7 +527,14 @@ class RemoteCampaign(RemoteTask):
             if last['uncertain']:
                 self._finish('uncertain_attempt', wall_clock())
             elif last['failed']:
-                self._finish('query_failed', wall_clock())
+                failed_entry = self.value['windows'][-1]
+                due = self._recovery_due(failed_entry, campaign_status(self.value)['failed_pairs'])
+                if due is None:
+                    self._finish('query_failed', wall_clock())
+                else:
+                    recovery_due[failed_entry['name']] = due
+                    emit({'remote_campaign_recovery': {'not_before_at': _now(due),
+                        'failed_window_preserved': True, 'failed_query_replayed': False}})
             elif last['end_reason'] == 'budget':
                 reason = 'budget' if campaign_status(self.value)['completed_pair_slots'] == c['max_pairs'] else 'window_budget'
                 self._finish(reason, wall_clock())
@@ -478,13 +551,14 @@ class RemoteCampaign(RemoteTask):
 class RemoteCampaignService(RemoteQueueService):
     def __init__(self, *, root, plan_file, store_ids, base_interval=300,
                  duration_seconds=7 * 86400, window_seconds=86400, max_pairs=6300,
-                 plan_updates_file=None, resume=False, resume_if_present=False, business_hours=None, **kwargs):
+                 plan_updates_file=None, resume=False, resume_if_present=False, business_hours=None,
+                 transient_recovery_limit=0, **kwargs):
         super().__init__(db=str(Path(root) / _name(1) / 'remote.sqlite3'), task_file=str(Path(root) / 'campaign.json'),
                          store_ids=store_ids, interval=base_interval, samples=1, resume=resume, **kwargs)
         self.resume_if_present = resume_if_present
         self.config = campaign_config(root, plan_file, store_ids, base_interval, duration_seconds,
                                       window_seconds, max_pairs, now=self.wall_clock(), plan_updates_file=plan_updates_file,
-                                      business_hours=business_hours)
+                                      business_hours=business_hours, transient_recovery_limit=transient_recovery_limit)
         if business_hours is not None:
             from .dailyview import DailyView
             self.daily_view=DailyView(store_ids,hours=business_hours,base_interval=base_interval)
@@ -525,7 +599,7 @@ class RemoteCampaignService(RemoteQueueService):
     def status(self):
         result = super().status()
         result.update(mode='bounded_multi_day_campaign', automatic_normal_window_transition=True,
-                      automatic_failure_retry=False)
+                      automatic_failure_retry=bool(self.config.get('transient_recovery_limit', 0)))
         if 'business_hours' in self.config:
             from .businesshours import BusinessHours
             hours = BusinessHours(self.config['business_hours'])

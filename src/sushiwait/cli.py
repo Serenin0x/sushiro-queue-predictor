@@ -530,6 +530,8 @@ def build_parser() -> argparse.ArgumentParser:
         campaign.add_argument("--duration", type=int, default=604800)
         campaign.add_argument("--window-duration", type=int, default=86400)
         campaign.add_argument("--max-pairs", type=int, default=6300)
+        campaign.add_argument("--transient-recovery-limit", type=int, choices=range(4), default=0,
+                              help="显式允许至多3次瞬时故障后创建新窗口；原期限预算不变，默认首错停止")
         modes = campaign.add_mutually_exclusive_group()
         modes.add_argument("--resume-task", action="store_true")
         modes.add_argument("--resume-if-present", action="store_true")
@@ -994,12 +996,14 @@ def main(argv: list[str] | None = None) -> int:
                 service = RemoteCampaignService(root=args.root, plan_file=args.plan_file, store_ids=ids,
                     base_interval=args.base_interval, duration_seconds=args.duration, window_seconds=args.window_duration,
                     max_pairs=args.max_pairs, plan_updates_file=args.plan_updates_file,
-                    resume=args.resume_task, resume_if_present=args.resume_if_present,business_hours=hours)
+                    resume=args.resume_task, resume_if_present=args.resume_if_present,business_hours=hours,
+                    transient_recovery_limit=args.transient_recovery_limit)
                 serve_local(service, port=args.port, listen_host=args.listen_host)
                 return 1 if service.status()['service_state'] == 'failed' else 0
             config = campaign_config(args.root, args.plan_file, ids, args.base_interval, args.duration,
                                      args.window_duration, args.max_pairs, now=_utc_clock(),
-                                     plan_updates_file=args.plan_updates_file,business_hours=hours)
+                                     plan_updates_file=args.plan_updates_file,business_hours=hours,
+                                     transient_recovery_limit=args.transient_recovery_limit)
             with RemoteCampaign(config=config, now=_utc_clock(), resume=args.resume_task,
                                 resume_if_present=args.resume_if_present) as campaign:
                 result = campaign.collect(wall_clock=_utc_clock, monotonic_clock=time.monotonic,

@@ -6,7 +6,7 @@
   "directory_currentness_verified": false,
   "collection_source": "crm_remote_v1_1",
   "maximum_stores_per_worker": 3,
-  "background_interval_seconds": 300,
+  "background_interval_seconds": 60,
   "batches": [
     [
       {

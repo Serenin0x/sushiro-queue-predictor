@@ -668,6 +668,8 @@ def check() -> None:
     check_monitor_hub_install()
     subprocess.run([sys.executable,"-I",str(args.source_root/"scripts/check_business_install.py"),
         str(args.source_root/"config/default-business-hours.json")],check=True,timeout=30)
+    subprocess.run([sys.executable,"-I",str(args.source_root/"scripts/check_campaign_recovery_install.py")],
+        check=True,timeout=30)
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
