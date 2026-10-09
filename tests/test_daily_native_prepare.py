@@ -62,3 +62,22 @@ class DailyNativePrepareTests(unittest.TestCase):
         self.args.not_before=(BASE-timedelta(seconds=1)).isoformat()
         with self.assertRaises(ValueError):preparation.prepare(self.args,now=BASE)
         self.assertFalse(Path(self.args.root).exists())
+
+    def test_explicit_legacy_cutoff_is_read_only_and_must_precede_activation(self):
+        self.args.legacy_exports_root=str(self.folder/'old-exports')
+        self.args.legacy_through_date='2026-10-10'
+        preparation.prepare(self.args,now=BASE)
+        root=Path(self.args.root)
+        for unit in root.glob('*.service'):
+            content=unit.read_text()
+            self.assertIn('--legacy-through-date 2026-10-10',content)
+            self.assertIn('--legacy-exports-root',content)
+            self.assertNotIn('ReadWritePaths='+self.args.legacy_exports_root,content)
+        self.assertFalse(Path(self.args.legacy_exports_root).exists())
+        self.assertEqual(json.loads((root/'units.json').read_text())['legacy_reader']['through_date'],'2026-10-10')
+
+    def test_invalid_legacy_pair_is_rejected_before_new_directories(self):
+        self.args.legacy_exports_root=str(self.folder/'old-exports')
+        self.args.legacy_through_date='2026-10-11'
+        with self.assertRaises(ValueError):preparation.prepare(self.args,now=BASE)
+        self.assertFalse(Path(self.args.root).exists())

@@ -549,12 +549,16 @@ def build_parser() -> argparse.ArgumentParser:
         daily.add_argument('--daily-pair-cap', type=int, default=1500)
         if name == 'remote-daily-serve':
             daily.add_argument('--port', type=int, default=18821)
+            daily.add_argument('--legacy-exports-root', help='显式旧试采daily-exports私有目录；仅读取')
+            daily.add_argument('--legacy-through-date', help='旧导出所属最后日期；须早于新接续本地日期')
     daily_status = commands.add_parser('remote-daily-status', help='只读每日控制器检查点；不启动采集或联网')
     daily_status.add_argument('--root', required=True)
     archives = commands.add_parser('daily-archive-month', help='只读指定月份的逐日归档；缺失与坏文件分别报告')
     archives.add_argument('--root', required=True)
     archives.add_argument('--store-id', required=True)
     archives.add_argument('--month', required=True)
+    archives.add_argument('--legacy-exports-root')
+    archives.add_argument('--legacy-through-date')
     hub = commands.add_parser('collection-hub-serve', help='把多个本机采集批次汇入同一观察台；不查询寿司郎、不启动采集')
     hub.add_argument('--config-file', required=True)
     hub.add_argument('--port', type=int, default=51930)
@@ -1014,13 +1018,16 @@ def main(argv: list[str] | None = None) -> int:
                 emit(daily_controller_status(args.root)); return 0
             store = canonical_store_id(args.store_id)
             if args.command == 'daily-archive-month':
-                from .dailyarchive import read_month
-                emit(read_month(args.root, store, args.month, now=_utc_clock())); return 0
+                from .dailyarchive import read_month, legacy_reader_config
+                legacy = legacy_reader_config(args.legacy_exports_root, args.legacy_through_date,
+                    daily_root=args.root)
+                emit(read_month(args.root, store, args.month, now=_utc_clock(), legacy=legacy)); return 0
             hours = read_hours(args.business_hours_file)
             if args.command == 'remote-daily-serve':
                 from .dailyservice import DailyCollectorService
                 service = DailyCollectorService(root=args.root, store_id=store, business_hours=hours,
-                    not_before=args.not_before, daily_pair_cap=args.daily_pair_cap)
+                    not_before=args.not_before, daily_pair_cap=args.daily_pair_cap,
+                    legacy_exports_root=args.legacy_exports_root, legacy_through_date=args.legacy_through_date)
                 serve_local(service, port=args.port, listen_host='127.0.0.1')
                 return 1 if service.status()['service_state'] == 'failed' else 0
             import signal

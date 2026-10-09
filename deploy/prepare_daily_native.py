@@ -15,6 +15,7 @@ import shlex
 from prepare_native import BASE
 from sushiwait.businesshours import read_hours
 from sushiwait.dailycontroller import daily_config
+from sushiwait.dailyarchive import legacy_reader_config
 from sushiwait.monitorhub import validate_config
 from sushiwait.remotetasks import _at, _now
 
@@ -38,6 +39,8 @@ def prepare(args, *, now=None):
     for s in stores:
         daily_config(root/('store-'+s['store_id']),s['store_id'],hours,
             not_before=_now(activation),daily_pair_cap=1500)
+    legacy=legacy_reader_config(getattr(args,'legacy_exports_root',None),
+        getattr(args,'legacy_through_date',None),activation=_now(activation),daily_root=root)
     root.mkdir(mode=0o700)
     workers=[];units=[]
     for i,s in enumerate(stores):
@@ -45,6 +48,8 @@ def prepare(args, *, now=None):
         command=[str(executable),'remote-daily-serve','--root',str(state),'--store-id',store,
             '--business-hours-file',str(release/'config/default-business-hours.json'),
             '--not-before',_now(activation),'--daily-pair-cap','1500','--port',str(args.first_port+i)]
+        if legacy is not None:
+            command += ['--legacy-exports-root',legacy['root'],'--legacy-through-date',legacy['through_date']]
         unit=f'{args.prefix}-store{store}.service'
         content=BASE.replace('bounded collection trial','daily business-hours collection').format(
             user=args.user,release=shlex.quote(str(release)),
@@ -57,6 +62,7 @@ def prepare(args, *, now=None):
     (root/'units.json').write_text(json.dumps({'units':units,'not_before':_now(activation),
         'release':str(release),'first_port':args.first_port,'daily_pair_cap_per_store':1500,
         'daily_maximum_total_http_attempts':36000,'interval_seconds':60,
+        'legacy_reader':legacy,
         'same_store_old_writer_stop_verified':False,'services_started':False}))
     return {'prepared_store_units':12,'not_before':_now(activation),
         'same_store_old_writer_stop_verified':False,'services_started':False,'origin_requests':0,
@@ -71,4 +77,6 @@ if __name__=='__main__':
     parser.add_argument('--prefix',default='sushiwait-daily')
     parser.add_argument('--user',default='ubuntu')
     parser.add_argument('--first-port',type=int,default=18821)
+    parser.add_argument('--legacy-exports-root')
+    parser.add_argument('--legacy-through-date')
     print(json.dumps(prepare(parser.parse_args())))

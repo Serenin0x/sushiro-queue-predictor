@@ -3,7 +3,7 @@ import threading
 import time
 from collections import OrderedDict
 
-from .dailyarchive import read_day, read_month
+from .dailyarchive import read_selected_day, read_month, legacy_reader_config
 from .dailycontroller import DailyController, daily_config, ZONE
 from .dailyview import DailyView
 from .remote import RemoteClient
@@ -13,9 +13,12 @@ from .remotetasks import RemoteTaskError
 
 class DailyCollectorService(RemoteQueueService):
     def __init__(self, *, root, store_id, business_hours, not_before, daily_pair_cap=1500,
+                 legacy_exports_root=None, legacy_through_date=None,
                  wall_clock=_utc, monotonic_clock=time.monotonic, wait=None, client_factory=RemoteClient):
         self.config = daily_config(root, store_id, business_hours,
             not_before=not_before, daily_pair_cap=daily_pair_cap)
+        self.legacy_reader = legacy_reader_config(legacy_exports_root, legacy_through_date,
+            activation=not_before, daily_root=root)
         self.view = LiveRemoteView([store_id], stale_after_seconds=120)
         self.daily_view = DailyView([store_id], hours=business_hours, base_interval=60)
         self.active_day = None
@@ -67,7 +70,8 @@ class DailyCollectorService(RemoteQueueService):
         now = self.wall_clock()
         month = month or now.astimezone(ZONE).strftime('%Y-%m')
         with self.archive_lock:
-            value = read_month(self.config['root'], store_id, month, now=now, _cache=self.archive_cache)
+            value = read_month(self.config['root'], store_id, month, now=now,
+                _cache=self.archive_cache, legacy=self.legacy_reader)
         with self.lock: view, active = self.daily_view, self.active_day
         if active is not None and active.startswith(month+'-'):
             live = view.detail(store_id, active, now=now)
@@ -75,6 +79,7 @@ class DailyCollectorService(RemoteQueueService):
                 value['days'] = [d for d in value['days'] if d['local_date'] != active] + [live['summary']]
                 value['days'].sort(key=lambda d: d['local_date'])
                 value['missing_archive_dates'] = [d for d in value['missing_archive_dates'] if d != active]
+                value['archive_origins'][active] = 'live_current_day'
         return value
 
     def daily_batch_index(self, month=None):
@@ -88,7 +93,7 @@ class DailyCollectorService(RemoteQueueService):
         with self.lock: view, active = self.daily_view, self.active_day
         if day == active: return view.detail(store_id, day, now=self.wall_clock())
         try:
-            return read_day(self.config['root'], store_id, day)
+            return read_selected_day(self.config['root'], store_id, day, legacy=self.legacy_reader)
         except FileNotFoundError:
             return DailyView([store_id], hours=self.config['business_hours'], base_interval=60).detail(
                 store_id, day, now=self.wall_clock())
