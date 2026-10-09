@@ -18,6 +18,7 @@ from sushiwait.remoteservice import LiveRemoteView
 from sushiwait.trendprofiles import (POLICY, TrendProfileError, _digest, build_profile,
     enrich_context, read_profile, score_context, validate_profile, write_profile)
 import test_remote_signals as fixtures
+from sushiwait.queuebinding import POLICY as QUEUE_BINDING_POLICY
 
 BASE = datetime(2026, 10, 6, 20, tzinfo=timezone.utc)
 
@@ -41,7 +42,8 @@ def profile(*, removed=3, duration=90000, dates=(1,2), samples_per_day=4):
 
 
 def context(removed=3,duration=90000,queue='ordinary'):
-    return {'schema_version':1,'source':'crm_remote_v1_1','store_id':'900001','queue_type':queue,
+    return {'schema_version':2,'queue_binding_policy':QUEUE_BINDING_POLICY,
+        'source':'crm_remote_v1_1','store_id':'900001','queue_type':queue,
         'observation_revision':8,'as_of':stamp(),'expires_at':stamp(60),
         'window_seconds':120,'max_local_age_seconds':60,'latest_queue_received_at':stamp(-1),
         'latest_count_received_at':stamp(-.5),'source_freshness':'unknown','count_unit':'unknown',
@@ -53,7 +55,10 @@ def context(removed=3,duration=90000,queue='ordinary'):
 
 def record(second,labels=(),**kw):
     offset=(BASE-fixtures.BASE).total_seconds()
-    return fixtures.record(offset+second,labels,**kw)
+    value = fixtures.record(offset+second,labels,**kw)
+    if value['queries']['groupqueues']['ok']:
+        value['queries']['groupqueues']['payload']['queues']['mixedQueue'] = list(labels)
+    return value
 
 
 class TrendProfileTests(unittest.TestCase):

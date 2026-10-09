@@ -17,9 +17,10 @@ from .historyfusion import build_history_fusion, HistoryFusionError
 from .intake import _canonical
 from .outcomes import _time
 from .packets import _write_packet, PacketError
+from .queuebinding import field_for_queue, require_bound_context
 
-POLICY = 'cutoff_episode_balanced_landmark_neighbors_v1'
-MODEL = 'reviewed-landmark-neighbors-v1'
+POLICY = 'cutoff_episode_balanced_landmark_neighbors_v2'
+MODEL = 'reviewed-landmark-neighbors-v2'
 
 
 class RealtimeFusionError(ValueError):
@@ -121,6 +122,7 @@ def build_realtime_fusion(*, source, reviews, remote, plan, feature_plan, contex
     try:
         plan = validate_plan(plan, now=clock)
         feature_plan = validate_feature_plan(feature_plan, now=clock)
+        require_bound_context(context)
         if (type(sealed_replay) is not bool or sealed_replay and ai_blend_ppm != 0
                 or plan['mode'] not in ('new_join','remaining')
                 or any(type(v) is not int for v in (neighbors, minimum_episodes,
@@ -144,7 +146,7 @@ def build_realtime_fusion(*, source, reviews, remote, plan, feature_plan, contex
         dataset = build_feature_dataset(source=source, reviews=reviews, remote=remote,
             plan=feature_plan, max_revisions=max_revisions, max_observations=max_observations)
         current = _current_vector(plan,context,now=clock,sealed_replay=sealed_replay)
-        queue = 'storeQueue' if plan['queue_type']=='ordinary' else 'reservationQueue'
+        queue = field_for_queue(plan['queue_type'])
         eligible = []
         if current is not None:
             vector,cadence,count_known,elapsed = current

@@ -3,7 +3,7 @@
 const byId = id => document.getElementById(id);
 const stateNames = {running:"正在采集",ready:"准备完成",starting:"正在启动",not_started:"尚未启动",completed:"采集已完成",failed:"采集失败",stopped:"采集已停止"};
 const viewNames = {recent_response:"最近收到的响应",saved_history:"已保存历史",last_known_only:"仅保留上次成功信息",stale_response:"响应已过时",unavailable:"尚无成功响应",clock_invalid:"响应时间异常"};
-const queueNames = {storeQueue:"堂食集合",reservationQueue:"预约集合",counterQueue:"吧台集合",boothQueue:"卡座集合",mixedQueue:"混合集合"};
+const queueNames = {storeQueue:"门店汇总",reservationQueue:"预约集合",counterQueue:"吧台集合",boothQueue:"卡座集合",mixedQueue:"堂食集合（参考）"};
 let timer=null, busy=false, paused=false, selected="", cached=null, lastFailed=false;
 function stamp(value) { const n=Date.parse(value); return Number.isFinite(n)?n:null; }
 function timeLabel(value) { return new Date(value).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}); }
@@ -52,7 +52,7 @@ function render(data) {
   const now=stamp(history.generated_at);
   const values=(endpoint,pick)=>points.map(p=>{const t=pointTime(p,endpoint);return {t,y:t===null||now===null||t>now?null:pick(p)};});
   plot("count",values("storequeuecount",p=>p.reported_count_raw),"#bc3f49",history.comparison_max_gap_seconds);
-  plot("ordinary",values("groupqueues",p=>p.display_comparison.removed_labels?.storeQueue??null),"#bc3f49",history.comparison_max_gap_seconds);
+  plot("ordinary",values("groupqueues",p=>p.display_comparison.removed_labels?.mixedQueue??null),"#bc3f49",history.comparison_max_gap_seconds);
   plot("reservation",values("groupqueues",p=>p.display_comparison.removed_labels?.reservationQueue??null),"#be8039",history.comparison_max_gap_seconds);
   plot("interval",values("groupqueues",p=>p.display_comparison.interval_seconds>0?p.display_comparison.interval_seconds:null),"#397989",history.comparison_max_gap_seconds);
   byId("issues").replaceChildren();

@@ -4,7 +4,7 @@
 <p id="status" role="status">正在加载…</p><p class="note">日历颜色当前表示采集覆盖：白色为无观测，浅黄色为覆盖不足，浅绿色为已覆盖至少 80% 的背景采样格。人流量配色将在积累数据后校准。</p>
 <div class="week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div id="calendar" class="calendar" aria-label="月历"></div>
 <h2 id="date-title">选择日期</h2><p id="summary"></p><div class="table"><table><thead><tr><th>门店</th><th>完整观测</th><th>失败／边界暂停</th><th>背景格覆盖</th><th>最近观测</th></tr></thead><tbody id="rows"></tbody></table></div>
-<section id="detail" hidden><label>展示队列 <select id="queue"><option value="storeQueue">门店展示</option><option value="reservationQueue">预约展示</option><option value="counterQueue">柜台展示</option><option value="boothQueue">卡座展示</option><option value="mixedQueue">混合展示</option></select></label>
+<section id="detail" hidden><label>展示队列 <select id="queue"><option value="mixedQueue">堂食展示（参考）</option><option value="reservationQueue">预约展示</option><option value="counterQueue">吧台展示</option><option value="boothQueue">卡座展示</option><option value="storeQueue">门店汇总（可能包含预约）</option></select></label>
 <h3>当前叫号参考—时间（第一位）</h3><p class="note">按用户约定，用列表第一位作为当前叫号参考；每次采集的前三个号码和时间仍保留在明细。参考位置尚未认证为实际叫号事件；非纯数字号码不换算。</p><canvas id="numbers" role="img" aria-label="第一位叫号参考随时间的位置"></canvas>
 <h3>原始数量随时间变化</h3><p class="note">数量单位尚未核实；失败或缺口不补零。</p><canvas id="count" role="img" aria-label="原始数量随时间变化"></canvas>
 <h3>展示集合变化速度</h3><p class="note">连续观测间消失的不同号码数／分钟；不等于真实叫号速度或过号率，长缺口和重启边界不比较。</p><canvas id="speed" role="img" aria-label="展示集合变化速度"></canvas><p id="graph-note"></p>

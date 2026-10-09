@@ -92,7 +92,7 @@ class RealtimeBacktestTests(unittest.TestCase):
         with sqlite3.connect(self.remote_path) as db:
             runs=dict(db.execute('SELECT id,run_id FROM remote_samples'))
         for index in range(20,27):
-            self.mutate(lambda r:r['queries']['groupqueues']['payload']['queues'].update(storeQueue=['999','888']),row=index)
+            self.mutate(lambda r:r['queries']['groupqueues']['payload']['queues'].update(mixedQueue=['999','888']),row=index)
             # Mutating a synthetic record requires a matching valid receipt.
             self.mutate(lambda r:r['local_intake'].update(record_sha256=_digest(
                 validate_record(r),runs[index],r['local_intake']['received_at'])),row=index)

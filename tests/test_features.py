@@ -20,6 +20,8 @@ from test_remote_signals import record as raw_record
 
 def queue_record(second, labels=(), count=0, **kwargs):
     value = raw_record(second, labels, count, **kwargs)
+    if value['queries']['groupqueues']['ok']:
+        value['queries']['groupqueues']['payload']['queues']['mixedQueue'] = list(labels)
     for item in value['queries'].values():
         if item['attempted']:
             from test_remote_signals import BASE as old_base

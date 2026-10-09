@@ -27,7 +27,7 @@ def check_deepseek_install():
     stamp=lambda seconds:(now+timedelta(seconds=seconds)).isoformat()
     plan={'schema_version':2,'data_origin':'synthetic','model_version':'install-synthetic-v1',
         'prediction_target':'new_join_total','conditioning':'new_join','ai_blend_ppm':500000,
-        'public_context':{'schema_version':1,'source':'crm_remote_v1_1','store_id':'900001',
+        'public_context':{'schema_version':2,'queue_binding_policy':'ordinary_mixed_reservation_separate_v1','source':'crm_remote_v1_1','store_id':'900001',
             'queue_type':'ordinary','observation_revision':1,'as_of':stamp(0),'expires_at':stamp(60),
             'window_seconds':300,'max_local_age_seconds':90,'latest_queue_received_at':stamp(-5),
             'latest_count_received_at':None,'features':[{'feature_id':'ordinary_removed_labels','value':1,'available_at':stamp(-5)}],
@@ -176,7 +176,7 @@ def check_trend_profiles_install():
                 '--as-of', (base-timedelta(seconds=120)).isoformat(), '--output', str(profile)]) == 0
             reference = read_profile(profile, now=base)
             assert len(reference['samples']) == 8
-            context = {'schema_version': 1, 'source': SOURCE, 'store_id': '900001', 'queue_type': 'ordinary',
+            context = {'schema_version': 2, 'queue_binding_policy':'ordinary_mixed_reservation_separate_v1','source': SOURCE, 'store_id': '900001', 'queue_type': 'ordinary',
                 'observation_revision': 1, 'as_of': base.isoformat(),
                 'expires_at': (base+timedelta(seconds=60)).isoformat(), 'window_seconds': 1800,
                 'max_local_age_seconds': 360, 'latest_queue_received_at': base.isoformat(),
@@ -463,7 +463,7 @@ def check_realtime_models_install():
         with RemoteStore(db) as remote:
             for fast,times in ((False,(200,230,260,290,310)),(True,(500,530,560,590,610))):
                 for index,t in enumerate(times):
-                    queues={key:[] for key in QUEUE_NAMES};queues['storeQueue']=[str(index) if fast else '999','888']
+                    queues={key:[] for key in QUEUE_NAMES};queues['mixedQueue']=[str(index) if fast else '999','888']
                     q=RemoteResult('groupqueues',True,True,{'queues':queues},None,200,stamp(t),stamp(t),0)
                     c=RemoteResult('storequeuecount',True,True,{'raw_count':10,'unit':'unknown'},None,200,stamp(t),stamp(t),0)
                     record={'schema_version':1,'source':SOURCE,'data_origin':'live','requested_store_id':'900001',
@@ -478,7 +478,7 @@ def check_realtime_models_install():
             'mode':'new_join','minimum_samples':1,'target_episode_id':None}
         features={k:plan[k] for k in ('schema_version','as_of','data_origin','api_profile','store_id')}
         features.update(queue_data_origin='synthetic',elapsed_seconds=[0],max_cases=100,window_seconds=120,max_gap_seconds=90)
-        context={'schema_version':1,'source':SOURCE,'store_id':'900001','queue_type':'ordinary',
+        context={'schema_version':2,'queue_binding_policy':'ordinary_mixed_reservation_separate_v1','source':SOURCE,'store_id':'900001','queue_type':'ordinary',
             'observation_revision':1,'as_of':at,'expires_at':(now+timedelta(seconds=60)).isoformat(),
             'window_seconds':120,'max_local_age_seconds':90,'latest_queue_received_at':at,'latest_count_received_at':at,
             'source_freshness':'unknown','count_unit':'unknown','store_identity_verified':False,
@@ -554,7 +554,7 @@ def check_realtime_backtest_install():
             for fast,times in ((False,(200,230,260,290,310,340,370)),
                     (True,(500,530,560,590,610,640,670)),(True,(1880,1910,1940,1970,1990,2020,2050))):
                 for index,t in enumerate(times):
-                    queues={k:[] for k in QUEUE_NAMES};queues['storeQueue']=[str(index) if fast else '999','888']
+                    queues={k:[] for k in QUEUE_NAMES};queues['mixedQueue']=[str(index) if fast else '999','888']
                     q=RemoteResult('groupqueues',True,True,{'queues':queues},None,200,stamp(t),stamp(t),0)
                     c=RemoteResult('storequeuecount',True,True,{'raw_count':10,'unit':'unknown'},None,200,stamp(t),stamp(t),0)
                     record={'schema_version':1,'source':SOURCE,'data_origin':'live','requested_store_id':'900001',
@@ -1611,7 +1611,7 @@ def check() -> None:
             print(json.dumps({'installed_baseline_research_ok':True,'synthetic_forecast_available':True,
                 'source_and_review_files_unchanged':True,'baseline_socket_calls':0,'baseline_credentials_accessed':False,
                 'real_labels_admitted':0,'eta_available':False,'is_live_acceptance':False}))
-            context={'schema_version':1,'source':'crm_remote_v1_1','store_id':plan['store_id'],
+            context={'schema_version':2,'queue_binding_policy':'ordinary_mixed_reservation_separate_v1','source':'crm_remote_v1_1','store_id':plan['store_id'],
                 'queue_type':plan['queue_type'],'observation_revision':1,'as_of':plan['as_of'],
                 'expires_at':(datetime.fromisoformat(plan['as_of'])+timedelta(seconds=60)).isoformat(),
                 'window_seconds':300,'max_local_age_seconds':90,

@@ -22,8 +22,9 @@ from .outcomes import _json, _time, _utc
 from .packets import PacketError, _write_packet
 from .realtimefusion import MODEL, RealtimeFusionError, build_realtime_fusion
 from .remote import SOURCE
+from .queuebinding import POLICY as QUEUE_BINDING_POLICY, field_for_queue
 
-POLICY = 'cutoff_known_paired_realtime_replay_v1'
+POLICY = 'cutoff_known_paired_realtime_replay_v2'
 VARIANTS = ('history_only', 'realtime_only', 'prior_fusion')
 _OPTIONS = {'minimum_samples', 'neighbors', 'minimum_episodes',
     'maximum_elapsed_difference_seconds', 'maximum_standardized_distance', 'realtime_weight_ppm'}
@@ -80,7 +81,7 @@ def _context(row, plan):
         age = q[endpoint+'_response_age_seconds']
         return _utc(at-timedelta(microseconds=int(Fraction(str(age))*1_000_000))) if available else None
     values = {}
-    for name, key in (('ordinary','storeQueue'), ('reservation','reservationQueue')):
+    for name, key in ((kind, field_for_queue(kind)) for kind in ('ordinary', 'reservation')):
         stats = q['display_window_statistics'][key]['whole']
         pairs = stats['comparable_pairs']
         values.update({name+'_removed_labels':stats['removed_labels'] if pairs else None,
@@ -92,7 +93,8 @@ def _context(row, plan):
             ('failed_responses','skipped_querys','out_of_order_responses'))
     values['reported_count_raw'] = q['reported_count_raw'] if q['count_availability']=='recent_responses' else None
     queue_at = recent('queue')
-    return {'schema_version':1, 'source':SOURCE, 'store_id':plan['store_id'],
+    return {'schema_version':2, 'queue_binding_policy':QUEUE_BINDING_POLICY,
+        'source':SOURCE, 'store_id':plan['store_id'],
         'queue_type':row['features']['queue_type'], 'observation_revision':0,
         'as_of':_utc(at), 'expires_at':_utc(at+timedelta(seconds=60)),
         'window_seconds':plan['window_seconds'], 'max_local_age_seconds':plan['max_gap_seconds'],

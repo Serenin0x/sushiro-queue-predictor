@@ -20,8 +20,9 @@ from .outcomes import _json, _time, _utc
 from .packets import _write_packet
 from .remote import SOURCE, _id
 from .remotesignals import _Stream
+from .queuebinding import field_for_queue, require_bound_context
 
-POLICY = 'dated_nonoverlapping_display_turnover_ranks_v1'
+POLICY = 'dated_nonoverlapping_display_turnover_ranks_v2'
 MAX_WINDOWS = 96
 _FIELDS = {'trend_profile_schema_version', 'policy', 'source', 'store_id', 'created_at',
     'history_cutoff', 'window_seconds', 'max_gap_seconds', 'minimum_pairs',
@@ -192,7 +193,7 @@ def build_profile(remote, store_id, *, as_of, now=None, window_seconds=1800,
                     summary = stream.finish(window_seconds, False)
                     feature = {'queue_availability':summary['availability'],
                         'display_window_statistics':summary['queues']}
-                ordinary = feature['display_window_statistics']['storeQueue']['whole']
+                ordinary = feature['display_window_statistics'][field_for_queue('ordinary')]['whole']
                 reservation = feature['display_window_statistics']['reservationQueue']['whole']
                 milliseconds = int(ordinary['observed_seconds']*1000)
                 pairs = ordinary['comparable_pairs']
@@ -225,7 +226,7 @@ def _context(value, now):
         'public_context': value, 'candidates': [{'candidate_id': 'history',
             'atoms': [{'lower_us': 0, 'upper_us': 0, 'mass_ppm': PPM}]}],
         'prior_weights_ppm': {'history': PPM}, 'ai_blend_ppm': 0}
-    return validate_fusion_plan(plan, now=now)['public_context']
+    return require_bound_context(validate_fusion_plan(plan, now=now)['public_context'])
 
 
 def _calendar(at, as_of):

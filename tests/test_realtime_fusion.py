@@ -247,6 +247,25 @@ class RealtimeModelTests(unittest.TestCase):
         one=self.calculate();two=self.calculate(realtime_weight_ppm=0)
         self.assertNotEqual(one['model_input_sha256'],two['model_input_sha256'])
 
+    def test_aggregate_only_changes_do_not_change_fitted_ordinary_wait(self):
+        import sqlite3
+        from sushiwait.remote import validate_record
+        from sushiwait.remoteintake import _digest
+        before = self.calculate()
+        self.assertTrue(before['research_realtime_model_fitted'])
+        with sqlite3.connect(self.remote_path) as database:
+            rows = list(database.execute('SELECT id,run_id FROM remote_samples'))
+        for index, run in rows:
+            features_fixture.FeatureDatasetTests.mutate(self,
+                lambda row: row['queries']['groupqueues']['payload']['queues'].update(storeQueue=['7000']),
+                row=index)
+            features_fixture.FeatureDatasetTests.mutate(self,
+                lambda row: row['local_intake'].update(record_sha256=_digest(
+                    validate_record(row), run, row['local_intake']['received_at'])), row=index)
+        after = self.calculate()
+        self.assertTrue(after['research_realtime_model_fitted'])
+        self.assertEqual(before['research_quantiles_us'], after['research_quantiles_us'])
+
     def test_unknown_count_is_not_implicitly_zero(self):
         missing=self.calculate(context=self.context_with(reported_count_raw=None))
         zero=self.calculate(context=self.context_with(reported_count_raw=0))
@@ -348,4 +367,3 @@ class RealtimeModelTests(unittest.TestCase):
         with self.assertRaises(TrackerLoopError):
             TrackingCoordinator([state],stores=['900001'],reader=lambda _:None,
                 sealed_remote_db=self.remote_path,clock=lambda:self.now)
-

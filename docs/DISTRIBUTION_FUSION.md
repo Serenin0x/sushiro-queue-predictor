@@ -1,5 +1,7 @@
 # 实时公共情景与分布融合
 
+rc58新公共上下文使用schema2及固定queue_binding_policy，堂食趋势改为mixedQueue、预约仍为reservationQueue。schema1只保留通用离线算术兼容，新追踪／实时模型／趋势评分拒绝未绑定上下文；AI输入摘要包含绑定。见[队列绑定](QUEUE_BINDINGS.md)。
+
 源码候选 rc46 新增公共特征整理、候选分布算术与 AI 权重答复校验。rc47已增加[有界DeepSeek供应商适配器](DEEPSEEK_ADAPTER.md)，默认不调用；rc48已加入历史经验候选桥接；真实供应商请求、实时候选生成、个人号码追踪、在线预测发布及误差校准仍待实现。当前真实认证标签为 0，`eta_available=false`；测试答复是自造的明确合成数据，不是 DeepSeek 实际输出。完整设计与研究来源见[实时模型](REALTIME_PREDICTION_MODEL.md)，验证事实见[交接历史](PROJECT_HANDOVER.md)。
 
 ## 计算怎样更新

@@ -18,6 +18,7 @@ from .intake import _canonical
 from .outcomes import _json, _time, _utc
 from .packets import PacketError, _write_packet
 from .remote import SOURCE
+from .queuebinding import POLICY as QUEUE_BINDING_POLICY, field_for_queue
 
 POLICY = 'public_scenario_interval_mixture_v1'
 EMPIRICAL_POLICY = 'public_empirical_interval_cdf_mixture_v2'
@@ -92,8 +93,11 @@ def validate_plan(value, *, now=None):
                 or not _integer(value['ai_blend_ppm'], 0, PPM)):
             raise ValueError
         context = value['public_context']
-        if (type(context) is not dict or set(context) != _CONTEXT
-                or not _integer(context['schema_version'], 1, 1)
+        context_schema = context.get('schema_version') if type(context) is dict else None
+        context_fields = _CONTEXT | {'queue_binding_policy'} if context_schema == 2 else _CONTEXT
+        if (type(context) is not dict or set(context) != context_fields
+                or not _integer(context['schema_version'], 1, 2)
+                or context_schema == 2 and context['queue_binding_policy'] != QUEUE_BINDING_POLICY
                 or context['source'] != SOURCE
                 or type(context['store_id']) is not str
                 or not re.fullmatch('[1-9][0-9]{0,9}', context['store_id'])
@@ -305,13 +309,13 @@ def context_from_history(history, *, queue_type, now=None, window_seconds=600,
                     gaps.append(delta)
                     if comparison['state'] == 'comparable_display_sets':
                         values = comparison['removed_labels']
-                        if (type(values) is not dict or not _integer(values.get('storeQueue'), 0, 2**31-1)
+                        if (type(values) is not dict or not _integer(values.get(field_for_queue('ordinary')), 0, 2**31-1)
                                 or not _integer(values.get('reservationQueue'), 0, 2**31-1)):
                             raise ValueError
                         comparable += 1
                         span = current-previous
                         observed_us += (span.days*86400+span.seconds)*1_000_000+span.microseconds
-                        removed['ordinary'] += values['storeQueue']
+                        removed['ordinary'] += values[field_for_queue('ordinary')]
                         removed['reservation'] += values['reservationQueue']
             if comparison['state'] == 'time_order_or_duplicate':
                 latest['groupqueues'] = None
@@ -334,7 +338,8 @@ def context_from_history(history, *, queue_type, now=None, window_seconds=600,
                   'storequeuecount_failures': failures['storequeuecount']}
         if any(value is not None and not _integer(value, 0, 2**31-1) for value in values.values()):
             raise ValueError
-        return {'schema_version': 1, 'source': SOURCE, 'store_id': store, 'queue_type': queue_type,
+        return {'schema_version': 2, 'queue_binding_policy': QUEUE_BINDING_POLICY,
+            'source': SOURCE, 'store_id': store, 'queue_type': queue_type,
             'observation_revision': len(points)+evicted, 'as_of': _utc(cutoff),
             'expires_at': _utc(cutoff+timedelta(seconds=ttl_seconds)),
             'window_seconds': window_seconds, 'max_local_age_seconds': max_local_age_seconds,

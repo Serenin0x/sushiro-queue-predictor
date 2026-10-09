@@ -24,8 +24,9 @@ from .intake import _canonical
 from .monitoring import polling_policy
 from .outcomes import _json, _time, _utc, _uuid
 from .remote import SOURCE, QUEUE_NAMES, _LABEL, _payload
+from .queuebinding import field_for_queue, require_bound_context
 
-POLICY = 'private_manual_ticket_observation_publication_v1'
+POLICY = 'private_manual_ticket_observation_publication_v2'
 _TICKET = {'schema_version', 'episode_id', 'data_origin', 'api_profile', 'store_id',
     'queue_type', 'number', 'issued_at', 'party_size', 'table_type', 'checked_in',
     'created_at', 'deadline_at', 'desired_arrival_at', 'call_offset_minutes',
@@ -113,8 +114,8 @@ def _context(value, *, now):
             'public_context': value, 'candidates': [{'candidate_id': 'history',
                 'atoms': [{'lower_us': 0, 'upper_us': 0, 'mass_ppm': 1_000_000}]}],
             'prior_weights_ppm': {'history': 1_000_000}}
-        return validate_fusion(plan, now=now)['public_context']
-    except FusionError:
+        return require_bound_context(validate_fusion(plan, now=now)['public_context'])
+    except (FusionError, ValueError):
         raise TrackingError('tracking_invalid_view') from None
 
 
@@ -187,7 +188,7 @@ def normalize_observation(ticket, view, context, *, as_of, now=None):
 
 
 def _display_analysis(ticket, observation, previous):
-    name = 'storeQueue' if ticket['queue_type'] == 'ordinary' else 'reservationQueue'
+    name = field_for_queue(ticket['queue_type'])
     current = observation['current_display_evidence']
     labels = observation['queues'][name] if current else None
     present = ticket['number'] in labels if labels is not None else None

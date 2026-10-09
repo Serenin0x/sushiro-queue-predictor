@@ -14,6 +14,7 @@ from unittest.mock import patch
 from sushiwait.cli import main
 from sushiwait.fusion import FusionError, context_from_history, fuse, public_request, validate_plan
 from sushiwait.remoteservice import LiveRemoteView, RemoteASGI, RemoteQueueService
+from sushiwait.queuebinding import POLICY as QUEUE_BINDING_POLICY
 import test_collection_monitor as monitoring
 
 BASE = datetime(2026, 10, 8, 4, tzinfo=timezone.utc)
@@ -30,7 +31,8 @@ def atom(lower, upper, mass=1_000_000):
 def plan():
     return {'schema_version': 1, 'data_origin': 'synthetic', 'model_version': 'synthetic-v1',
         'prediction_target': 'new_join_total', 'conditioning': 'new_join', 'ai_blend_ppm': 500_000,
-        'public_context': {'schema_version': 1, 'source': 'crm_remote_v1_1', 'store_id': '900001',
+        'public_context': {'schema_version': 2, 'queue_binding_policy': QUEUE_BINDING_POLICY,
+            'source': 'crm_remote_v1_1', 'store_id': '900001',
             'queue_type': 'ordinary', 'observation_revision': 3, 'as_of': stamp(),
             'expires_at': stamp(60), 'window_seconds': 300, 'max_local_age_seconds': 90,
             'latest_queue_received_at': stamp(-5), 'latest_count_received_at': stamp(-4),
