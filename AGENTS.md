@@ -1,5 +1,7 @@
 # 接手与协作规则
 
+R47／DS-001：用户要求在GitHub增加前端设计板块，内容入口docs/design/README.md及CONTENT_SPEC.md，README已给链接。规范页面内容、流程、字段、预测／提醒状态、日历曲线、公开／私人边界及当前和未来能力，不设计样式。独立设计GPT从该入口和最新四板块交接接手；统计前端仍功能优先／简单浅色，正式Logo和其他未选草稿保持。
+
 E0367发布纠正：GitHub拒绝含checks.yml的push，PAT缺workflow scope；未公开提交c271a3a和规则保留本地local/rc65-workflow-draft-c271a3a，普通功能发布恢复原公共工作流。不得说纯文档CI已经关闭，后续正常授权连接有workflow权限再实施；本地已通过未改变部分仍不重测，CI结果不单独循环提交。
 
 最新2026-10-09 E0366：本人要求避免无穷检查。已通过且未改动的部分不重跑，纯docs Markdown／AGENTS的main push不触发全CI，PR保持完整。rc65候选新增daily-quality-report及自动quality.json，完整1669项32.247秒／新仓库外安装通过；今晚云端交接仍冻结64，不热换65。22:05旧归档／22:10交接／明日10:30开采到时观察，预测主线同时推进，勿重跑135预检或重复安装。
