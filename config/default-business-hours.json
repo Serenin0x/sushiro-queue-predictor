@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "executable_declared_schedule",
+  "timezone": "Asia/Shanghai",
+  "source": "user_assumed",
+  "declared_on": "2026-10-08",
+  "business_hours_verified": false,
+  "apply_when_store_specific_rule_missing": true,
+  "weekday_intervals": {
+    "1": [["11:00", "22:00"]],
+    "2": [["11:00", "22:00"]],
+    "3": [["11:00", "22:00"]],
+    "4": [["11:00", "22:00"]],
+    "5": [["11:00", "22:00"]],
+    "6": [["10:30", "22:00"]],
+    "7": [["10:30", "22:00"]]
+  },
+  "known_statutory_holiday_intervals": [["10:30", "22:00"]],
+  "makeup_workday_policy": "follow_natural_weekday_unless_specific_override",
+  "unknown_holiday_policy": "retain_unknown_and_follow_declared_weekday",
+  "interval_boundary": "start_inclusive_end_exclusive",
+  "collect_outside_window": false,
+  "store_overrides": [],
+  "date_overrides": []
+}

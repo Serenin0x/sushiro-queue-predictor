@@ -13,6 +13,7 @@ import http.client
 import json
 import re
 import threading
+import hashlib
 from urllib.parse import urlsplit
 
 from .credentials import _read_private_file
@@ -129,7 +130,10 @@ class MonitorHub:
     def asset(self, path):
         name, mime = {'/monitor': ('monitor.html', 'text/html; charset=utf-8'),
             '/monitor.js': ('monitor.js', 'text/javascript; charset=utf-8'),
-            '/monitor.css': ('monitor.css', 'text/css; charset=utf-8')}[path]
+            '/monitor.css': ('monitor.css', 'text/css; charset=utf-8'),
+            '/statistics':('statistics.html','text/html; charset=utf-8'),
+            '/statistics.js':('statistics.js','text/javascript; charset=utf-8'),
+            '/statistics.css':('statistics.css','text/css; charset=utf-8')}[path]
         raw = files('sushiwait').joinpath('web', name).read_text()
         if path == '/monitor.js':
             old = 'const status=await getJSON("/api/v1/status");'
@@ -144,6 +148,38 @@ class MonitorHub:
                 f'观察 {len(self.names)} 家门店的已保存数据；状态和查询预算对应当前门店所属批次。切换门店不会增加寿司郎查询。')
         return raw.encode(), mime
 
+    def daily(self,store,day=None):
+        if store not in self.by_store:raise HubError('monitor_hub_scope_mismatch')
+        path=f'/api/v1/stores/{store}/days'+('/'+day if day else '')
+        value=self.reader(self.by_store[store],path)
+        if (type(value) is not dict or value.get('daily_schema_version')!=1
+                or value.get('requested_store_id')!=store or value.get('network_performed_by_read') is not False
+                or value.get('eta_available') is not False or day and value.get('local_date')!=day):
+            raise HubError('monitor_hub_scope_mismatch')
+        return value
+
+    def daily_index(self):
+        days={};unavailable=[]
+        for store in self.names:
+            try:
+                value=self.daily(store)
+                summaries=value.get('days')
+                if type(summaries) is not list or len(summaries)>16:raise HubError()
+                seen=set()
+                for item in summaries:
+                    if (type(item) is not dict or item.get('store_id')!=store
+                            or type(item.get('local_date')) is not str
+                            or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}',item['local_date'])
+                            or item['local_date'] in seen):raise HubError()
+                    seen.add(item['local_date'])
+                for item in summaries:days.setdefault(item['local_date'],{})[store]=item
+            except HubError:unavailable.append(store)
+        return {'daily_schema_version':1,'source':'crm_remote_v1_1','days':days,
+            'store_names':dict(self.names),'configured_store_ids':list(self.names),'unavailable_store_ids':unavailable,
+            'cohort_id':hashlib.sha256(json.dumps(list(self.names),separators=(',',':')).encode()).hexdigest(),
+            'heatmap_semantics':'coverage_only_traffic_not_calibrated','actual_called_count':None,
+            'network_performed_by_read':False,'upstream_network_performed_by_hub':False,'eta_available':False}
+
     def dispatch(self, target, *, method='GET', body_present=False, now=None):
         clock = _clock() if now is None else now
         if method != 'GET':
@@ -154,11 +190,14 @@ class MonitorHub:
         if clock >= _time(self.config['deadline_at']):
             return self._error(503, 'monitor_hub_deadline_reached')
         try:
-            if parsed.path in {'/monitor','/monitor.js','/monitor.css'}:
+            if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css'}:
                 raw, mime = self.asset(parsed.path)
                 return 200, raw, mime
             if parsed.path == '/api/v1/status':
                 value = self.status()
+            elif parsed.path=='/api/v1/days':value=self.daily_index()
+            elif re.fullmatch(r'/api/v1/stores/[1-9][0-9]{0,9}/days(?:/[0-9]{4}-[0-9]{2}-[0-9]{2})?',parsed.path):
+                pieces=parsed.path.split('/');value=self.daily(pieces[4],pieces[6] if len(pieces)==7 else None)
             else:
                 match = re.fullmatch('/api/v1/stores/([1-9][0-9]{0,9})/(status|queue|history)', parsed.path)
                 if match is None or match[1] not in self.by_store:

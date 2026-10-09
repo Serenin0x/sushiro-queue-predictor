@@ -27,7 +27,7 @@
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/115f5d28279edda3-dark.svg"><img src="assets/readme-labels/115f5d28279edda3-light.svg" alt="凭证到期，采集有序暂停与恢复" width="226" height="20"></picture></strong>：在声明到期前 30 秒保护停采；可选择短时等待正常新凭证，通过检查后继续采集，并保持请求节奏。已实测保护暂停、等待超时停止，以及正常新凭证更新后无需重启的恢复。新增私有有界任务进度与显式重启续采，对账已保存结果、记录未知缺口，并跨重启检查凭证版本；西单已实测中断后续采。单店保留原采样目标；多店新增完整轮次的恢复目标与间隔保护，减少额外等待。已安装单店版的一次真实跨更新间隔为 98.760 秒，恢复后约 30 秒；多店新版真实验收另记；更新缺口和长期稳定性继续验证。长期无人值守与服务器独立更新仍待验证。
 
-- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料。新增包格式校验与本机事务归档，重复不新增、同标识不同内容整批停止；新增有容量上限的持久待确认目录，重开后仍能校验已保存的包，相同包重复加入保持原文件；新增有界本机接收服务，独立校验身份、验证整包并事务归档，成功后返回对应确认；新增本机投递、回执签名与逐条对应校验，保存后可以离线复核，原包始终保留；新增[采集统计页](docs/COLLECTION_MONITOR.md)：查看门店原始数量、堂食与预约展示变化及实际响应间隔，失败和断采缺口清楚标记；页面查看不额外查询上游；新增[十二店分批采集](docs/STORE_EXPANSION.md)，北京、成都、上海、广州、深圳及重庆、武汉、长沙、南京、杭州、天津已有明确门店进入新48小时采集；首轮24次查询全成功，旧中断资料独立保留。新增[多批次观察台](docs/MONITOR_HUB.md)，按门店名称切换同一页面，分别显示所属批次的状态、查询计数与曲线，刷新不增加寿司郎请求。新增[Linux 部署说明](docs/LINUX_DEPLOYMENT.md)，打包匿名采集与号码服务；新增[手动云端检查](docs/CLOUD_SOURCE_CHECK.md)，核对云端 Linux 的当次来源连通性，实际服务器与远程上传继续验收。
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/139eaa95f99193d3-dark.svg"><img src="assets/readme-labels/139eaa95f99193d3-light.svg" alt="把数据留住，也把来源分清" width="194" height="20"></picture></strong>：使用 SQLite 保存公共快照，隔离新旧接口及真实、合成数据；保留字段缺失情况，支持历史变化与采集质量报告。新增公共字段分页导出，将允许的门店信息保存为私有数据包，保留缺失信息、稳定观测标识与内容校验，为后续服务器接收准备资料。新增包格式校验与本机事务归档，重复不新增、同标识不同内容整批停止；新增有容量上限的持久待确认目录，重开后仍能校验已保存的包，相同包重复加入保持原文件；新增有界本机接收服务，独立校验身份、验证整包并事务归档，成功后返回对应确认；新增本机投递、回执签名与逐条对应校验，保存后可以离线复核，原包始终保留；新增[采集统计页](docs/COLLECTION_MONITOR.md)：查看门店原始数量、堂食与预约展示变化及实际响应间隔，失败和断采缺口清楚标记；页面查看不额外查询上游；十二店此前已分批验证，旧试采按营业时段要求停止、资料独立保留。新增[营业时段与每日统计](docs/BUSINESS_HOURS_COLLECTION.md)：声明的开店时刻自动开始、闭店等待；日历按日期和门店查看号码位置、原始数量与展示变化速度，覆盖不足和缺失清楚呈现，完整原始观测留在私有数据库。默认营业时间为用户假定，不是官方认证；目前是保留原期限和预算的有界试采，永久故障恢复继续验收。新增[多批次观察台](docs/MONITOR_HUB.md)，按门店名称切换同一页面，分别显示所属批次的状态、查询计数与曲线，刷新不增加寿司郎请求。新增[Linux 部署说明](docs/LINUX_DEPLOYMENT.md)，打包匿名采集与号码服务；新增[手动云端检查](docs/CLOUD_SOURCE_CHECK.md)，核对云端 Linux 的当次来源连通性，实际服务器与远程上传继续验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/bf4fbb34b32ed56d-dark.svg"><img src="assets/readme-labels/bf4fbb34b32ed56d-light.svg" alt="看清采集是否可靠" width="130" height="20"></picture></strong>：报告区分请求失败、字段处理失败与本机停采，统计实际请求间隔、展示号码变化和字段状态。明确统计窗口，帮助发现异常；新增[终态窗口质量](docs/ANONYMOUS_WINDOW_QUALITY.md)，完整核对结果链、跨日期统计和成功请求缺口，区分预算用完与原截止结束；相同数据不会被当成刚更新的数据；可离线查看私有任务的成功、失败与未知槽位，不读取凭证或查询门店。
 
@@ -81,9 +81,11 @@
 
 ## 版本说明
 
-当前源码候选为 **v0.2.0rc55**，新增[多批次观察台](docs/MONITOR_HUB.md)：一张页面按名称查看不同批次的门店，各店所属任务状态、预算和失败分别保留；真实采集扩大至12家，新48小时任务每店5分钟一轮。私人预测另记程序首次保存时刻，旧日志保持时间未知。软件、安装与公开验收分别记录，真实等待误差和AI收益继续校准，正式v0.2.0和v1.0.0未完成。
+当前源码候选为 **v0.2.0rc56**，新增[营业时段自动采集与每日统计](docs/BUSINESS_HOURS_COLLECTION.md)：逐GET核对开闭店，边界部分响应单独保存，跨日和重启保持期限／预算；简单浅色月历按日按店显示号码、数量与展示变化，页面不加抓上游。安装／Linux与真实营业运行分别记录，永久故障控制、云主机连续性和真实等待误差仍待验收；正式v0.2.0和v1.0.0未完成。
 
 ## 更新说明
+
+- <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/49a6dc09ba7cec22-dark.svg"><img src="assets/readme-labels/49a6dc09ba7cec22-light.svg" alt="2026-10-09 · v0.2.0rc56" width="179" height="20"></picture></strong>：让门店观测按天积累、按日历查看：营业时段内自动采集，闭店后等待；跨边界的部分响应保留，未知不补零。浅色月历可选择门店查看号码位置、数量和展示变化，颜色先反映覆盖程度；低价年付部署指引已整理，实际云主机与连续运行继续验收。
 
 - <strong><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-labels/b23feeca052b26b0-dark.svg"><img src="assets/readme-labels/b23feeca052b26b0-light.svg" alt="2026-10-08 · v0.2.0rc55" width="179" height="20"></picture></strong>：让更多门店的数据在同一处看得见：12家门店四批采集，按名称切换数量和展示变化曲线，各批次状态如实呈现。查看页面不加抓上游；中断旧资料独立保留，首次保存时间为以后检验实时预测留证，真实性与误差继续校准。
 

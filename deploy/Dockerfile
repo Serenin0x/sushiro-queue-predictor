@@ -11,6 +11,7 @@ FROM python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY deploy/requirements-server.txt /opt/sushiwait/requirements-server.txt
 COPY deploy/plan_admin.py /opt/sushiwait/plan_admin.py
+COPY config/default-business-hours.json /opt/sushiwait/default-business-hours.json
 COPY --from=build /wheels/ /wheels/
 RUN python -m pip install --no-cache-dir --only-binary=:all: --require-hashes -r /opt/sushiwait/requirements-server.txt \
     && python -m pip install --no-index --no-deps /wheels/*.whl \

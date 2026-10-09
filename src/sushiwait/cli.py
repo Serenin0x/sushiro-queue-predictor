@@ -505,6 +505,7 @@ def build_parser() -> argparse.ArgumentParser:
         window.add_argument("--task-file",required=True)
         window.add_argument("--plan-file",required=True,help="明确私有不可变计划；空plans也持续采集背景数据")
         window.add_argument("--plan-updates-file",help="显式私有版本化计划更新；独立0700目录，不能与数据库/任务共用父目录")
+        window.add_argument("--business-hours-file",help="显式营业时间JSON；嵌入原任务，闭店不查询，恢复时规则必须一致")
         window.add_argument("--store-id",action="append",required=True)
         window.add_argument("--base-interval",type=int,default=300)
         window.add_argument("--duration",type=int,default=86400)
@@ -523,6 +524,7 @@ def build_parser() -> argparse.ArgumentParser:
         campaign.add_argument("--root", required=True, help="专用空0700状态目录；保留每段窗口，不删除旧库")
         campaign.add_argument("--plan-file", required=True, help="状态目录外的不可变私有计划")
         campaign.add_argument("--plan-updates-file", help="状态目录外独立私有计划更新")
+        campaign.add_argument("--business-hours-file",help="显式营业时间JSON；营业外等待，不重置期限或预算")
         campaign.add_argument("--store-id", action="append", required=True)
         campaign.add_argument("--base-interval", type=int, default=300)
         campaign.add_argument("--duration", type=int, default=604800)
@@ -986,16 +988,18 @@ def main(argv: list[str] | None = None) -> int:
                 emit(remote_campaign_status(args.root))
                 return 0
             ids = [canonical_store_id(s) for s in args.store_id]
+            from .businesshours import read_hours
+            hours = read_hours(args.business_hours_file) if args.business_hours_file else None
             if args.command == "remote-campaign-serve":
                 service = RemoteCampaignService(root=args.root, plan_file=args.plan_file, store_ids=ids,
                     base_interval=args.base_interval, duration_seconds=args.duration, window_seconds=args.window_duration,
                     max_pairs=args.max_pairs, plan_updates_file=args.plan_updates_file,
-                    resume=args.resume_task, resume_if_present=args.resume_if_present)
+                    resume=args.resume_task, resume_if_present=args.resume_if_present,business_hours=hours)
                 serve_local(service, port=args.port, listen_host=args.listen_host)
                 return 1 if service.status()['service_state'] == 'failed' else 0
             config = campaign_config(args.root, args.plan_file, ids, args.base_interval, args.duration,
                                      args.window_duration, args.max_pairs, now=_utc_clock(),
-                                     plan_updates_file=args.plan_updates_file)
+                                     plan_updates_file=args.plan_updates_file,business_hours=hours)
             with RemoteCampaign(config=config, now=_utc_clock(), resume=args.resume_task,
                                 resume_if_present=args.resume_if_present) as campaign:
                 result = campaign.collect(wall_clock=_utc_clock, monotonic_clock=time.monotonic,
@@ -1020,14 +1024,17 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if args.command=="remote-window-status":emit(remote_window_status(args.task_file));return 0
             ids=[canonical_store_id(s) for s in args.store_id]
+            from .businesshours import read_hours
+            hours=read_hours(args.business_hours_file) if args.business_hours_file else None
             if args.command=="remote-window-serve":
                 service=RemoteWindowService(db=args.db,task_file=args.task_file,plan_file=args.plan_file,store_ids=ids,
                     base_interval=args.base_interval,duration_seconds=args.duration,max_pairs=args.max_pairs,
-                    resume=args.resume_task,resume_if_present=args.resume_if_present,plan_updates_file=args.plan_updates_file)
+                    resume=args.resume_task,resume_if_present=args.resume_if_present,plan_updates_file=args.plan_updates_file,
+                    business_hours=hours)
                 serve_local(service,port=args.port,listen_host=args.listen_host)
                 return 1 if service.status()['service_state']=='failed' else 0
             config=window_config(args.db,args.plan_file,ids,args.base_interval,args.duration,args.max_pairs,now=_utc_clock(),
-                plan_updates_file=args.plan_updates_file)
+                plan_updates_file=args.plan_updates_file,business_hours=hours)
             with RemoteWindowTask(args.task_file,config=config,resume=args.resume_task,now=_utc_clock(),
                                   resume_if_present=args.resume_if_present) as task:
                 task.prepare_database()

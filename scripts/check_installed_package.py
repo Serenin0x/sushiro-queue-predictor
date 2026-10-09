@@ -666,6 +666,8 @@ def check() -> None:
     check_realtime_models_install()
     check_realtime_backtest_install()
     check_monitor_hub_install()
+    subprocess.run([sys.executable,"-I",str(args.source_root/"scripts/check_business_install.py"),
+        str(args.source_root/"config/default-business-hours.json")],check=True,timeout=30)
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
@@ -682,7 +684,7 @@ def check() -> None:
         raise SystemExit("installed_bridge_diagnostics_missing")
     window_help=subprocess.run([sys.executable,"-I","-m","sushiwait","remote-window-serve","--help"],
                                capture_output=True,text=True,timeout=10,check=True)
-    if any(flag not in window_help.stdout for flag in ("--resume-if-present","--listen-host","--plan-updates-file")):
+    if any(flag not in window_help.stdout for flag in ("--resume-if-present","--listen-host","--plan-updates-file","--business-hours-file")):
         raise SystemExit("installed_container_options_missing")
     surge_help = subprocess.run([sys.executable, "-I", "-m", "sushiwait",
                                  "context-surge", "--help"],

@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUSHIWAIT · 每日统计</title><link rel="stylesheet" href="/statistics.css"><script src="/statistics.js" defer></script></head><body><main>
+<h1>SUSHIWAIT · 每日统计</h1><p>按北京时间查看营业时段内已保存的门店观测。</p>
+<nav><a href="/monitor">最近观测</a><label>月份 <input id="month" type="month"></label><label>门店 <select id="store"><option value="">全部门店</option></select></label><button id="refresh" type="button">刷新统计</button></nav>
+<p id="status" role="status">正在加载…</p><p class="note">日历颜色当前表示采集覆盖：白色为无观测，浅黄色为覆盖不足，浅绿色为已覆盖至少 80% 的背景采样格。人流量配色将在积累数据后校准。</p>
+<div class="week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div id="calendar" class="calendar" aria-label="月历"></div>
+<h2 id="date-title">选择日期</h2><p id="summary"></p><div class="table"><table><thead><tr><th>门店</th><th>完整观测</th><th>失败／边界暂停</th><th>背景格覆盖</th><th>最近观测</th></tr></thead><tbody id="rows"></tbody></table></div>
+<section id="detail" hidden><label>展示队列 <select id="queue"><option value="storeQueue">门店展示</option><option value="reservationQueue">预约展示</option><option value="counterQueue">柜台展示</option><option value="boothQueue">卡座展示</option><option value="mixedQueue">混合展示</option></select></label>
+<h3>号码—时间观测点</h3><p class="note">每次返回的前三个展示号码；散点保留原始数字，有限列表不是完整叫号游标。非纯数字号码保留在明细，图上不换算。</p><canvas id="numbers" role="img" aria-label="展示号码随时间的位置"></canvas>
+<h3>原始数量随时间变化</h3><p class="note">数量单位尚未核实；失败或缺口不补零。</p><canvas id="count" role="img" aria-label="原始数量随时间变化"></canvas>
+<h3>展示集合变化速度</h3><p class="note">连续观测间消失的不同号码数／分钟；不等于真实叫号速度或过号率，长缺口和重启边界不比较。</p><canvas id="speed" role="img" aria-label="展示集合变化速度"></canvas><p id="graph-note"></p>
+<details><summary>观测明细（最近 60 条）</summary><div class="table"><table><thead><tr><th>队列响应时间</th><th>展示号码</th><th>原始数量</th><th>状态</th></tr></thead><tbody id="points"></tbody></table></div></details></section>
+<footer>只读取本机已提交副本，不增加寿司郎查询。营业时间采用声明的默认规则，可按门店覆盖；服务器尚需实际部署和连续运行验收。</footer></main></body></html>

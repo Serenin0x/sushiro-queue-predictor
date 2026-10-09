@@ -47,7 +47,9 @@ def window_quality_report(database, task_file, *, as_of, max_gap_seconds=360):
         'count_changes': 0, 'run_boundaries': 0, 'long_gap_boundaries': 0,
         'responses_completed_after_deadline': 0, 'previous': None,
         'request_starts': [], 'successful_starts': []} for store in config['store_ids']}
-    count = attempts = successes = 0
+    if 'business_hours' in config:
+        for state in states.values():state['scheduled_pause_slots']=0
+    count = attempts = successes = pauses = 0
     digest = _EMPTY
     previous_start = None
     rows = database.db.execute(
@@ -78,7 +80,10 @@ def window_quality_report(database, task_file, *, as_of, max_gap_seconds=360):
         attempts += n
         successes += int(record['ok'])
         state['http_attempts'] += n
-        state['successful_pairs' if record['ok'] else 'failed_pairs'] += 1
+        paused='business_hours' in config and any(q['error_code']=='business_window_closed' for q in record['queries'].values())
+        pauses+=int(paused)
+        category='scheduled_pause_slots' if paused else 'successful_pairs' if record['ok'] else 'failed_pairs'
+        state[category] += 1
         state['request_starts'].append(started)
         state['responses_completed_after_deadline'] += int(ended > deadline)
         local = started.astimezone(ZoneInfo('Asia/Shanghai'))
@@ -86,7 +91,8 @@ def window_quality_report(database, task_file, *, as_of, max_gap_seconds=360):
         bucket = state['days'].setdefault(day, {'successful_pairs': 0, 'failed_pairs': 0,
             'http_attempts': 0, 'hour_counts': {},
             'date_features': date_features(started.isoformat(), as_of=as_of)})
-        bucket['successful_pairs' if record['ok'] else 'failed_pairs'] += 1
+        if 'business_hours' in config:bucket.setdefault('scheduled_pause_slots',0)
+        bucket[category] += 1
         bucket['http_attempts'] += n
         hour = str(local.hour)
         bucket['hour_counts'][hour] = bucket['hour_counts'].get(hour, 0) + 1
@@ -107,7 +113,8 @@ def window_quality_report(database, task_file, *, as_of, max_gap_seconds=360):
                 state['count_changes'] += int(previous['storequeuecount']['payload']['raw_count']
                     != current['storequeuecount']['payload']['raw_count'])
         state['previous'] = row[1], record
-    if (count != task['successful'] + task['failed'] or successes != task['successful']
+    if (count != task['successful'] + task['failed'] + task.get('scheduled_pauses',0) or successes != task['successful']
+            or pauses!=task.get('scheduled_pauses',0)
             or digest != task['records_digest'] or attempts != task['recorded_http_attempts']):
         raise RemoteTaskError('remote_quality_checkpoint_conflict')
     database._guard()
@@ -145,7 +152,7 @@ def window_quality_report(database, task_file, *, as_of, max_gap_seconds=360):
         'analysis_interval_seconds': (through-first).total_seconds(),
         'deadline_checkpoint_reached': task['end_reason'] == 'deadline',
         'max_gap_seconds': max_gap_seconds, 'rows_examined': count,
-        'successful_pairs': successes, 'failed_pairs': count-successes,
+        'successful_pairs': successes, 'failed_pairs': count-successes-pauses, 'scheduled_pause_slots': pauses,
         'uncertain_pair_slots': task['uncertain'], 'recorded_http_attempts': attempts,
         'unrecorded_http_attempts': 'unknown' if task['uncertain'] else 0,
         'unknown_slots_by_store': 'unknown' if task['uncertain'] else 0,

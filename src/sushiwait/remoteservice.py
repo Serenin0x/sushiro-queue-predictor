@@ -11,6 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from importlib.resources import files
 import json
+import re
 import threading
 import time
 
@@ -31,6 +32,9 @@ MONITOR_POINTS = 360
 _MONITOR_FILES = {'/monitor': ('monitor.html', b'text/html; charset=utf-8'),
     '/monitor.js': ('monitor.js', b'text/javascript; charset=utf-8'),
     '/monitor.css': ('monitor.css', b'text/css; charset=utf-8')}
+_MONITOR_FILES.update({'/statistics':('statistics.html',b'text/html; charset=utf-8'),
+    '/statistics.js':('statistics.js',b'text/javascript; charset=utf-8'),
+    '/statistics.css':('statistics.css',b'text/css; charset=utf-8')})
 _MONITOR_CSP = (b"default-src 'none'; script-src 'self'; style-src 'self'; "
     b"connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
@@ -185,6 +189,7 @@ class RemoteQueueService:
         self.stop_event,self.ready,self.activated = threading.Event(),threading.Event(),threading.Event()
         self.lock = threading.Lock()
         self.thread = None
+        self.daily_view = None
         self.state,self.error_code,self.task_status = 'not_started',None,None
 
     def _set(self, state, *, error=None, task=None):
@@ -193,6 +198,7 @@ class RemoteQueueService:
             if task is not None:self.task_status = deepcopy(task)
 
     def _restore(self, database):
+        if self.daily_view is not None:self.daily_view.restore(database)
         for store in self.view.stores:
             database._guard()
             rows = database.db.execute('SELECT store_id,ok,CASE WHEN length(CAST(payload_json AS BLOB))<=? '
@@ -232,7 +238,9 @@ class RemoteQueueService:
                             task=self._task_status(task));return
                     self._set('running',task=self._task_status(task))
                     def emit(event):
-                        if 'record' in event:self.view.publish(event['record'])
+                        if 'record' in event:
+                            if self.daily_view is not None:self.daily_view.committed(event)
+                            self.view.publish(event['record'])
                         self._set('running',task=self._task_status(task))
                     def sleep(seconds):
                         if self.wait is None:self.stop_event.wait(seconds)
@@ -280,6 +288,15 @@ class RemoteQueueService:
         state = self.status()
         return self.view.snapshot(store_id,now=self.wall_clock(),service_state=state['service_state'],
             worker_alive=state['worker_alive'])
+
+    def daily_index(self,store_id):
+        if self.daily_view is None:raise RemoteServiceError('daily_view_not_enabled')
+        return self.daily_view.index(store_id,now=self.wall_clock())
+
+    def daily_detail(self,store_id,day):
+        if self.daily_view is None:raise RemoteServiceError('daily_view_not_enabled')
+        try:return self.daily_view.detail(store_id,day,now=self.wall_clock())
+        except ValueError:raise RemoteServiceError('daily_view_invalid_date_or_scope') from None
 
     def monitor_history(self, store_id):
         state = self.status()
@@ -344,6 +361,15 @@ class RemoteASGI:
                 elif path in _MONITOR_FILES:
                     name, content_type = _MONITOR_FILES[path]
                     asset = files('sushiwait').joinpath('web', name).read_bytes(), content_type
+                elif path=='/api/v1/days':
+                    if self.service.daily_view is None:status,payload=503,{'error_code':'daily_view_not_enabled'}
+                    else:payload=self.service.daily_view.batch_index(now=self.service.wall_clock())
+                elif re.fullmatch(r'/api/v1/stores/[1-9][0-9]{0,18}/days(?:/[0-9]{4}-[0-9]{2}-[0-9]{2})?',path):
+                    pieces=path.split('/');store=pieces[4]
+                    if store not in self.service.view.stores:status,payload=404,{'error_code':'store_not_in_scope'}
+                    else:
+                        try:payload=self.service.daily_index(store) if len(pieces)==6 else self.service.daily_detail(store,pieces[6])
+                        except (RemoteServiceError,RemoteTaskError):status,payload=503,{'error_code':'daily_view_unavailable'}
                 elif path.startswith('/api/v1/stores/') and path.endswith('/history'):
                     store = path[len('/api/v1/stores/'):-len('/history')]
                     if store not in self.service.view.stores:status,payload = 404,{'error_code':'store_not_in_scope'}

@@ -42,7 +42,7 @@ _COLUMNS = {"id": "INTEGER", "run_id": "TEXT", "store_id": "TEXT", "ok": "INTEGE
 _ERRORS = frozenset({"invalid_endpoint", "invalid_store_id", "invalid_response",
     "redirect_blocked", "http_error", "response_too_large", "timeout", "network_error",
     "tls_error", "tls_verification_failed", "invalid_json", "unsupported_queue_schema",
-    "unsupported_count_schema", "preceding_query_failed", "business_error"})
+    "unsupported_count_schema", "preceding_query_failed", "business_error", "business_window_closed"})
 
 
 def _utc():
@@ -87,14 +87,16 @@ class RemoteResult:
 
 class RemoteClient:
     """One attempt, verified TLS, fixed destination; no credential input at all."""
-    def __init__(self, *, timeout_seconds=15, max_response_bytes=MAX_BODY, opener=None):
+    def __init__(self, *, timeout_seconds=15, max_response_bytes=MAX_BODY, opener=None, request_guard=None):
         if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
                 or not 0 < timeout_seconds <= 15 or type(max_response_bytes) is not int
-                or not 1 <= max_response_bytes <= MAX_BODY):
+                or not 1 <= max_response_bytes <= MAX_BODY
+                or request_guard is not None and not callable(request_guard)):
             raise ValueError("invalid_transport_bounds")
         self.timeout = timeout_seconds
         self.max_bytes = max_response_bytes
         self.opener = opener
+        self.request_guard = request_guard
 
     def fetch(self, endpoint, store_id):
         started, tick = _utc(), time.monotonic_ns()
@@ -118,6 +120,10 @@ class RemoteClient:
                 self.opener = build_opener(ProxyHandler({}), _RejectRedirects(),
                                            HTTPSHandler(context=ssl.create_default_context()))
                 self.opener.addheaders = []
+            # Check immediately before each actual transport call, including
+            # the second GET when the first response straddles closing time.
+            if self.request_guard is not None and not self.request_guard(store_id):
+                return result("business_window_closed")
             attempted = True
             response = self.opener.open(request, timeout=self.timeout)
             status = response.getcode()
@@ -229,6 +235,9 @@ def validate_record(value):
                 raise ValueError("remote_record_invalid")
         else:
             if _time(item.get("received_at")) < _time(item.get("started_at")) or type(item.get("elapsed_ms")) is not int or item["elapsed_ms"] < 0:
+                raise ValueError("remote_record_invalid")
+            if error == "business_window_closed" and (item['attempted'] or status is not None
+                    or item.get('transport') is not None):
                 raise ValueError("remote_record_invalid")
         payload = None
         if item["ok"]:

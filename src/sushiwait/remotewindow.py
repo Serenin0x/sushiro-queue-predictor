@@ -33,7 +33,7 @@ def _plans(path,stores,base,now):
     return value
 
 
-def window_config(db,plan_file,store_ids,base_interval,duration_seconds,max_pairs,*,now,plan_updates_file=None):
+def window_config(db,plan_file,store_ids,base_interval,duration_seconds,max_pairs,*,now,plan_updates_file=None,business_hours=None):
     if (type(store_ids) is not list or not 1<=len(store_ids)<=3 or len(set(store_ids))!=len(store_ids)
             or not _integer(base_interval,60,3600) or not _integer(duration_seconds,30,MAX_DURATION)
             or not _integer(max_pairs,1,MAX_PAIRS)):
@@ -49,6 +49,9 @@ def window_config(db,plan_file,store_ids,base_interval,duration_seconds,max_pair
             raise RemoteTaskError('remote_window_updates_path_conflict')
         read_update(path,stores=store_ids,base_interval=base_interval,now=now)
         config['plan_updates_file']=path
+    if business_hours is not None:
+        from .businesshours import validate_hours
+        config['business_hours']=validate_hours(business_hours)
     return config
 
 
@@ -56,6 +59,18 @@ def _decode_window(body):
     try:
         if len(body)>16*1024:raise ValueError
         v=_json(body);c=v['config']
+        if type(v.get('schema_version')) is int and v['schema_version'] in (4,5):
+            from .businesshours import validate_hours
+            feed=v['schema_version']==5
+            if (set(v)!=_KEYS|{'scheduled_pauses'}|({'plan_context'} if feed else set())
+                    or type(c) is not dict or 'business_hours' not in c
+                    or not _integer(v['scheduled_pauses'],0,v['cursor'])
+                    or not _integer(v['successful'],0,v['cursor'])):raise ValueError
+            validate_hours(c['business_hours'])
+            base=deepcopy(v);base['schema_version']=3 if feed else 2
+            base['config'].pop('business_hours');base['successful']+=base.pop('scheduled_pauses')
+            _decode_window(json.dumps(base,separators=(',',':')).encode())
+            return v
         if type(v.get('schema_version')) is int and v['schema_version']==3:
             if (set(v)!=_KEYS|{'plan_context'} or type(c) is not dict
                     or set(c)!={'db','plan_file','plan_digest','store_ids','base_interval','duration_seconds','max_pairs','plan_updates_file'}):raise ValueError
@@ -143,7 +158,11 @@ def window_status(v):
         'pending_attempt':v['pending'] is not None,'updated_at':v['updated_at'],'last_gap':deepcopy(v['last_gap']),
         'catch_up_requests':0,'process_liveness':'unknown','source_freshness':'unknown',
         'eta_available':False,'verified_training_labels':0}
-    if v['schema_version']==3:
+    if 'business_hours' in c:
+        result.update(business_hours_enabled=True,scheduled_pause_slots=v['scheduled_pauses'],
+            all_pairs_successful=not(v['failed'] or v['uncertain'] or v['scheduled_pauses']),
+            business_hours_source='user_assumed',business_hours_verified=False)
+    if 'plan_context' in v:
         result.update(plan_updates_enabled=True,accepted_plan_revision=v['plan_context']['revision'],
             unobserved_plan_revisions=v['plan_context']['unobserved_revisions'],complete_plan_history_verified=False)
     return result
@@ -166,6 +185,8 @@ class RemoteWindowTask(RemoteTask):
             value.update(schema_version=3,plan_context={'series_id':update['series_id'],'revision':update['revision'],
                 'document_digest':_digest(update),'declared_at':update['declared_at'],'applied_at':_now(now),
                 'unobserved_revisions':update['revision']-1})
+        if 'business_hours' in config:
+            value.update(schema_version=5 if 'plan_context' in value else 4,scheduled_pauses=0)
         return value
 
     def __init__(self,path,*,config,resume,now,resume_if_present=False):
@@ -178,7 +199,7 @@ class RemoteWindowTask(RemoteTask):
         self.fingerprint=None;self.data_version=None
         super().__init__(path,config=config,resume=resume,now=now,resume_if_present=resume_if_present)
         try:
-            if self.value['schema_version']==3 and self.value['state'] not in ('completed','failed'):
+            if 'plan_context' in self.value and self.value['state'] not in ('completed','failed'):
                 self.document=self._checked_update(now=now)['document']
         except Exception:
             self.close();raise
@@ -191,7 +212,7 @@ class RemoteWindowTask(RemoteTask):
 
     def refresh_plans(self,*,now):
         """Apply only between pairs; task deadline, budget, starts and cursor remain."""
-        if self.value['schema_version']!=3 or self.value['state']!='ready':return
+        if 'plan_context' not in self.value or self.value['state']!='ready':return
         if _at(_now(now))<_at(self.value['updated_at']):raise RemoteTaskError('remote_window_clock_rollback')
         update=self._checked_update(now=now);context=self.value['plan_context']
         if update['revision']>context['revision']:
@@ -216,7 +237,7 @@ class RemoteWindowTask(RemoteTask):
         except ValueError:raise RemoteTaskError('remote_window_plan_unavailable') from None
         if _digest(document)!=self.value['config']['plan_digest']:
             raise RemoteTaskError('remote_window_plan_changed')
-        if self.value['schema_version']==3 and self.value['state'] not in ('completed','failed'):
+        if 'plan_context' in self.value and self.value['state'] not in ('completed','failed'):
             self._checked_update()
         if list(self.db.identity)!=self.value['database_identity']:
             raise RemoteTaskError('remote_window_database_changed')
@@ -239,23 +260,28 @@ class RemoteWindowTask(RemoteTask):
             (MAX_RECORD,self.value['initial_id'],self.value['config']['max_pairs']+2))
 
     def _verify_prefix(self):
-        self._database_guard();count=self.value['successful']+self.value['failed'];digest=_EMPTY;attempts=0;pending=[];seen=0
+        self._database_guard();count=self.value['successful']+self.value['failed']+self.value.get('scheduled_pauses',0);digest=_EMPTY;attempts=0;pending=[];seen=0
+        observed={'successful':0,'failed':0,'scheduled_pauses':0}
         for index,row in enumerate(self._read_rows()):
             seen+=1
             if row[0]!=self.value['initial_id']+index+1:raise RemoteTaskError('remote_window_result_conflict')
             record=self._record(row)
             if index<count:
                 digest=_chain(digest,row);attempts+=sum(q['attempted'] for q in record['queries'].values())
+                paused=any(q['error_code']=='business_window_closed' for q in record['queries'].values())
+                observed['scheduled_pauses' if paused else 'successful' if record['ok'] else 'failed']+=1
             else:pending.append(row)
         if seen not in ((count,count+1) if self.value['pending'] else (count,)):
             raise RemoteTaskError('remote_window_result_conflict')
         if digest!=self.value['records_digest'] or attempts!=self.value['recorded_http_attempts']:
             raise RemoteTaskError('remote_window_database_changed')
+        if 'business_hours' in self.value['config'] and any(observed[k]!=self.value[k] for k in observed):
+            raise RemoteTaskError('remote_window_result_conflict')
         return pending
 
     def _tail(self,*,own_append=False):
         self._database_guard(own_append=own_append)
-        count=self.value['successful']+self.value['failed'];after=self.value['initial_id']+count
+        count=self.value['successful']+self.value['failed']+self.value.get('scheduled_pauses',0);after=self.value['initial_id']+count
         maximum=self.db.db.execute('SELECT COALESCE(MAX(id),0) FROM remote_samples').fetchone()[0]
         if maximum not in ((after,after+1) if self.value['pending'] else (after,)):
             raise RemoteTaskError('remote_window_result_conflict')
@@ -295,7 +321,7 @@ class RemoteWindowTask(RemoteTask):
         if self.finish_if_due(now=now) or self.value['state']!='ready' or store_id not in self.value['config']['store_ids']:
             raise RemoteTaskError('remote_window_start_not_allowed')
         value=deepcopy(self.value);value['pending']={'cursor':value['cursor'],'store_id':store_id,
-            'run_id':self.db.run_id,'after_id':value['initial_id']+value['successful']+value['failed'],'started_at':at}
+            'run_id':self.db.run_id,'after_id':value['initial_id']+value['successful']+value['failed']+value.get('scheduled_pauses',0),'started_at':at}
         value['starts'][store_id]=at;value.update(state='running',last_attempt_at=at,updated_at=at);self._commit(value)
 
     def reconcile(self,*,now,interrupted=False):
@@ -308,7 +334,9 @@ class RemoteWindowTask(RemoteTask):
             if (row[1]!=pending['run_id'] or row[2]!=pending['store_id']
                     or _at(record['queries']['groupqueues']['started_at'])<_at(pending['started_at'])):
                 raise RemoteTaskError('remote_window_result_conflict')
-            value['successful' if record['ok'] else 'failed']+=1
+            paused=('business_hours' in value['config'] and any(
+                q['error_code']=='business_window_closed' for q in record['queries'].values()))
+            value['scheduled_pauses' if paused else 'successful' if record['ok'] else 'failed']+=1
             value['recorded_http_attempts']+=sum(q['attempted'] for q in record['queries'].values())
             value['records_digest']=_chain(value['records_digest'],row)
         else:
@@ -320,6 +348,8 @@ class RemoteWindowTask(RemoteTask):
 class PersistentWindowSchedule:
     def __init__(self,task,*,wall,monotonic,previous_starts=None,previous_monotonic=None,resume_wait=False):
         self.task=task;self.last_wall=None;self.last_mono=None;self.starts_mono={}
+        from .businesshours import BusinessHours
+        self.hours=BusinessHours(task.value['config']['business_hours']) if 'business_hours' in task.value['config'] else None
         at,mono=self.clock(wall,monotonic)
         self.previous_starts=deepcopy(previous_starts or {})
         carried=deepcopy(previous_monotonic or {})
@@ -349,6 +379,12 @@ class PersistentWindowSchedule:
         policy=shared_polling_policy(doc,as_of=_now(wall),base_interval=c['base_interval'])
         policies={p['store_id']:p for p in policy['stores']};due=[];wakes=[]
         for store in c['store_ids']:
+            if self.hours is not None:
+                opening=self.hours.decision(store,at)
+                if not opening['is_open_window']:
+                    wakes.append(mono+max(0,(_at(opening['next_open_at'])-at).total_seconds())
+                        if opening['next_open_at'] else self.deadline_mono)
+                    continue
             item=policies.get(store);interval=(item['requested_interval_seconds'] if item else None) or c['base_interval']
             previous=value['starts'].get(store,self.previous_starts.get(store))
             target=mono+max(0,(_at(previous)+timedelta(seconds=interval)-at).total_seconds()) if previous else mono
@@ -370,30 +406,46 @@ class PersistentWindowSchedule:
 def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,should_stop=lambda:False,schedule=None):
     if schedule is None:schedule=PersistentWindowSchedule(task,wall=wall_clock(),monotonic=monotonic_clock())
     if schedule.task is not task:raise RemoteTaskError('remote_window_schedule_conflict')
-    while not should_stop():
-        decision=schedule.decision(wall=wall_clock(),monotonic=monotonic_clock())
-        if decision['done']:break
-        if not decision['due_stores']:
-            delay=max(0,decision['wake_monotonic']-monotonic_clock())
-            sleep(min(1,delay) if task.value['schema_version']==3 else delay);continue
-        store=decision['due_stores'][0]
-        schedule.mark(store,wall=wall_clock(),monotonic=monotonic_clock())
-        record=client.snapshot(store);identifier=task.db.append(record);task.reconcile(now=wall_clock())
-        emit({'id':identifier,'pair_slot':task.value['cursor'],'record':record})
-        if task.value['state']=='failed':break
+    if schedule.hours is not None and client is not None:
+        from .remote import RemoteClient
+        if not isinstance(client,RemoteClient) or client.request_guard is not None:
+            raise RemoteTaskError('business_hours_transport_guard_required')
+        def guard(store):
+            at,mono=schedule.clock(wall_clock(),monotonic_clock())
+            return (not should_stop() and at<_at(task.value['deadline_at'])
+                and mono<schedule.deadline_mono and schedule.hours.decision(store,at)['is_open_window'])
+        client.request_guard=guard
+    try:
+        while not should_stop():
+            decision=schedule.decision(wall=wall_clock(),monotonic=monotonic_clock())
+            if decision['done']:break
+            if not decision['due_stores']:
+                delay=max(0,decision['wake_monotonic']-monotonic_clock())
+                sleep(min(1,delay) if 'plan_context' in task.value or schedule.hours is not None else delay);continue
+            store=decision['due_stores'][0]
+            schedule.mark(store,wall=wall_clock(),monotonic=monotonic_clock())
+            record=client.snapshot(store);identifier=task.db.append(record);task.reconcile(now=wall_clock())
+            emit({'id':identifier,'pair_slot':task.value['cursor'],'record':record})
+            if task.value['state']=='failed':break
+    finally:
+        if schedule.hours is not None and client is not None:
+            client.request_guard=None
     result=window_status(task.value)
     result['ok']=task.value['state']=='completed' and not task.value['failed'] and not task.value['uncertain']
     result['stopped_by_request']=should_stop();emit({'remote_window_summary':result});return result
 
 
 class RemoteWindowService(RemoteQueueService):
-    def __init__(self,*,plan_file,base_interval=300,duration_seconds=86400,max_pairs=8640,resume_if_present=False,plan_updates_file=None,**kwargs):
+    def __init__(self,*,plan_file,base_interval=300,duration_seconds=86400,max_pairs=8640,resume_if_present=False,plan_updates_file=None,business_hours=None,**kwargs):
         if type(resume_if_present) is not bool or resume_if_present and kwargs.get('resume',False):
             raise RemoteTaskError('remote_task_invalid_resume_mode')
         self.resume_if_present=resume_if_present
         super().__init__(interval=base_interval,samples=1,**kwargs)
         self.config=window_config(kwargs['db'],plan_file,kwargs['store_ids'],base_interval,duration_seconds,max_pairs,
-            now=self.wall_clock(),plan_updates_file=plan_updates_file)
+            now=self.wall_clock(),plan_updates_file=plan_updates_file,business_hours=business_hours)
+        if business_hours is not None:
+            from .dailyview import DailyView
+            self.daily_view=DailyView(kwargs['store_ids'],hours=business_hours,base_interval=base_interval)
     def _make_task(self):
         return RemoteWindowTask(self.task_file,config=self.config,resume=self.resume,now=self.wall_clock(),
             resume_if_present=self.resume_if_present)

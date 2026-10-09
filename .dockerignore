@@ -13,6 +13,8 @@
 !src/sushiwait/web/*.html
 !src/sushiwait/web/*.css
 !src/sushiwait/web/*.js
+!config/
+!config/default-business-hours.json
 !deploy/
 !deploy/Dockerfile
 !deploy/requirements-build.txt

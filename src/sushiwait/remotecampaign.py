@@ -42,7 +42,7 @@ def _name(index):
 
 def campaign_config(root, plan_file, store_ids, base_interval=300,
                     duration_seconds=7 * 86400, window_seconds=86400,
-                    max_pairs=6300, *, now, plan_updates_file=None):
+                    max_pairs=6300, *, now, plan_updates_file=None, business_hours=None):
     root = os.path.abspath(root)
     plan = os.path.abspath(plan_file)
     update = None if plan_updates_file is None else os.path.abspath(plan_updates_file)
@@ -57,11 +57,15 @@ def campaign_config(root, plan_file, store_ids, base_interval=300,
     first = str(Path(root) / _name(1) / 'remote.sqlite3')
     # Reuse the existing scope/plan validation without creating a window.
     initial = window_config(first, plan, store_ids, base_interval, 30, 1, now=now)
-    return {'root': root, 'db': first, 'plan_file': plan,
+    result = {'root': root, 'db': first, 'plan_file': plan,
             'plan_digest': initial['plan_digest'], 'store_ids': list(store_ids),
             'base_interval': base_interval, 'duration_seconds': duration_seconds,
             'window_seconds': window_seconds, 'max_pairs': max_pairs,
             'plan_updates_file': update}
+    if business_hours is not None:
+        from .businesshours import validate_hours
+        result['business_hours'] = validate_hours(business_hours)
+    return result
 
 
 def _hash_ok(value):
@@ -73,6 +77,22 @@ def _decode_campaign(body):
         if len(body) > 16 * 1024:
             raise ValueError
         value = _json(body)
+        if type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] == 2:
+            from .businesshours import validate_hours
+            if type(value.get('config')) is not dict or 'business_hours' not in value['config']:
+                raise ValueError
+            validate_hours(value['config']['business_hours'])
+            base = deepcopy(value)
+            base['schema_version'] = 1
+            base['config'].pop('business_hours')
+            for entry in base['windows']:
+                s = entry['summary']
+                if (type(s) is not dict or not _integer(s.get('scheduled_pauses'),0,s.get('cursor',-1))
+                        or not _integer(s.get('successful'),0,s.get('cursor',-1))):
+                    raise ValueError
+                s['successful'] += s.pop('scheduled_pauses')
+            _decode_campaign(json.dumps(base,separators=(',',':')).encode())
+            return value
         if (type(value) is not dict or set(value) != {'schema_version', 'source', 'config',
                 'created_at', 'deadline_at', 'updated_at', 'state', 'end_reason', 'windows', 'plan_context'}
                 or type(value['schema_version']) is not int or value['schema_version'] != 1
@@ -182,7 +202,7 @@ def campaign_status(value):
     totals = {k: sum(e['summary'][k] for e in value['windows'])
               for k in ('cursor', 'successful', 'failed', 'uncertain', 'recorded_http_attempts')}
     pending = any(e['summary']['pending'] for e in value['windows'])
-    return {'campaign_schema_version': 1, 'source': SOURCE, 'mode': 'bounded_multi_day_campaign',
+    result = {'campaign_schema_version': value['schema_version'], 'source': SOURCE, 'mode': 'bounded_multi_day_campaign',
             'state': value['state'], 'end_reason': value['end_reason'], 'store_ids': list(c['store_ids']),
             'base_interval_seconds': c['base_interval'], 'duration_seconds': c['duration_seconds'],
             'window_seconds': c['window_seconds'], 'created_at': value['created_at'],
@@ -199,6 +219,10 @@ def campaign_status(value):
             'status_semantics': 'last_published_campaign_checkpoint',
             'accepted_plan_revision': value['plan_context']['revision'] if value['plan_context'] else None,
             'source_freshness': 'unknown', 'eta_available': False, 'verified_training_labels': 0}
+    if 'business_hours' in c:
+        result.update(business_hours_enabled=True,business_hours_source='user_assumed',business_hours_verified=False,
+            scheduled_pause_slots=sum(e['summary']['scheduled_pauses'] for e in value['windows']))
+    return result
 
 
 def remote_campaign_status(root):
@@ -206,7 +230,10 @@ def remote_campaign_status(root):
 
 
 def _summary(task):
-    return {key: (task['pending'] is not None if key == 'pending' else task[key]) for key in _SUMMARY_KEYS}
+    result = {key: (task['pending'] is not None if key == 'pending' else task[key]) for key in _SUMMARY_KEYS}
+    if 'scheduled_pauses' in task:
+        result['scheduled_pauses'] = task['scheduled_pauses']
+    return result
 
 
 def _file_digest(path):
@@ -238,7 +265,7 @@ class RemoteCampaign(RemoteTask):
     @staticmethod
     def initial_value(config, now):
         created = _now(now)
-        return {'schema_version': 1, 'source': SOURCE, 'config': deepcopy(config),
+        return {'schema_version': 2 if 'business_hours' in config else 1, 'source': SOURCE, 'config': deepcopy(config),
                 'created_at': created,
                 'deadline_at': _now(_at(created) + timedelta(seconds=config['duration_seconds'])),
                 'updated_at': created, 'state': 'active', 'end_reason': None,
@@ -279,6 +306,8 @@ class RemoteCampaign(RemoteTask):
                   'duration_seconds': entry['duration_seconds'], 'max_pairs': entry['max_pairs']}
         if c['plan_updates_file'] is not None:
             config['plan_updates_file'] = c['plan_updates_file']
+        if 'business_hours' in c:
+            config['business_hours'] = deepcopy(c['business_hours'])
         return config
 
     def _archive(self, entry, *, restore=None):
@@ -327,7 +356,7 @@ class RemoteCampaign(RemoteTask):
         if new:
             value['windows'].append(entry)
         value['updated_at'] = task['updated_at']
-        if task['schema_version'] == 3:
+        if 'plan_context' in task:
             value['plan_context'] = deepcopy(task['plan_context'])
         self._commit(value)
 
@@ -449,12 +478,16 @@ class RemoteCampaign(RemoteTask):
 class RemoteCampaignService(RemoteQueueService):
     def __init__(self, *, root, plan_file, store_ids, base_interval=300,
                  duration_seconds=7 * 86400, window_seconds=86400, max_pairs=6300,
-                 plan_updates_file=None, resume=False, resume_if_present=False, **kwargs):
+                 plan_updates_file=None, resume=False, resume_if_present=False, business_hours=None, **kwargs):
         super().__init__(db=str(Path(root) / _name(1) / 'remote.sqlite3'), task_file=str(Path(root) / 'campaign.json'),
                          store_ids=store_ids, interval=base_interval, samples=1, resume=resume, **kwargs)
         self.resume_if_present = resume_if_present
         self.config = campaign_config(root, plan_file, store_ids, base_interval, duration_seconds,
-                                      window_seconds, max_pairs, now=self.wall_clock(), plan_updates_file=plan_updates_file)
+                                      window_seconds, max_pairs, now=self.wall_clock(), plan_updates_file=plan_updates_file,
+                                      business_hours=business_hours)
+        if business_hours is not None:
+            from .dailyview import DailyView
+            self.daily_view=DailyView(store_ids,hours=business_hours,base_interval=base_interval)
 
     def _run(self):
         try:
@@ -470,6 +503,7 @@ class RemoteCampaignService(RemoteQueueService):
                 self._set('running', task=campaign_status(campaign.value))
                 def emit(event):
                     if 'record' in event:
+                        if self.daily_view is not None:self.daily_view.committed(event)
                         self.view.publish(event['record'])
                     self._set('running', task=campaign_status(campaign.value))
                 def sleep(seconds):
@@ -492,4 +526,12 @@ class RemoteCampaignService(RemoteQueueService):
         result = super().status()
         result.update(mode='bounded_multi_day_campaign', automatic_normal_window_transition=True,
                       automatic_failure_retry=False)
+        if 'business_hours' in self.config:
+            from .businesshours import BusinessHours
+            hours = BusinessHours(self.config['business_hours'])
+            result.update(business_hours_enabled=True,business_hours_source='user_assumed',business_hours_verified=False,
+                business_windows={store:hours.decision(store,self.wall_clock()) for store in self.view.stores},
+                off_hours_queries_allowed=False)
+            result['collection_phase']=('collecting_business_window' if any(w['is_open_window'] for w in result['business_windows'].values())
+                else 'waiting_business_hours') if result['service_state']=='running' and result['worker_alive'] else result['service_state']
         return result
