@@ -90,6 +90,13 @@ def run(meta, *, now=None, runner=subprocess.run, archive_check=verify_archives,
     hours=BusinessHours(read_hours(release/'config/default-business-hours.json'))
     if any(hours.decision(s,clock)['is_open_window'] for s in ids):raise ValueError('cutover_requires_closed_hours')
     archive_check(meta,runner)
+    previous={}
+    for unit in meta['old_units']+meta['new_units']:
+        state=runner(['systemctl','is-enabled',unit],capture_output=True,text=True,timeout=5).stdout.strip()
+        if state not in ('enabled','disabled'):
+            raise ValueError('cutover_unit_enable_state_unconfirmed')
+        previous[unit]=state
+    changed_enable_states=False
     try:
         runner(['systemctl','stop',*meta['old_units']],check=True,timeout=60)
         for unit in meta['old_collector_units']:
@@ -110,17 +117,28 @@ def run(meta, *, now=None, runner=subprocess.run, archive_check=verify_archives,
             except (ValueError,OSError):pass
             sleep(.5)
         if not healthy:raise ValueError('cutover_new_readers_unconfirmed')
-        runner(['systemctl','disable',*meta['old_units']],check=True,timeout=30)
+        changed_enable_states=True
         runner(['systemctl','enable',*meta['new_units']],check=True,timeout=30)
+        runner(['systemctl','disable',*meta['old_units']],check=True,timeout=30)
     except BaseException:
         runner(['systemctl','stop',*meta['new_units']],check=False,timeout=60)
+        for unit in meta['new_units']:
+            state=runner(['systemctl','is-active',unit],capture_output=True,text=True,timeout=5)
+            if state.stdout.strip() not in ('inactive','failed'):
+                raise ValueError('cutover_rollback_stop_unconfirmed')
+        if changed_enable_states:
+            for state,command in [('enabled','enable'),('disabled','disable')]:
+                units=[u for u,v in previous.items() if v==state]
+                if units:runner(['systemctl',command,*units],check=False,timeout=30)
         # Original task identities/deadlines are unchanged on rollback.
         runner(['systemctl','start',*meta['old_units']],check=False,timeout=60)
         raise
-    proof={'cutover_completed_at':_now(clock),'configured_stores':len(ids),
+    proof={'cutover_started_at':_now(clock),
+        'cutover_completed_at':_now(datetime.now(timezone.utc) if now is None else clock),'configured_stores':len(ids),
         'old_store_writers_verified_stopped':len(meta['old_collector_units']),
         'verified_old_archives':len(meta['legacy_store_ids']),'old_files_preserved':True,
         'new_activation':meta['not_before'],'official_requests_added_by_handover':0,
+        'previous_unit_enable_states':previous,
         'current_mainland_completeness_verified':False}
     # Private local operator evidence, separate from immutable store archives.
     with target.open('x') as stream:json.dump(proof,stream);stream.flush();os.fsync(stream.fileno())

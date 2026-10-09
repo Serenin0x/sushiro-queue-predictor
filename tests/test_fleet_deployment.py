@@ -97,6 +97,8 @@ class DeploymentTests(unittest.TestCase):
 
     def runner(self,cmd,**kwargs):
         self.commands.append(cmd)
+        if cmd[1]=='is-enabled':
+            return SimpleNamespace(stdout='enabled\n' if '-old-' in cmd[2] else 'disabled\n',returncode=0)
         return SimpleNamespace(stdout='inactive\n',returncode=3)
 
     def test_closed_handover_verifies_before_stopping_and_enables_only_after_health(self):
@@ -105,8 +107,9 @@ class DeploymentTests(unittest.TestCase):
         proof=handover.run(meta,now=BASE+timedelta(hours=11,minutes=10),runner=self.runner,
             archive_check=archives,reader=self.reader,sleep=lambda _:None)
         self.assertEqual(self.commands[0],['verified-archives'])
-        self.assertEqual(self.commands[1],['systemctl','stop',*meta['old_units']])
-        self.assertEqual(self.commands[-1],['systemctl','enable',*meta['new_units']])
+        self.assertIn(['systemctl','stop',*meta['old_units']],self.commands)
+        self.assertEqual(self.commands[-2],['systemctl','enable',*meta['new_units']])
+        self.assertEqual(self.commands[-1],['systemctl','disable',*meta['old_units']])
         self.assertEqual(proof['configured_stores'],147)
         self.assertEqual(proof['official_requests_added_by_handover'],0)
         self.assertTrue((Path(meta['root'])/'cutover-proof.json').is_file())
@@ -136,7 +139,8 @@ class DeploymentTests(unittest.TestCase):
         self.commands=[];meta=self.meta()
         with self.assertRaises(ValueError):handover.run(meta,now=BASE+timedelta(hours=11,minutes=10),runner=self.runner,
             archive_check=lambda *_:None,reader=lambda *_:{},sleep=lambda _:None)
-        self.assertEqual(self.commands[-2:], [['systemctl','stop',*meta['new_units']],
+        mutations=[x for x in self.commands if x[1] not in ('is-active','is-enabled')]
+        self.assertEqual(mutations[-2:], [['systemctl','stop',*meta['new_units']],
             ['systemctl','start',*meta['old_units']]])
         self.assertFalse(any('enable' in x for x in self.commands))
         self.assertFalse((Path(meta['root'])/'cutover-proof.json').exists())
@@ -144,6 +148,43 @@ class DeploymentTests(unittest.TestCase):
     def test_unknown_unit_namespace_or_store_scope_rejected(self):
         meta=self.meta();meta['old_units']=['sshd.service']
         with self.assertRaises(ValueError):handover.validate(meta)
+
+    def test_partial_enable_failure_restores_original_boot_states_and_old_services(self):
+        self.commands=[];meta=self.meta()
+        def runner(command,**kwargs):
+            result=self.runner(command,**kwargs)
+            if command==['systemctl','disable',*meta['old_units']]:
+                raise RuntimeError('simulated enable-state failure')
+            return result
+        with self.assertRaises(RuntimeError):
+            handover.run(meta,now=BASE+timedelta(hours=11,minutes=10),runner=runner,
+                archive_check=lambda *_:None,reader=self.reader,sleep=lambda _:None)
+        mutations=[x for x in self.commands if x[1] not in ('is-active','is-enabled')]
+        self.assertEqual(mutations[-4:],[['systemctl','stop',*meta['new_units']],
+            ['systemctl','enable',*meta['old_units']],['systemctl','disable',*meta['new_units']],
+            ['systemctl','start',*meta['old_units']]])
+        self.assertFalse((Path(meta['root'])/'cutover-proof.json').exists())
+
+    def test_unknown_boot_state_never_stops_old_services(self):
+        self.commands=[]
+        def runner(command,**kwargs):
+            self.commands.append(command);return SimpleNamespace(stdout='masked\n')
+        with self.assertRaises(ValueError):
+            handover.run(self.meta(),now=BASE+timedelta(hours=11,minutes=10),runner=runner,
+                archive_check=lambda *_:None,reader=self.reader,sleep=lambda _:None)
+        self.assertFalse(any(x[1]=='stop' for x in self.commands))
+
+    def test_unconfirmed_new_stop_does_not_restart_duplicate_old_writers(self):
+        self.commands=[];meta=self.meta()
+        def runner(command,**kwargs):
+            result=self.runner(command,**kwargs)
+            if command[1]=='is-active' and command[2] in meta['new_units']:
+                result.stdout='active\n'
+            return result
+        with self.assertRaisesRegex(ValueError,'rollback_stop_unconfirmed'):
+            handover.run(meta,now=BASE+timedelta(hours=11,minutes=10),runner=runner,
+                archive_check=lambda *_:None,reader=lambda *_:{},sleep=lambda _:None)
+        self.assertFalse(any(x[1]=='start' and x[2:] == meta['old_units'] for x in self.commands))
 
 
 if __name__=='__main__':unittest.main()
