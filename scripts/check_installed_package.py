@@ -129,6 +129,19 @@ def check_tracking_install():
                 assert main(['ticket-track-status','--state-dir',str(state)])==0
                 assert main(['ticket-track-end','--state-dir',str(state),'--status','ended','--declared-at',stamp(0)])==0
             result=json.loads((state/'prediction-0001.json').read_bytes())
+            draft_one=inputs/'experience-1.json';draft_two=inputs/'experience-2.json'
+            with patch('sushiwait.experience._now',return_value=now),contextlib.redirect_stdout(io.StringIO()) as experience_output:
+                assert main(['ticket-outcome-draft','--state-dir',str(state),'--event-type','checked_in',
+                    '--output',str(draft_one)])==0
+                assert main(['ticket-outcome-draft','--state-dir',str(state),'--event-type','called',
+                    '--previous-file',str(draft_one),'--output',str(draft_two)])==0
+            experience=json.loads(draft_two.read_bytes())
+            assert experience['revision']==2 and experience['episode_id']==ticket['episode_id']
+            assert experience['events'][:2]==json.loads(draft_one.read_bytes())['events']
+            assert 'number' not in experience and 'desired_arrival_at' not in experience
+            assert all(e['verification_status']=='unverified' for e in experience['events'])
+            assert draft_two.stat().st_mode&0o777==0o600
+            assert ticket['episode_id'] not in experience_output.getvalue() and str(root) not in experience_output.getvalue()
             assert result['fusion']['wait_quantile_envelopes_us']['p50']=={'lower_us':300_000_000,'upper_us':360_000_000}
             assert result['polling_request']['requested_interval_seconds']==30 and not result['eta_available']
             assert all(p.stat().st_mode&0o777==0o600 for p in state.iterdir())
@@ -137,7 +150,7 @@ def check_tracking_install():
             except TrackingError as error: assert error.error_code=='tracking_terminal'
             else: raise AssertionError('tracking_install_terminal_publication')
         assert sockets.call_count==auth.call_count==0
-    print(json.dumps({'installed_manual_tracking_ok':True,'actual_private_cli_paths':5,'conditional_distribution_applied':True,
+    print(json.dumps({'installed_manual_tracking_ok':True,'actual_private_cli_paths':5,'experience_draft_cli_calls':2,'experience_revision_preserved':True,'conditional_distribution_applied':True,
         'terminal_publication_rejected':True,'socket_calls':0,'credentials_accessed':False,'provider_calls':0,
         'verified_training_labels':0,'eta_available':False}))
 
@@ -673,7 +686,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("realtime-backtest", "realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("ticket-outcome-draft", "realtime-backtest", "realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
         raise SystemExit("installed_cli_missing_commands")
     if 'collection-hub-serve' not in help_result.stdout:
         raise SystemExit('installed_monitor_hub_command_missing')

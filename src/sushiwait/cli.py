@@ -754,6 +754,15 @@ def build_parser() -> argparse.ArgumentParser:
     track = commands.add_parser('ticket-track-init', help='保存手动已有号的私有有界会话；不取号')
     track.add_argument('--ticket-file', required=True)
     track.add_argument('--state-dir', required=True)
+    experience = commands.add_parser('ticket-outcome-draft', help='根据本人记录的实际事件生成私有经历草稿；不自动认定叫号')
+    experience.add_argument('--state-dir', required=True)
+    experience.add_argument('--event-type', required=True, choices=('checked_in','called','seated','no_show','cancelled','observation_ended'))
+    experience.add_argument('--event-lower')
+    experience.add_argument('--event-upper')
+    experience.add_argument('--issued-lower')
+    experience.add_argument('--issued-upper')
+    experience.add_argument('--previous-file')
+    experience.add_argument('--output', required=True)
     track = commands.add_parser('ticket-track-observe', help='绑定已提交公开投影与本人号码；不查询上游')
     track.add_argument('--state-dir', required=True)
     track.add_argument('--view-file', required=True)
@@ -1346,6 +1355,23 @@ def main(argv: list[str] | None = None) -> int:
                     'network_performed': False, 'provider_called': False, 'business_writes': 0,
                     'notification_sent': False, 'verified_training_labels': 0, 'eta_available': False})
                 return 1
+        if args.command == 'ticket-outcome-draft':
+            from .experience import ExperienceError, write_experience
+            try:
+                previous = read_tracking_document(args.previous_file) if args.previous_file else None
+                result = write_experience(directory=args.state_dir, destination=args.output,
+                    event_type=args.event_type, lower=args.event_lower, upper=args.event_upper,
+                    issued_lower=args.issued_lower, issued_upper=args.issued_upper, previous=previous)
+                durable = result['durability_confirmed']
+                emit({'ok': durable, **result, **({} if durable else {'error_code':'experience_durability_unconfirmed'})})
+                return 0 if durable else 1
+            except (ExperienceError, TrackingError, ValueError, OSError) as error:
+                emit({'ok': False, 'error_code': getattr(error, 'error_code', 'experience_invalid_input'),
+                    'committed': getattr(error, 'committed', False), 'durability_confirmed': False,
+                    'network_performed': False, 'provider_called': False, 'business_writes': 0,
+                    'notification_sent': False, 'verified_training_labels': 0, 'eta_available': False})
+                return 1
+
         if args.command == 'realtime-backtest':
             from .realtimebacktest import RealtimeBacktestError, read_plan as read_replay_plan, write_realtime_backtest
             from .remote import RemoteStore
