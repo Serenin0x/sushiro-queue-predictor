@@ -104,4 +104,92 @@ check("future boundary produces censorship, not call or skip",()=>{
   assert.equal(r.cases[1].state,"boundary_censored");assert(!("called" in r.cases[1]));
 });
 check("invalid replay bounds",()=>assert.equal(model.replay(data(),{queueType:"ordinary",stride:1}).error,"invalid_replay_request"));
+function archived(day, count=91, rate=2) {
+  const d=data(count,rate),shift=Date.parse(`${day}T03:00:00Z`)-base;
+  d.local_date=day;d.graph_truncated=false;d.summary={date_type:"ordinary_workday"};
+  d.points.forEach(p=>{for(const key of ["request_started_at","queue_received_at"])p[key]=iso(Date.parse(p[key])+shift);});
+  d.generated_at=d.points.at(-1).queue_received_at;return d;
+}
+function withHistory(d,days,changes={}) {
+  d.graph_truncated=false;d.summary={date_type:"ordinary_workday"};
+  return model.forecastWithHistory(d,options(d,changes),days);
+}
+check("history starts before a five-minute current trend exists",()=>{
+  const d=data(4),r=withHistory(d,[archived("2026-10-08"),archived("2026-10-07")],{ticket:"136"});
+  assert(r.available);assert.equal(r.policy,model.HISTORY_POLICY);assert.equal(r.mode,"history_initial");
+  assert.equal(r.live_weight,0);assert.equal(r.history.selected_days,2);assert.equal(r.history.samples,4);
+  assert.equal(r.history.cohort,"date_type_season_time");assert.equal(r.history.interval_observed,4);
+  assert.equal(r.reference_time,iso(base+(3+14.5)*60000));assert.equal(r.calibrated_interval,false);
+});
+check("right-censored windows retain unknown late endpoint",()=>{
+  const r=withHistory(data(4),[archived("2026-10-08",61),archived("2026-10-07",61)],{ticket:"136"});
+  assert(r.available);assert.equal(r.history.right_censored,2);assert.equal(r.scenario_latest,null);
+  assert.equal(r.empirical_quantile_bounds_minutes_from_sample["0.9"].upper,null);
+});
+check("unobserved crossings cannot yield a fabricated finite median",()=>{
+  const r=withHistory(data(4),[archived("2026-10-08",91,0),archived("2026-10-07",91,0)]);
+  assert.equal(r.available,false);assert.equal(r.history.state,"median_upper_unknown");
+});
+check("history failure preserves valid recent-only forecast",()=>{
+  const d=data(),r=withHistory(d,[archived("2026-10-08")]);
+  assert(r.available);assert.equal(r.mode,"recent_only");assert.equal(r.history.state,"insufficient_history");
+  assert.equal(r.reference_time,model.forecast(d,options(d)).reference_time);
+});
+check("new observed span increases live weight, wall-clock aging does not",()=>{
+  const days=[archived("2026-10-08"),archived("2026-10-07")],a=data(11),b=data(21);
+  const ra=withHistory(a,days,{ticket:"160"}),rb=withHistory(b,days,{ticket:"180"});
+  assert.equal(ra.mode,"history_live_mix");assert.equal(ra.live_weight,.425);assert.equal(rb.live_weight,.85);
+  assert.equal(withHistory(a,days,{ticket:"160",now:options(a).now+30000}).live_weight,ra.live_weight);
+});
+check("latest acceleration raises live weight and early scenario",()=>{
+  const d=data();d.points.at(-1).queues.mixedQueue=["258"];
+  const r=withHistory(d,[archived("2026-10-08",91,10),archived("2026-10-07",91,10)],
+    {ticket:"300",issuedAt:d.points.at(-1).queue_received_at});
+  assert(r.available);assert(r.acceleration_signal);assert.equal(r.live_weight,.75);
+});
+check("history selection preserves boundary censorship",()=>{
+  const days=[archived("2026-10-08"),archived("2026-10-07")];
+  days.forEach(d=>{d.points[61].pair_ok=false;});
+  const r=withHistory(data(4),days,{ticket:"136"});assert.equal(r.history.boundary_censored,2);
+});
+check("historical times are intervals, not interpolated exact events",()=>{
+  const r=withHistory(data(4),[archived("2026-10-08"),archived("2026-10-07")],{ticket:"136"});
+  assert.deepEqual(r.empirical_quantile_bounds_minutes_from_sample["0.5"],{lower:14,upper:15});
+  assert.equal(r.central_semantics,"midpoint_of_empirical_median_bounds");assert.equal(r.actual_call_verified,false);
+});
+check("one densely observed day cannot outweigh another day",()=>{
+  const r=withHistory(data(4),[archived("2026-10-08",91,1),archived("2026-10-07",31,2)],{ticket:"136"});
+  assert.equal(r.history.samples,3);assert.deepEqual(r.empirical_quantile_bounds_minutes_from_sample["0.5"],{lower:14,upper:15});
+});
+for(const mutate of [d=>d.requested_store_id="900002",d=>d.graph_truncated=true,
+  d=>d.local_date="2026-10-09",d=>d.local_date="2026-10-10",d=>d.local_date="2026-02-30",
+  d=>d.generated_at=iso(base+40*60000),d=>d.generated_at=iso(Date.parse(d.points[1].queue_received_at)),
+  d=>d.network_performed_by_read=true,d=>d.first_label_is_confirmed_call=true])
+  check("invalid, future or mismatched archive excluded",()=>{
+    const past=archived("2026-10-08");mutate(past);
+    const r=withHistory(data(4),[past,archived("2026-10-07")]);
+    assert.equal(r.available,false);assert.equal(r.history.excluded_days,1);assert.equal(r.history.selected_days,0);
+  });
+check("duplicates do not masquerade as independent days",()=>{
+  const d=archived("2026-10-08"),r=withHistory(data(4),[d,structuredClone(d)]);
+  assert.equal(r.available,false);assert.equal(r.history.accepted_days,1);assert.equal(r.history.excluded_days,1);
+});
+check("holiday archives are not pooled into ordinary workdays",()=>{
+  const days=[archived("2026-10-08"),archived("2026-10-07")];days.forEach(d=>d.summary.date_type="holiday");
+  assert.equal(withHistory(data(4),days).history.state,"insufficient_history");
+});
+check("history cannot bypass fresh-sample, cycle and scope guards",()=>{
+  const days=[archived("2026-10-08"),archived("2026-10-07")],d=data();
+  assert.equal(withHistory(d,days,{now:options(d).now+90001}).reason,"stale_sample");
+  assert.equal(withHistory(d,days,{confirmedScope:false}).reason,"confirm_ticket_scope");
+  d.points[10].queues.mixedQueue=["10"];
+  assert.equal(withHistory(d,days).reason,"ticket_cycle_uncertain");
+});
+check("history work bounds and caller data stay immutable",()=>{
+  const d=data(),days=[archived("2026-10-08"),archived("2026-10-07")],before=JSON.stringify([d,days]);
+  d.graph_truncated=false;d.summary={date_type:"ordinary_workday"};const canonical=JSON.stringify([d,days]);
+  model.forecastWithHistory(d,options(d),days);assert.equal(JSON.stringify([d,days]),canonical);assert(before);
+  assert.equal(withHistory(d,Array(8).fill(days[0])).history.accepted_days,0);
+  d.graph_truncated=true;assert.equal(model.forecastWithHistory(d,options(d),days).reason,"truncated_current_projection");
+});
 console.log(`${cases} reference-model cases passed`);

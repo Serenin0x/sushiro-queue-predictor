@@ -1,5 +1,7 @@
 # 自动检查与安装验证
 
+2026-10-10 rc66：新历史初估／实时修正62个Node模型案例和独立历史UI检查通过；浏览器发现并修正过期结果旁的历史回退文案后，最终完整1670项33.424秒OK。新wheel328305字节、65模块／8资源／73文件与源码及仓库外安装完全一致，README元数据相同；仓库外-I安装检查exit0。准确公开与CI随后记录，线上仍64，不借旧65成绩，实际叫号精度未验证。
+
 E0367最终包补充：README已纠正workflow权限限制，最终wheel324500字节／SHA2560d988401927570cdb0e9c17d442abfc3608e6457ad562f80b94ed2c056c84e84。73运行文件逐字等于完整检查初包和源码，仓库外重新安装最终包及全部文件／README元数据核对成功；不因文案重跑全套。以下E0366初包324445字节结果保留原时点。
 
 2026-10-09按本人要求收紧检查流程：已准备main分支push仅修改docs中的Markdown或AGENTS.md时跳过整套工作流，代码、测试、部署配置、README和工作流变化照常检查；PR和手动运行保持完整，避免必需检查因路径过滤一直pending。首次公开被GitHub明确拒绝：当前PAT没有workflow scope；草稿保留本地分支local/rc65-workflow-draft-c271a3a，当前公开配置未改，不绕过授权限制。规则见[GitHub工作流路径过滤文档](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)。同一冻结代码通过后不因纯进度记录反复执行本地全套检查，不为记录CI结果创建新的代码候选；新候选仅做一次必要公开，CI结果随下次实质改动记录。真实闭店／开采观察和预测开发并行。

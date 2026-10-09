@@ -8,3 +8,10 @@ class StatisticsUITests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         result=subprocess.run([node,str(root/'tests/statistics.test.js'),str(root/'src/sushiwait/web/statistics.js'),str(root/'src/sushiwait/web/reference-model.js')],capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_history_loading_and_forecast_updates(self):
+        node=shutil.which('node')
+        if node is None:self.skipTest('Node unavailable')
+        root=Path(__file__).resolve().parents[1]
+        result=subprocess.run([node,str(root/'tests/statistics-history.test.js'),str(root/'src/sushiwait/web/statistics.js'),str(root/'src/sushiwait/web/reference-model.js')],capture_output=True,text=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
