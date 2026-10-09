@@ -112,6 +112,8 @@ def check():
         code = ("import pathlib,json,hashlib,os; p=pathlib.Path('/state'); "
                 "print(json.dumps({'counter':json.loads((p/'synthetic-http-count.json').read_text()),"
                 "'starts':json.loads((p/'synthetic-starts.json').read_text()),"
+                "'schedule_starts':json.loads((p/'synthetic-schedule-starts.json').read_text()),"
+                "'dispatch_delays':json.loads((p/'synthetic-dispatch-delays.json').read_text()),"
                 "'task':json.loads((p/'task.json').read_text()),"
                 "'hashes':{n:hashlib.sha256((p/n).read_bytes()).hexdigest() for n in "
                 "['remote.sqlite3','task.json','plans.json']},"
@@ -184,7 +186,19 @@ def check():
         assert task['config']['max_pairs'] == 6 and task['config']['duration_seconds'] == 121
         assert before['counter'] == 6 and len(before['starts']) == 3
         intervals = [later - earlier for earlier, later in zip(before['starts'], before['starts'][1:])]
-        assert 59.99 <= intervals[0] < 65 and 29.99 <= intervals[1] < 35
+        scheduled=[datetime.fromisoformat(s.replace('Z','+00:00')) for s in before['schedule_starts']]
+        scheduled_intervals=[(b-a).total_seconds() for a,b in zip(scheduled,scheduled[1:])]
+        delays=before['dispatch_delays']
+        print(json.dumps({'container_plan_timing_diagnostic':True,
+            'scheduled_start_intervals_seconds':scheduled_intervals,
+            'transport_start_intervals_seconds':intervals,'dispatch_delays_seconds':delays}),flush=True)
+        # The gate is before checkpoint persistence. Different fsync delays
+        # can make consecutive transport entries slightly closer than 60/30s.
+        # Check the original gate strictly and transport drift separately.
+        assert len(scheduled)==len(delays)==3
+        assert 59.99 <= scheduled_intervals[0] < 65 and 29.99 <= scheduled_intervals[1] < 35
+        assert all(0<=delay<1 for delay in delays)
+        assert 59<=intervals[0]<66 and 29<=intervals[1]<36
         assert admin('clear')['revision'] == 5
         second, url = start()
         terminal = wait(url, lambda v: v.get('service_state') == 'completed')
@@ -206,6 +220,8 @@ def check():
             'original_deadline_preserved': True, 'original_budget_preserved': True,
             'terminal_resume_unchanged': True, 'non_root_uid': 10001, 'read_only_root': True,
             'host_bind': '127.0.0.1', 'actual_start_intervals_seconds': [round(x, 3) for x in intervals],
+            'saved_schedule_intervals_seconds':[round(x,3) for x in scheduled_intervals],
+            'dispatch_delays_seconds':[round(x,4) for x in delays],
             'elapsed_seconds': round(time.monotonic() - started, 3)}))
     finally:
         for name in names:
