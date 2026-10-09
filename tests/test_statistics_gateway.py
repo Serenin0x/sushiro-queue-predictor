@@ -12,7 +12,7 @@ spec.loader.exec_module(gateway)
 class Hub:
     def __init__(self):
         self.names = {'3014': 'Test store'}
-        self.config = {'deadline_at': (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+        self.config = {'schema_version':1,'deadline_at': (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
         self.calls = []
 
     def dispatch(self, path):
@@ -50,6 +50,15 @@ class StatisticsGatewayTests(unittest.TestCase):
                      '/api/v1/stores/3004/days/2026-10-09']:
             self.assertEqual(self.request(path)[0]['status'], 404)
         self.assertEqual(self.hub.calls, [])
+
+    def test_continuous_readonly_config_exposes_month_but_no_control(self):
+        self.hub.config = {'schema_version':2,'mode':'daily_controller_readonly'}
+        self.app = gateway.StatisticsGateway(self.hub)
+        self.assertIsNone(self.app.deadline)
+        self.assertEqual(self.request('/api/v1/months/2026-09')[0]['status'],200)
+        self.assertEqual(self.request('/api/v1/months/2026-13')[0]['status'],404)
+        self.assertEqual(self.request('/api/v1/stores/3014/status')[0]['status'],404)
+        self.assertEqual(self.hub.calls,['/api/v1/months/2026-09'])
 
     def test_mutation_methods_rejected_without_projection_reads(self):
         for method in ['POST', 'PUT', 'DELETE', 'PATCH', 'HEAD']:

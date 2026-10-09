@@ -403,7 +403,8 @@ class PersistentWindowSchedule:
         self.task.begin(store,now=wall);self.starts_mono[store]=monotonic
 
 
-def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,should_stop=lambda:False,schedule=None):
+def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,should_stop=lambda:False,schedule=None,
+                          before_attempt=lambda:None):
     if schedule is None:schedule=PersistentWindowSchedule(task,wall=wall_clock(),monotonic=monotonic_clock())
     if schedule.task is not task:raise RemoteTaskError('remote_window_schedule_conflict')
     if schedule.hours is not None and client is not None:
@@ -423,6 +424,7 @@ def collect_remote_window(task,client,*,wall_clock,monotonic_clock,sleep,emit,sh
                 delay=max(0,decision['wake_monotonic']-monotonic_clock())
                 sleep(min(1,delay) if 'plan_context' in task.value or schedule.hours is not None else delay);continue
             store=decision['due_stores'][0]
+            before_attempt()
             schedule.mark(store,wall=wall_clock(),monotonic=monotonic_clock())
             record=client.snapshot(store);identifier=task.db.append(record);task.reconcile(now=wall_clock())
             emit({'id':identifier,'pair_slot':task.value['cursor'],'record':record})

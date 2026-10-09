@@ -679,6 +679,8 @@ def check() -> None:
     check_realtime_models_install()
     check_realtime_backtest_install()
     check_monitor_hub_install()
+    subprocess.run([sys.executable,"-I",str(args.source_root/"scripts/check_daily_install.py"),
+        "--source-root",str(args.source_root)],check=True)
     subprocess.run([sys.executable,"-I",str(args.source_root/"scripts/check_business_install.py"),
         str(args.source_root/"config/default-business-hours.json")],check=True,timeout=30)
     subprocess.run([sys.executable,"-I",str(args.source_root/"scripts/check_campaign_recovery_install.py")],

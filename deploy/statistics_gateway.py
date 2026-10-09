@@ -18,10 +18,12 @@ class StatisticsGateway:
         self.hub = hub
         self.cache = OrderedDict()
         self.lock = asyncio.Lock()
-        self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00'))
+        self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
 
     def allowed(self, path):
         if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/api/v1/days'}:
+            return True
+        if re.fullmatch(r'/api/v1/months/20[0-9]{2}-(?:0[1-9]|1[0-2])',path):
             return True
         match = re.fullmatch(r'/api/v1/stores/([1-9][0-9]{0,9})/days/([0-9]{4}-[0-9]{2}-[0-9]{2})', path)
         return bool(match and match[1] in self.hub.names)
@@ -44,7 +46,7 @@ class StatisticsGateway:
             status, body, mime = 400, b'Parameters are not supported', 'text/plain; charset=utf-8'
         elif not self.allowed(path):
             status, body, mime = 404, b'Statistics route not found', 'text/plain; charset=utf-8'
-        elif datetime.now(timezone.utc) >= self.deadline:
+        elif self.deadline is not None and datetime.now(timezone.utc) >= self.deadline:
             status, body, mime = 503, b'Trial deadline reached', 'text/plain; charset=utf-8'
         else:
             # Serialize bounded cache fills. The hub reads worker-owned copies,
@@ -77,8 +79,8 @@ async def serve(args):
     import uvicorn
     hub = MonitorHub(read_config(args.config_file))
     app = StatisticsGateway(hub)
-    remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds()
-    if remaining <= 0:
+    remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds() if app.deadline is not None else None
+    if remaining is not None and remaining <= 0:
         raise ValueError('original_trial_deadline_reached')
     server = uvicorn.Server(uvicorn.Config(app, host=args.listen_host, port=args.port,
         proxy_headers=False, server_header=False, access_log=False,
@@ -86,15 +88,16 @@ async def serve(args):
     async def expire():
         await asyncio.sleep(remaining)
         server.should_exit = True
-    timer = asyncio.create_task(expire())
+    timer = asyncio.create_task(expire()) if remaining is not None else None
     try:
         await server.serve()
     finally:
-        timer.cancel()
-        try:
-            await timer
-        except asyncio.CancelledError:
-            pass
+        if timer is not None:
+            timer.cancel()
+            try:
+                await timer
+            except asyncio.CancelledError:
+                pass
 
 
 if __name__ == '__main__':

@@ -418,7 +418,7 @@ class RemoteCampaign(RemoteTask):
         return _at(entry['updated_at']) + timedelta(seconds=60 * 2 ** (failures - 1)) if transient else None
 
     def collect(self, *, wall_clock, monotonic_clock, sleep, emit, should_stop=lambda: False,
-                client_factory=RemoteClient, restore=lambda _: None):
+                client_factory=RemoteClient, restore=lambda _: None, before_attempt=lambda: None):
         c = self.value['config']
         if not self.history_checked:
             self.restore_history(restore)
@@ -515,7 +515,8 @@ class RemoteCampaign(RemoteTask):
                     if not task.value['uncertain']:
                         client = None if task.value['state'] in ('completed', 'failed') else client_factory()
                         collect_remote_window(task, client, wall_clock=wall_clock, monotonic_clock=monotonic_clock,
-                            sleep=sleep, emit=child_event, should_stop=should_stop, schedule=schedule)
+                            sleep=sleep, emit=child_event, should_stop=should_stop, schedule=schedule,
+                            before_attempt=before_attempt)
                     last = deepcopy(task.value)
                     carried_mono = deepcopy(schedule.starts_mono)
             if last['state'] not in ('completed', 'failed') and not last['uncertain']:

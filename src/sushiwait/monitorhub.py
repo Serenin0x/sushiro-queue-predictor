@@ -38,10 +38,15 @@ def _clock():
 def validate_config(value, *, now=None):
     try:
         clock = _clock() if now is None else now
-        if (type(value) is not dict or set(value) != {'schema_version', 'deadline_at', 'workers'}
-                or type(value['schema_version']) is not int or value['schema_version'] != 1
-                or type(value['workers']) is not list or not 1 <= len(value['workers']) <= 16
-                or not clock < _time(value['deadline_at']) <= clock+timedelta(days=14)):
+        if type(value) is not dict or type(value.get('schema_version')) is not int:
+            raise ValueError
+        continuous = value['schema_version'] == 2
+        if (continuous and (set(value) != {'schema_version', 'mode', 'workers'}
+                or value['mode'] != 'daily_controller_readonly')
+                or not continuous and (value['schema_version'] != 1
+                    or set(value) != {'schema_version', 'deadline_at', 'workers'}
+                    or not clock < _time(value['deadline_at']) <= clock+timedelta(days=14))
+                or type(value['workers']) is not list or not 1 <= len(value['workers']) <= 16):
             raise ValueError
         stores, endpoints, workers = set(), set(), []
         for worker in value['workers']:
@@ -50,7 +55,7 @@ def validate_config(value, *, now=None):
             match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{1,5})', worker['endpoint'])
             if (match is None or not 1 <= int(match[1]) <= 65535
                     or worker['endpoint'] in endpoints or type(worker['stores']) is not dict
-                    or not 1 <= len(worker['stores']) <= 3):
+                    or not 1 <= len(worker['stores']) <= (1 if continuous else 3)):
                 raise ValueError
             for identity, name in worker['stores'].items():
                 if (type(identity) is not str or not re.fullmatch('[1-9][0-9]{0,9}', identity)
@@ -60,6 +65,8 @@ def validate_config(value, *, now=None):
                 stores.add(identity)
             endpoints.add(worker['endpoint'])
             workers.append({'endpoint': worker['endpoint'], 'stores': dict(worker['stores'])})
+        if continuous:
+            return {'schema_version': 2, 'mode': 'daily_controller_readonly', 'workers': workers}
         return {'schema_version': 1, 'deadline_at': _utc(_time(value['deadline_at'])), 'workers': workers}
     except Exception:
         raise HubError('monitor_hub_invalid_config') from None
@@ -149,33 +156,40 @@ class MonitorHub:
                 f'观察 {len(self.names)} 家门店的已保存数据；状态和查询预算对应当前门店所属批次。切换门店不会增加寿司郎查询。')
         return raw.encode(), mime
 
-    def daily(self,store,day=None):
+    def daily(self,store,day=None,month=None):
         if store not in self.by_store:raise HubError('monitor_hub_scope_mismatch')
-        path=f'/api/v1/stores/{store}/days'+('/'+day if day else '')
+        if month is not None:
+            from .dailyarchive import selected_month
+            selected_month(month)
+        path=f'/api/v1/stores/{store}/months/{month}' if month else f'/api/v1/stores/{store}/days'+('/'+day if day else '')
         value=self.reader(self.by_store[store],path)
         if (type(value) is not dict or value.get('daily_schema_version')!=1
                 or value.get('requested_store_id')!=store or value.get('network_performed_by_read') is not False
-                or value.get('eta_available') is not False or day and value.get('local_date')!=day):
+                or value.get('eta_available') is not False or day and value.get('local_date')!=day
+                or month and value.get('month') != month):
             raise HubError('monitor_hub_scope_mismatch')
         return value
 
-    def daily_index(self):
+    def daily_index(self,month=None):
         days={};unavailable=[]
         for store in self.names:
             try:
-                value=self.daily(store)
+                value=self.daily(store,month=month)
                 summaries=value.get('days')
-                if type(summaries) is not list or len(summaries)>16:raise HubError()
+                if type(summaries) is not list or len(summaries)>(31 if month else 31 if self.config['schema_version']==2 else 16):raise HubError()
+                if value.get('unavailable_archive_dates'):unavailable.append(store)
                 seen=set()
                 for item in summaries:
                     if (type(item) is not dict or item.get('store_id')!=store
                             or type(item.get('local_date')) is not str
                             or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}',item['local_date'])
-                            or item['local_date'] in seen):raise HubError()
+                            or item['local_date'] in seen
+                            or month and not item['local_date'].startswith(month+'-')):raise HubError()
                     seen.add(item['local_date'])
                 for item in summaries:days.setdefault(item['local_date'],{})[store]=item
-            except HubError:unavailable.append(store)
-        return {'daily_schema_version':1,'source':'crm_remote_v1_1','days':days,
+            except (HubError,ValueError):
+                if store not in unavailable:unavailable.append(store)
+        return {**({'month':month} if month else {}),'daily_schema_version':1,'source':'crm_remote_v1_1','days':days,
             'store_names':dict(self.names),'configured_store_ids':list(self.names),'unavailable_store_ids':unavailable,
             'cohort_id':hashlib.sha256(json.dumps(list(self.names),separators=(',',':')).encode()).hexdigest(),
             'heatmap_semantics':'coverage_only_traffic_not_calibrated','actual_called_count':None,
@@ -188,7 +202,7 @@ class MonitorHub:
         parsed = urlsplit(target)
         if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment or body_present:
             return self._error(400, 'request_parameters_not_supported')
-        if clock >= _time(self.config['deadline_at']):
+        if self.config['schema_version']==1 and clock >= _time(self.config['deadline_at']):
             return self._error(503, 'monitor_hub_deadline_reached')
         try:
             if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css','/reference-model.js'}:
@@ -197,6 +211,9 @@ class MonitorHub:
             if parsed.path == '/api/v1/status':
                 value = self.status()
             elif parsed.path=='/api/v1/days':value=self.daily_index()
+            elif re.fullmatch(r'/api/v1/months/20[0-9]{2}-[0-9]{2}',parsed.path):
+                from .dailyarchive import selected_month
+                month=parsed.path.rsplit('/',1)[1];selected_month(month);value=self.daily_index(month)
             elif re.fullmatch(r'/api/v1/stores/[1-9][0-9]{0,9}/days(?:/[0-9]{4}-[0-9]{2}-[0-9]{2})?',parsed.path):
                 pieces=parsed.path.split('/');value=self.daily(pieces[4],pieces[6] if len(pieces)==7 else None)
             else:
@@ -255,5 +272,5 @@ def serve_hub(config, *, port=51930, ready=None, stop=None):
         server.timeout = 1
         if ready is not None:
             ready(server.server_address[1])
-        while _clock() < _time(hub.config['deadline_at']) and not (stop is not None and stop.is_set()):
+        while (hub.config['schema_version']==2 or _clock() < _time(hub.config['deadline_at'])) and not (stop is not None and stop.is_set()):
             server.handle_request()

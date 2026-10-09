@@ -364,7 +364,33 @@ class RemoteASGI:
                     asset = files('sushiwait').joinpath('web', name).read_bytes(), content_type
                 elif path=='/api/v1/days':
                     if self.service.daily_view is None:status,payload=503,{'error_code':'daily_view_not_enabled'}
+                    elif hasattr(self.service, 'daily_batch_index'):payload=self.service.daily_batch_index()
                     else:payload=self.service.daily_view.batch_index(now=self.service.wall_clock())
+                elif re.fullmatch(r'/api/v1/months/20[0-9]{2}-[0-9]{2}', path):
+                    from .dailyarchive import selected_month
+                    month = path.rsplit('/', 1)[1]
+                    try:
+                        selected_month(month)
+                        if hasattr(self.service, 'daily_batch_index'):payload=self.service.daily_batch_index(month)
+                        else:
+                            payload=self.service.daily_view.batch_index(now=self.service.wall_clock())
+                            payload['days']={d:v for d,v in payload['days'].items() if d.startswith(month+'-')}
+                            payload['month']=month
+                    except (RemoteTaskError, ValueError, AttributeError):
+                        status,payload=503,{'error_code':'daily_view_unavailable'}
+                elif re.fullmatch(r'/api/v1/stores/[1-9][0-9]{0,18}/months/20[0-9]{2}-[0-9]{2}',path):
+                    from .dailyarchive import selected_month
+                    pieces=path.split('/');store,month=pieces[4],pieces[6]
+                    if store not in self.service.view.stores:status,payload=404,{'error_code':'store_not_in_scope'}
+                    else:
+                        try:
+                            selected_month(month)
+                            if hasattr(self.service, 'daily_batch_index'):payload=self.service.daily_index(store,month)
+                            else:
+                                payload=self.service.daily_index(store)
+                                payload['days']=[d for d in payload['days'] if d['local_date'].startswith(month+'-')]
+                                payload['month']=month
+                        except (RemoteServiceError,RemoteTaskError):status,payload=503,{'error_code':'daily_view_unavailable'}
                 elif re.fullmatch(r'/api/v1/stores/[1-9][0-9]{0,18}/days(?:/[0-9]{4}-[0-9]{2}-[0-9]{2})?',path):
                     pieces=path.split('/');store=pieces[4]
                     if store not in self.service.view.stores:status,payload=404,{'error_code':'store_not_in_scope'}

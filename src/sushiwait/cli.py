@@ -540,6 +540,21 @@ def build_parser() -> argparse.ArgumentParser:
             campaign.add_argument("--listen-host", choices=("127.0.0.1", "0.0.0.0"), default="127.0.0.1")
     campaign_status = commands.add_parser("remote-campaign-status", help="只读多日采集检查点；不打开数据库、不联网")
     campaign_status.add_argument("--root", required=True)
+    for name in ('remote-daily-collect', 'remote-daily-serve'):
+        daily = commands.add_parser(name, help='按营业日建立独立有界任务、归档并等待次日；不续改旧试验')
+        daily.add_argument('--root', required=True, help='同店专用0700根目录；与旧试验分开')
+        daily.add_argument('--store-id', required=True)
+        daily.add_argument('--business-hours-file', required=True)
+        daily.add_argument('--not-before', required=True, help='显式接续起始时间；须核对旧同店写者已停止')
+        daily.add_argument('--daily-pair-cap', type=int, default=1500)
+        if name == 'remote-daily-serve':
+            daily.add_argument('--port', type=int, default=18821)
+    daily_status = commands.add_parser('remote-daily-status', help='只读每日控制器检查点；不启动采集或联网')
+    daily_status.add_argument('--root', required=True)
+    archives = commands.add_parser('daily-archive-month', help='只读指定月份的逐日归档；缺失与坏文件分别报告')
+    archives.add_argument('--root', required=True)
+    archives.add_argument('--store-id', required=True)
+    archives.add_argument('--month', required=True)
     hub = commands.add_parser('collection-hub-serve', help='把多个本机采集批次汇入同一观察台；不查询寿司郎、不启动采集')
     hub.add_argument('--config-file', required=True)
     hub.add_argument('--port', type=int, default=51930)
@@ -989,6 +1004,43 @@ def main(argv: list[str] | None = None) -> int:
             emit({'ok':False,'committed':error.committed,'error_code':str(error)});return 2
         except (OSError,ValueError,TypeError,KeyError,OverflowError):
             emit({'ok':False,'committed':False,'error_code':'plan_update_input_or_storage_error'});return 2
+    if args.command in ('remote-daily-collect', 'remote-daily-serve', 'remote-daily-status', 'daily-archive-month'):
+        from .dailycontroller import DailyController, daily_config, daily_controller_status
+        from .businesshours import read_hours
+        from .remotetasks import RemoteTaskError
+        from .remoteservice import RemoteServiceError, serve_local
+        try:
+            if args.command == 'remote-daily-status':
+                emit(daily_controller_status(args.root)); return 0
+            store = canonical_store_id(args.store_id)
+            if args.command == 'daily-archive-month':
+                from .dailyarchive import read_month
+                emit(read_month(args.root, store, args.month, now=_utc_clock())); return 0
+            hours = read_hours(args.business_hours_file)
+            if args.command == 'remote-daily-serve':
+                from .dailyservice import DailyCollectorService
+                service = DailyCollectorService(root=args.root, store_id=store, business_hours=hours,
+                    not_before=args.not_before, daily_pair_cap=args.daily_pair_cap)
+                serve_local(service, port=args.port, listen_host='127.0.0.1')
+                return 1 if service.status()['service_state'] == 'failed' else 0
+            import signal
+            import threading
+            stop = threading.Event(); previous = {}
+            try:
+                for signum in (signal.SIGINT, signal.SIGTERM):
+                    previous[signum] = signal.signal(signum, lambda *_: stop.set())
+                config = daily_config(args.root, store, hours, not_before=args.not_before,
+                    daily_pair_cap=args.daily_pair_cap)
+                with DailyController(config=config, now=_utc_clock()) as controller:
+                    emit(controller.status())
+                    result = controller.run(wall_clock=_utc_clock, monotonic_clock=time.monotonic,
+                        sleep=stop.wait, emit=emit, should_stop=stop.is_set)
+                    emit(result); return 1 if result['state'] == 'halted' else 0
+            finally:
+                for signum, handler in previous.items(): signal.signal(signum, handler)
+        except (RemoteTaskError, RemoteServiceError, OSError, ValueError, TypeError, KeyError, OverflowError):
+            emit({'ok':False,'error_code':'daily_collection_unavailable_or_unsafe',
+                'eta_available':False}); return 2
     if args.command in ("remote-campaign-collect", "remote-campaign-serve", "remote-campaign-status"):
         from .remotecampaign import RemoteCampaign, RemoteCampaignService, campaign_config, remote_campaign_status
         from .remoteservice import serve_local, RemoteServiceError

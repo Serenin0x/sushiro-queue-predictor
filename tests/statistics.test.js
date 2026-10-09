@@ -29,4 +29,17 @@ ctx.Date.now=()=>base+30*60000+90001;vm.runInContext('renderPrediction()',ctx);a
 ctx.fetch=async()=>{throw Error("latest read failed");};await vm.runInContext('showDay().catch(showError)',ctx);
 assert.equal(vm.runInContext('detail',ctx),null);assert(!nodes.get("prediction").textContent.includes("参考位置预计"));
 assert(reads.every(p=>/^\/api\/v1\/(?:days|stores\/900001\/days\/2026-10-09)$/.test(p)));
-assert(!reads.some(p=>p.includes("ticket")||p.includes("11:00")||p.includes("?")));console.log("calendar, response races, stale forecasts, queue confirmation and private local-only inputs passed");})().catch(e=>{console.error(e);process.exitCode=1;});
+assert(!reads.some(p=>p.includes("ticket")||p.includes("11:00")||p.includes("?")));
+nodes.get("store").value="";
+ctx.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>({...index,month:"2026-09",days:{"2026-09-01":{"900001":{...summary,local_date:"2026-09-01"}}}})};};
+nodes.get("month").value="2026-09";nodes.get("month").onchange();await settle();
+assert(reads.includes("/api/v1/months/2026-09"));assert.equal(nodes.get("calendar").children.filter(n=>n.tag==="button").length,30);
+assert(nodes.get("calendar").children.filter(n=>n.tag==="button")[0].textContent==="1");
+let resolveMonthA,resolveMonthB;
+ctx.fetch=path=>new Promise(resolve=>{reads.push(path);if(!resolveMonthA)resolveMonthA=resolve;else resolveMonthB=resolve;});
+nodes.get("month").value="2026-08";nodes.get("month").onchange();
+nodes.get("month").value="2026-09";nodes.get("month").onchange();
+resolveMonthA({ok:true,json:async()=>({...index,month:"2026-08"})});await settle();
+assert(resolveMonthB);resolveMonthB({ok:true,json:async()=>({...index,month:"2026-09"})});await settle();
+assert.equal(vm.runInContext('index.month',ctx),"2026-09");
+console.log("calendar, monthly reads, month races, stale forecasts and private local-only inputs passed");})().catch(e=>{console.error(e);process.exitCode=1;});
