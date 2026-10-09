@@ -1,0 +1,744 @@
+{
+  "schema_version": 1,
+  "directory_observed_at": "2026-10-03T20:32:51+08:00",
+  "directory_source": "official_normal_response_provided_by_user",
+  "directory_currentness_verified": false,
+  "current_mainland_completeness_verified": false,
+  "stores": [
+    {
+      "store_id": "1",
+      "directory_name": "东方宝泰店",
+      "area": "广州天河区"
+    },
+    {
+      "store_id": "2",
+      "directory_name": "正佳广场店",
+      "area": "广州天河区"
+    },
+    {
+      "store_id": "3",
+      "directory_name": "万菱汇店",
+      "area": "广州天河区"
+    },
+    {
+      "store_id": "4",
+      "directory_name": "悦汇城店",
+      "area": "广州荔湾区"
+    },
+    {
+      "store_id": "5",
+      "directory_name": "富力海珠城店",
+      "area": "广州海珠区"
+    },
+    {
+      "store_id": "6",
+      "directory_name": "丽影广场店",
+      "area": "广州海珠区"
+    },
+    {
+      "store_id": "7",
+      "directory_name": "凯德云尚店",
+      "area": "广州白云区"
+    },
+    {
+      "store_id": "8",
+      "directory_name": "番禺永旺店",
+      "area": "广州番禺区"
+    },
+    {
+      "store_id": "9",
+      "directory_name": "南海万科广场店",
+      "area": "佛山南海区"
+    },
+    {
+      "store_id": "10",
+      "directory_name": "北京路粤潮楼店",
+      "area": "广州越秀区"
+    },
+    {
+      "store_id": "11",
+      "directory_name": "王府井紫薇港店",
+      "area": "佛山禅城区"
+    },
+    {
+      "store_id": "12",
+      "directory_name": "美林天地店",
+      "area": "广州天河区"
+    },
+    {
+      "store_id": "13",
+      "directory_name": "乐峰广场店",
+      "area": "广州海珠区"
+    },
+    {
+      "store_id": "15",
+      "directory_name": "花城汇南区店",
+      "area": "广州天河区"
+    },
+    {
+      "store_id": "16",
+      "directory_name": "武汉摩尔城店",
+      "area": "武汉汉阳区"
+    },
+    {
+      "store_id": "17",
+      "directory_name": "松山湖万象汇店",
+      "area": "东莞松山湖片区"
+    },
+    {
+      "store_id": "18",
+      "directory_name": "江燕路万科里店",
+      "area": "广州海珠区"
+    },
+    {
+      "store_id": "19",
+      "directory_name": "海德・汇一城店",
+      "area": "东莞南城街道"
+    },
+    {
+      "store_id": "21",
+      "directory_name": "武汉江宸天街店",
+      "area": "武汉江汉区"
+    },
+    {
+      "store_id": "23",
+      "directory_name": "民盈国贸城店",
+      "area": "东莞东城街道"
+    },
+    {
+      "store_id": "24",
+      "directory_name": "银泰创意城店",
+      "area": "武汉洪山区"
+    },
+    {
+      "store_id": "25",
+      "directory_name": "陈家祠扬韬店",
+      "area": "广州荔湾区"
+    },
+    {
+      "store_id": "26",
+      "directory_name": "华贸天地店",
+      "area": "惠州惠城区"
+    },
+    {
+      "store_id": "27",
+      "directory_name": "中华广场店",
+      "area": "广州越秀区"
+    },
+    {
+      "store_id": "28",
+      "directory_name": "番禺天河城店",
+      "area": "广州番禺区"
+    },
+    {
+      "store_id": "29",
+      "directory_name": "荔湾领展店",
+      "area": "广州荔湾区"
+    },
+    {
+      "store_id": "30",
+      "directory_name": "番禺万达广场店",
+      "area": "广州番禺区"
+    },
+    {
+      "store_id": "31",
+      "directory_name": "南湾华发商都店",
+      "area": "珠海香洲区"
+    },
+    {
+      "store_id": "32",
+      "directory_name": "萝岗万达店",
+      "area": "广州黄埔区"
+    },
+    {
+      "store_id": "34",
+      "directory_name": "SM厦门店",
+      "area": "厦门湖里区"
+    },
+    {
+      "store_id": "35",
+      "directory_name": "江门利和广场店",
+      "area": "江门蓬江区"
+    },
+    {
+      "store_id": "36",
+      "directory_name": "珠海富华里店",
+      "area": "珠海香洲区"
+    },
+    {
+      "store_id": "37",
+      "directory_name": "汉溪K11店",
+      "area": "广州番禺区"
+    },
+    {
+      "store_id": "38",
+      "directory_name": "新塘永旺店",
+      "area": "广州增城区"
+    },
+    {
+      "store_id": "39",
+      "directory_name": "NOVA岭南站店",
+      "area": "佛山禅城区"
+    },
+    {
+      "store_id": "40",
+      "directory_name": "君超中心店",
+      "area": "广州天河区"
+    },
+    {
+      "store_id": "41",
+      "directory_name": "武汉楚河汉街店",
+      "area": "武汉武昌区"
+    },
+    {
+      "store_id": "42",
+      "directory_name": "长沙悦方ID MALL店",
+      "area": "长沙天心区"
+    },
+    {
+      "store_id": "43",
+      "directory_name": "珠海万象汇店",
+      "area": "珠海香洲区"
+    },
+    {
+      "store_id": "44",
+      "directory_name": "楚宝天地店",
+      "area": "武汉江汉区"
+    },
+    {
+      "store_id": "45",
+      "directory_name": "增城万达店",
+      "area": "广州增城区"
+    },
+    {
+      "store_id": "1001",
+      "directory_name": "卓悦中心店",
+      "area": "深圳福田区"
+    },
+    {
+      "store_id": "1002",
+      "directory_name": "壹方天地店",
+      "area": "深圳龙华区"
+    },
+    {
+      "store_id": "1003",
+      "directory_name": "海雅缤纷城店",
+      "area": "深圳宝安区"
+    },
+    {
+      "store_id": "1004",
+      "directory_name": "皇庭广场店",
+      "area": "深圳福田区"
+    },
+    {
+      "store_id": "1005",
+      "directory_name": "KK ONE店",
+      "area": "深圳福田区"
+    },
+    {
+      "store_id": "1006",
+      "directory_name": "卓悦汇店",
+      "area": "深圳福田区"
+    },
+    {
+      "store_id": "1007",
+      "directory_name": "海岸城店",
+      "area": "深圳南山区"
+    },
+    {
+      "store_id": "1008",
+      "directory_name": "天虹龙华店",
+      "area": "深圳龙华区"
+    },
+    {
+      "store_id": "1009",
+      "directory_name": "CCP雅宝店",
+      "area": "深圳龙岗区"
+    },
+    {
+      "store_id": "1010",
+      "directory_name": "iN城市广场店",
+      "area": "深圳福田区"
+    },
+    {
+      "store_id": "1011",
+      "directory_name": "福田卓悦Intown店",
+      "area": "深圳福田区"
+    },
+    {
+      "store_id": "1012",
+      "directory_name": "南山天利名城店",
+      "area": "深圳南山区"
+    },
+    {
+      "store_id": "1013",
+      "directory_name": "深圳万象城店",
+      "area": "深圳罗湖区"
+    },
+    {
+      "store_id": "1014",
+      "directory_name": "深圳来福士广场店",
+      "area": "深圳南山区"
+    },
+    {
+      "store_id": "1015",
+      "directory_name": "壹方城店",
+      "area": "深圳宝安区"
+    },
+    {
+      "store_id": "1016",
+      "directory_name": "万象前海店",
+      "area": "深圳南山区"
+    },
+    {
+      "store_id": "1017",
+      "directory_name": "罗湖益田假日广场店",
+      "area": "深圳罗湖区"
+    },
+    {
+      "store_id": "1018",
+      "directory_name": "宝安大仟里店",
+      "area": "深圳宝安区"
+    },
+    {
+      "store_id": "1019",
+      "directory_name": "深圳大运天地店",
+      "area": "深圳龙岗区"
+    },
+    {
+      "store_id": "2001",
+      "directory_name": "IFS店",
+      "area": "成都锦江区"
+    },
+    {
+      "store_id": "2003",
+      "directory_name": "来福士广场店",
+      "area": "成都武侯区"
+    },
+    {
+      "store_id": "2004",
+      "directory_name": "成都万象城店",
+      "area": "成都成华区"
+    },
+    {
+      "store_id": "2006",
+      "directory_name": "观音桥大融城店",
+      "area": "重庆江北区"
+    },
+    {
+      "store_id": "2007",
+      "directory_name": "重庆时代天街店",
+      "area": "重庆渝中区"
+    },
+    {
+      "store_id": "2008",
+      "directory_name": "凯德天府店",
+      "area": "成都高新区"
+    },
+    {
+      "store_id": "2009",
+      "directory_name": "世豪广场店",
+      "area": "成都高新区"
+    },
+    {
+      "store_id": "2010",
+      "directory_name": "赛格国际购物中心店",
+      "area": "西安雁塔区"
+    },
+    {
+      "store_id": "2011",
+      "directory_name": "凯德广场金牛店",
+      "area": "成都金牛区"
+    },
+    {
+      "store_id": "3001",
+      "directory_name": "天津南开大悦城",
+      "area": "天津南开区"
+    },
+    {
+      "store_id": "3002",
+      "directory_name": "西青大悦汇店",
+      "area": "天津西青区"
+    },
+    {
+      "store_id": "3003",
+      "directory_name": "天津天河城店",
+      "area": "天津和平区"
+    },
+    {
+      "store_id": "3004",
+      "directory_name": "西单大悦城店",
+      "area": "北京西城区"
+    },
+    {
+      "store_id": "3005",
+      "directory_name": "长楹天街店",
+      "area": "北京朝阳区"
+    },
+    {
+      "store_id": "3006",
+      "directory_name": "太阳宫凯德店",
+      "area": "北京朝阳区"
+    },
+    {
+      "store_id": "3007",
+      "directory_name": "和平大悦城店",
+      "area": "天津和平区"
+    },
+    {
+      "store_id": "3008",
+      "directory_name": "苏州中心店",
+      "area": "苏州工业园区"
+    },
+    {
+      "store_id": "3009",
+      "directory_name": "朝阳大悦城店",
+      "area": "北京朝阳区"
+    },
+    {
+      "store_id": "3010",
+      "directory_name": "獅山天街店",
+      "area": "苏州高新区"
+    },
+    {
+      "store_id": "3011",
+      "directory_name": "银泰in77・D馆店",
+      "area": "杭州上城区"
+    },
+    {
+      "store_id": "3012",
+      "directory_name": "北京世纪金源店",
+      "area": "北京海淀区"
+    },
+    {
+      "store_id": "3013",
+      "directory_name": "北京荟聚店",
+      "area": "北京大兴区"
+    },
+    {
+      "store_id": "3014",
+      "directory_name": "中关村大融城店",
+      "area": "北京海淀区"
+    },
+    {
+      "store_id": "3015",
+      "directory_name": "西直门凯德店",
+      "area": "北京西城区"
+    },
+    {
+      "store_id": "3016",
+      "directory_name": "亦庄天街店",
+      "area": "北京大兴区"
+    },
+    {
+      "store_id": "3017",
+      "directory_name": "昆山万象汇店",
+      "area": "苏州昆山市"
+    },
+    {
+      "store_id": "3018",
+      "directory_name": "萧山万象汇店",
+      "area": "杭州萧山区"
+    },
+    {
+      "store_id": "3019",
+      "directory_name": "石景山喜隆多店",
+      "area": "北京石景山区"
+    },
+    {
+      "store_id": "3020",
+      "directory_name": "城西银泰城店",
+      "area": "杭州拱墅区"
+    },
+    {
+      "store_id": "3021",
+      "directory_name": "杭州奥体印象城店",
+      "area": "杭州萧山区"
+    },
+    {
+      "store_id": "3022",
+      "directory_name": "宁波万象城店",
+      "area": "宁波江北区"
+    },
+    {
+      "store_id": "3023",
+      "directory_name": "丽泽天街店",
+      "area": "北京丰台区"
+    },
+    {
+      "store_id": "3024",
+      "directory_name": "无锡万象城店",
+      "area": "无锡滨湖区"
+    },
+    {
+      "store_id": "3025",
+      "directory_name": "上海环球港店",
+      "area": "上海普陀区"
+    },
+    {
+      "store_id": "3026",
+      "directory_name": "中山公园龙之梦店",
+      "area": "上海长宁区"
+    },
+    {
+      "store_id": "3027",
+      "directory_name": "苏州万象天地店",
+      "area": "苏州姑苏区"
+    },
+    {
+      "store_id": "3028",
+      "directory_name": "苏州吴江万象汇店",
+      "area": "苏州吴江区"
+    },
+    {
+      "store_id": "3029",
+      "directory_name": "朝阳合生汇店",
+      "area": "北京朝阳区"
+    },
+    {
+      "store_id": "3030",
+      "directory_name": "熙悦天街店",
+      "area": "北京房山区"
+    },
+    {
+      "store_id": "3031",
+      "directory_name": "通州万达店",
+      "area": "北京通州区"
+    },
+    {
+      "store_id": "3032",
+      "directory_name": "陆家嘴中心店",
+      "area": "上海浦东新区"
+    },
+    {
+      "store_id": "3033",
+      "directory_name": "南翔印象城MEGA店",
+      "area": "上海嘉定区"
+    },
+    {
+      "store_id": "3034",
+      "directory_name": "瑞虹新天地月亮湾店",
+      "area": "上海虹口区"
+    },
+    {
+      "store_id": "3035",
+      "directory_name": "门头沟长安天街店",
+      "area": "北京门头沟区"
+    },
+    {
+      "store_id": "3036",
+      "directory_name": "虹桥新天地店",
+      "area": "上海闵行区"
+    },
+    {
+      "store_id": "3037",
+      "directory_name": "济南万象城店",
+      "area": "济南历下区"
+    },
+    {
+      "store_id": "3038",
+      "directory_name": "通州万象汇店",
+      "area": "北京通州区"
+    },
+    {
+      "store_id": "3039",
+      "directory_name": "黄龙国际中心店",
+      "area": "杭州西湖区"
+    },
+    {
+      "store_id": "3040",
+      "directory_name": "LCM置汇旭辉店",
+      "area": "上海浦东新区"
+    },
+    {
+      "store_id": "3041",
+      "directory_name": "凯德虹口店",
+      "area": "上海虹口区"
+    },
+    {
+      "store_id": "3042",
+      "directory_name": "祥云小镇･南区店",
+      "area": "北京顺义区"
+    },
+    {
+      "store_id": "3043",
+      "directory_name": "义乌天地店",
+      "area": "金华义乌市"
+    },
+    {
+      "store_id": "3044",
+      "directory_name": "宁波万象汇店",
+      "area": "宁波鄞州区"
+    },
+    {
+      "store_id": "3045",
+      "directory_name": "西北旺万象汇店",
+      "area": "北京海淀区"
+    },
+    {
+      "store_id": "3046",
+      "directory_name": "宁波环球银泰百货店",
+      "area": "宁波鄞州区"
+    },
+    {
+      "store_id": "3047",
+      "directory_name": "绍兴天地店",
+      "area": "绍兴越城区"
+    },
+    {
+      "store_id": "3048",
+      "directory_name": "柯桥万达店",
+      "area": "绍兴柯桥区"
+    },
+    {
+      "store_id": "3049",
+      "directory_name": "杭州东站万象汇店",
+      "area": "杭州上城区"
+    },
+    {
+      "store_id": "3050",
+      "directory_name": "国贸商城･北区店",
+      "area": "北京朝阳区"
+    },
+    {
+      "store_id": "3051",
+      "directory_name": "上海啦啦宝都店",
+      "area": "上海浦东新区"
+    },
+    {
+      "store_id": "3052",
+      "directory_name": "鄞州万达店",
+      "area": "宁波鄞州区"
+    },
+    {
+      "store_id": "3053",
+      "directory_name": "华熙LIVE・五棵松店",
+      "area": "北京海淀区"
+    },
+    {
+      "store_id": "3054",
+      "directory_name": "南京景枫中心店",
+      "area": "南京江宁区"
+    },
+    {
+      "store_id": "3055",
+      "directory_name": "南京万象天地店",
+      "area": "南京江宁区"
+    },
+    {
+      "store_id": "3056",
+      "directory_name": "绍兴银泰店",
+      "area": "绍兴越城区"
+    },
+    {
+      "store_id": "3057",
+      "directory_name": "嘉兴南湖天地店",
+      "area": "嘉兴南湖区"
+    },
+    {
+      "store_id": "3058",
+      "directory_name": "杭州来福士店",
+      "area": "杭州上城区"
+    },
+    {
+      "store_id": "3059",
+      "directory_name": "温州万象城店",
+      "area": "温州瓯海区"
+    },
+    {
+      "store_id": "3060",
+      "directory_name": "海淀大悦城店",
+      "area": "北京海淀区"
+    },
+    {
+      "store_id": "3061",
+      "directory_name": "金华世贸城市广场店",
+      "area": "金华婺城区"
+    },
+    {
+      "store_id": "3062",
+      "directory_name": "南通万象城店",
+      "area": "南通崇川区"
+    },
+    {
+      "store_id": "3063",
+      "directory_name": "嘉兴南湖万达店",
+      "area": "嘉兴南湖区"
+    },
+    {
+      "store_id": "3064",
+      "directory_name": "青岛万象城店",
+      "area": "青岛市南区"
+    },
+    {
+      "store_id": "3065",
+      "directory_name": "JLC金陵中環店",
+      "area": "南京秦淮区"
+    },
+    {
+      "store_id": "3066",
+      "directory_name": "上海来福士店",
+      "area": "上海黄浦区"
+    },
+    {
+      "store_id": "3067",
+      "directory_name": "石家庄万象城店",
+      "area": "石家庄桥西区"
+    },
+    {
+      "store_id": "3068",
+      "directory_name": "杭州余杭万达店",
+      "area": "杭州余杭区"
+    },
+    {
+      "store_id": "3069",
+      "directory_name": "青岛崂山万象汇店",
+      "area": "青岛崂山区"
+    },
+    {
+      "store_id": "3070",
+      "directory_name": "长泰广场店",
+      "area": "上海浦东新区"
+    },
+    {
+      "store_id": "3071",
+      "directory_name": "合肥万象城店",
+      "area": "合肥蜀山区"
+    },
+    {
+      "store_id": "3072",
+      "directory_name": "上海晶耀虹桥店",
+      "area": "上海长宁区"
+    },
+    {
+      "store_id": "3073",
+      "directory_name": "上海五角场万达店",
+      "area": "上海杨浦区"
+    },
+    {
+      "store_id": "3074",
+      "directory_name": "魏公芳华里店",
+      "area": "北京海淀区"
+    },
+    {
+      "store_id": "3076",
+      "directory_name": "温州印象城MEGA店",
+      "area": "温州鹿城区"
+    },
+    {
+      "store_id": "3078",
+      "directory_name": "天津万象城店",
+      "area": "天津河西区"
+    },
+    {
+      "store_id": "3079",
+      "directory_name": "镇江苏宁广场店",
+      "area": "镇江京口区"
+    },
+    {
+      "store_id": "3080",
+      "directory_name": "济南恒隆广场店",
+      "area": "济南历下区"
+    }
+  ]
+}

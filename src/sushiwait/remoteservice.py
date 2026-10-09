@@ -362,6 +362,10 @@ class RemoteASGI:
                 elif path in _MONITOR_FILES:
                     name, content_type = _MONITOR_FILES[path]
                     asset = files('sushiwait').joinpath('web', name).read_bytes(), content_type
+                elif re.fullmatch(r'/api/v1/stores/[1-9][0-9]{0,18}/status', path) and hasattr(self.service, 'children'):
+                    store = path.split('/')[4]
+                    if store not in self.service.view.stores:status,payload=404,{'error_code':'store_not_in_scope'}
+                    else:payload=self.service.status(store)
                 elif path=='/api/v1/days':
                     if self.service.daily_view is None:status,payload=503,{'error_code':'daily_view_not_enabled'}
                     elif hasattr(self.service, 'daily_batch_index'):payload=self.service.daily_batch_index()

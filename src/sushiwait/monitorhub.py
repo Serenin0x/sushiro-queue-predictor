@@ -21,6 +21,7 @@ from .outcomes import _json, _time, _utc
 from .remoteservice import _MONITOR_CSP
 
 MAX_BODY = 2_097_152
+MAX_FLEET_INDEX = 8 * 1024 * 1024
 
 
 class HubError(ValueError):
@@ -40,13 +41,14 @@ def validate_config(value, *, now=None):
         clock = _clock() if now is None else now
         if type(value) is not dict or type(value.get('schema_version')) is not int:
             raise ValueError
-        continuous = value['schema_version'] == 2
+        fleet = value['schema_version'] == 3
+        continuous = value['schema_version'] in (2, 3)
         if (continuous and (set(value) != {'schema_version', 'mode', 'workers'}
-                or value['mode'] != 'daily_controller_readonly')
+                or value['mode'] != ('daily_fleet_readonly' if fleet else 'daily_controller_readonly'))
                 or not continuous and (value['schema_version'] != 1
                     or set(value) != {'schema_version', 'deadline_at', 'workers'}
                     or not clock < _time(value['deadline_at']) <= clock+timedelta(days=14))
-                or type(value['workers']) is not list or not 1 <= len(value['workers']) <= 16):
+                or type(value['workers']) is not list or not 1 <= len(value['workers']) <= (1 if fleet else 16)):
             raise ValueError
         stores, endpoints, workers = set(), set(), []
         for worker in value['workers']:
@@ -55,7 +57,7 @@ def validate_config(value, *, now=None):
             match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{1,5})', worker['endpoint'])
             if (match is None or not 1 <= int(match[1]) <= 65535
                     or worker['endpoint'] in endpoints or type(worker['stores']) is not dict
-                    or not 1 <= len(worker['stores']) <= (1 if continuous else 3)):
+                    or not 1 <= len(worker['stores']) <= (256 if fleet else 1 if continuous else 3)):
                 raise ValueError
             for identity, name in worker['stores'].items():
                 if (type(identity) is not str or not re.fullmatch('[1-9][0-9]{0,9}', identity)
@@ -66,7 +68,8 @@ def validate_config(value, *, now=None):
             endpoints.add(worker['endpoint'])
             workers.append({'endpoint': worker['endpoint'], 'stores': dict(worker['stores'])})
         if continuous:
-            return {'schema_version': 2, 'mode': 'daily_controller_readonly', 'workers': workers}
+            return {'schema_version': 3 if fleet else 2,
+                'mode': 'daily_fleet_readonly' if fleet else 'daily_controller_readonly', 'workers': workers}
         return {'schema_version': 1, 'deadline_at': _utc(_time(value['deadline_at'])), 'workers': workers}
     except Exception:
         raise HubError('monitor_hub_invalid_config') from None
@@ -80,14 +83,16 @@ def read_config(path):
 
 
 def _read_local(worker, path):
-    connection = http.client.HTTPConnection('127.0.0.1', int(worker['endpoint'].rsplit(':', 1)[1]), timeout=3)
+    large_index = path == '/api/v1/days' or re.fullmatch(r'/api/v1/months/20[0-9]{2}-[0-9]{2}', path)
+    bound = MAX_FLEET_INDEX if large_index else MAX_BODY
+    connection = http.client.HTTPConnection('127.0.0.1', int(worker['endpoint'].rsplit(':', 1)[1]), timeout=8 if large_index else 3)
     try:
         connection.request('GET', path, headers={'Accept': 'application/json', 'Connection': 'close'})
         response = connection.getresponse()
         if response.status != 200:
             raise HubError()
-        raw = response.read(MAX_BODY+1)
-        if len(raw) > MAX_BODY:
+        raw = response.read(bound+1)
+        if len(raw) > bound:
             raise HubError('monitor_hub_invalid_response')
         value = _json(raw)
         if type(value) is not dict:
@@ -113,8 +118,10 @@ class MonitorHub:
         if store not in self.by_store:
             raise HubError('monitor_hub_scope_mismatch')
         worker = self.by_store[store]
-        value = self.reader(worker, '/api/v1/status')
-        if (type(value) is not dict or value.get('store_ids') != list(worker['stores'])
+        fleet = self.config['schema_version'] == 3
+        value = self.reader(worker, f'/api/v1/stores/{store}/status' if fleet else '/api/v1/status')
+        if (type(value) is not dict or value.get('store_ids') != ([store] if fleet else list(worker['stores']))
+                or fleet and value.get('fleet_store_ids') != list(worker['stores'])
                 or value.get('service_state') not in {'running','starting','ready','not_started',
                     'completed','failed','stopped'} or type(value.get('worker_alive')) is not bool
                 or value.get('network_performed_by_read') is not False or value.get('eta_available') is not False):
@@ -171,6 +178,8 @@ class MonitorHub:
         return value
 
     def daily_index(self,month=None):
+        if self.config['schema_version'] == 3:
+            return self.fleet_index(month)
         days={};unavailable=[]
         for store in self.names:
             try:
@@ -194,6 +203,31 @@ class MonitorHub:
             'cohort_id':hashlib.sha256(json.dumps(list(self.names),separators=(',',':')).encode()).hexdigest(),
             'heatmap_semantics':'coverage_only_traffic_not_calibrated','actual_called_count':None,
             'network_performed_by_read':False,'upstream_network_performed_by_hub':False,'eta_available':False}
+
+    def fleet_index(self, month=None):
+        if month is not None:
+            from .dailyarchive import selected_month
+            selected_month(month)
+        value = self.reader(self.config['workers'][0], '/api/v1/months/'+month if month else '/api/v1/days')
+        if (type(value) is not dict or value.get('daily_schema_version') != 1
+                or value.get('configured_store_ids') != list(self.names)
+                or value.get('store_names') != self.names or value.get('network_performed_by_read') is not False
+                or value.get('eta_available') is not False or month and value.get('month') != month
+                or type(value.get('days')) is not dict or len(value['days']) > 31
+                or type(value.get('unavailable_store_ids')) is not list
+                or set(value['unavailable_store_ids']) - set(self.names)):
+            raise HubError('monitor_hub_scope_mismatch')
+        from .dailyfleet import SUMMARY_KEYS
+        for day, summaries in value['days'].items():
+            if (not re.fullmatch(r'20[0-9]{2}-[0-9]{2}-[0-9]{2}', day)
+                    or not day.startswith(value.get('month', '')+'-') or type(summaries) is not dict
+                    or set(summaries) - set(self.names)):
+                raise HubError('monitor_hub_scope_mismatch')
+            for store, row in summaries.items():
+                if (type(row) is not dict or set(row) != set(SUMMARY_KEYS)
+                        or row['store_id'] != store or row['local_date'] != day):
+                    raise HubError('monitor_hub_scope_mismatch')
+        return {**value, 'upstream_network_performed_by_hub': False}
 
     def dispatch(self, target, *, method='GET', body_present=False, now=None):
         clock = _clock() if now is None else now
@@ -272,5 +306,5 @@ def serve_hub(config, *, port=51930, ready=None, stop=None):
         server.timeout = 1
         if ready is not None:
             ready(server.server_address[1])
-        while (hub.config['schema_version']==2 or _clock() < _time(hub.config['deadline_at'])) and not (stop is not None and stop.is_set()):
+        while (hub.config['schema_version'] in (2, 3) or _clock() < _time(hub.config['deadline_at'])) and not (stop is not None and stop.is_set()):
             server.handle_request()

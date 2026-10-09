@@ -95,6 +95,8 @@ def check():
         code = ("import pathlib,json,hashlib,os; p=pathlib.Path('/state'); r=p/'campaign'; "
             "print(json.dumps({'counter':json.loads((p/'synthetic-http-count.json').read_text()),"
             "'starts':json.loads((p/'synthetic-starts.json').read_text()),"
+            "'schedule_starts':json.loads((p/'synthetic-schedule-starts.json').read_text()),"
+            "'dispatch_delays':json.loads((p/'synthetic-dispatch-delays.json').read_text()),"
             "'campaign':json.loads((r/'campaign.json').read_text()),"
             "'hashes':{str(f.relative_to(p)):hashlib.sha256(f.read_bytes()).hexdigest() "
             "for f in list(r.rglob('*'))+[p/'plans.json'] if f.is_file()},"
@@ -164,8 +166,21 @@ def check():
         assert campaign['config']['duration_seconds'] == 141 and campaign['config']['max_pairs'] == 8
         assert before['counter'] == 8 and len(before['starts']) == 4
         intervals = [b - a for a, b in zip(before['starts'], before['starts'][1:])]
+        scheduled=[datetime.fromisoformat(s.replace('Z','+00:00')) for s in before['schedule_starts']]
+        scheduled_intervals=[(b-a).total_seconds() for a,b in zip(scheduled,scheduled[1:])]
+        delays=before['dispatch_delays']
+        print(json.dumps({'container_campaign_timing_diagnostic':True,
+            'scheduled_start_intervals_seconds':scheduled_intervals,
+            'transport_start_intervals_seconds':intervals,'dispatch_delays_seconds':delays}),flush=True)
+        assert len(scheduled)==len(delays)==4
         assert 64 <= intervals[0] < 85, f'campaign_restart_interval_out_of_range: {intervals!r}'
-        assert all(29.99 <= interval < 35 for interval in intervals[1:]), f'campaign_poll_intervals_out_of_range: {intervals!r}'
+        assert 64 <= scheduled_intervals[0] < 85
+        # The saved gate is before fsync and transport. Check its 30-second
+        # rule independently (millisecond timestamp precision); constrain
+        # dispatch latency too, so a delayed prior GET cannot hide early gates.
+        assert all(29.999 <= interval < 35 for interval in scheduled_intervals[1:]), f'campaign_saved_gate_intervals_out_of_range: {scheduled_intervals!r}'
+        assert all(0 <= delay < 1 for delay in delays)
+        assert all(29 <= interval < 36 for interval in intervals[1:]), f'campaign_transport_drift_out_of_range: {intervals!r}'
         assert all(e['checkpoint_digest'] and e['database_digest'] for e in campaign['windows'])
         assert admin('clear')['revision'] == 4
         third, url = start()
@@ -186,6 +201,8 @@ def check():
             'campaign_deadline_preserved': True, 'campaign_budget_preserved': True,
             'terminal_resume_unchanged': True, 'terminal_feed_revision': 4, 'accepted_revision': 3,
             'actual_start_intervals_seconds': [round(interval, 3) for interval in intervals],
+            'saved_schedule_intervals_seconds':scheduled_intervals,
+            'dispatch_delays_seconds':[round(d,4) for d in delays],
             'non_root_uid': 10001, 'host_bind': '127.0.0.1',
             'elapsed_seconds': round(time.monotonic() - started, 3)}))
     finally:

@@ -553,6 +553,17 @@ def build_parser() -> argparse.ArgumentParser:
             daily.add_argument('--legacy-through-date', help='旧导出所属最后日期；须早于新接续本地日期')
     daily_status = commands.add_parser('remote-daily-status', help='只读每日控制器检查点；不启动采集或联网')
     daily_status.add_argument('--root', required=True)
+    fleet = commands.add_parser('remote-daily-fleet-serve', help='显式门店目录共享进程、统一限速与单店独立每日归档')
+    fleet.add_argument('--root', required=True)
+    fleet.add_argument('--catalog-file', required=True)
+    fleet.add_argument('--business-hours-file', required=True)
+    fleet.add_argument('--not-before', required=True)
+    fleet.add_argument('--daily-pair-cap', type=int, default=1500)
+    fleet.add_argument('--requests-per-second', type=float, default=5)
+    fleet.add_argument('--port', type=int, default=18821)
+    fleet.add_argument('--legacy-exports-root')
+    fleet.add_argument('--legacy-through-date')
+    fleet.add_argument('--legacy-store-id', action='append', default=[])
     archives = commands.add_parser('daily-archive-month', help='只读指定月份的逐日归档；缺失与坏文件分别报告')
     archives.add_argument('--root', required=True)
     archives.add_argument('--store-id', required=True)
@@ -1008,6 +1019,22 @@ def main(argv: list[str] | None = None) -> int:
             emit({'ok':False,'committed':error.committed,'error_code':str(error)});return 2
         except (OSError,ValueError,TypeError,KeyError,OverflowError):
             emit({'ok':False,'committed':False,'error_code':'plan_update_input_or_storage_error'});return 2
+    if args.command == 'remote-daily-fleet-serve':
+        from .dailyfleet import DailyFleetService, read_catalog
+        from .businesshours import read_hours
+        from .remoteservice import RemoteServiceError, serve_local
+        from .remotetasks import RemoteTaskError
+        try:
+            service = DailyFleetService(root=args.root, catalog=read_catalog(args.catalog_file),
+                business_hours=read_hours(args.business_hours_file), not_before=args.not_before,
+                daily_pair_cap=args.daily_pair_cap, requests_per_second=args.requests_per_second,
+                legacy_exports_root=args.legacy_exports_root, legacy_through_date=args.legacy_through_date,
+                legacy_store_ids=args.legacy_store_id)
+            serve_local(service, port=args.port, listen_host='127.0.0.1')
+            return 1 if service.status()['service_state'] == 'failed' else 0
+        except (RemoteTaskError, RemoteServiceError, OSError, ValueError, TypeError, KeyError, OverflowError):
+            emit({'ok': False, 'error_code': 'fleet_unavailable_or_unsafe', 'eta_available': False})
+            return 2
     if args.command in ('remote-daily-collect', 'remote-daily-serve', 'remote-daily-status', 'daily-archive-month'):
         from .dailycontroller import DailyController, daily_config, daily_controller_status
         from .businesshours import read_hours
