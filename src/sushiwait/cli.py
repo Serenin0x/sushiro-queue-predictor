@@ -578,6 +578,13 @@ def build_parser() -> argparse.ArgumentParser:
     plans_publish.add_argument("--output",required=True)
     plans_publish.add_argument("--store-id",action="append",required=True)
     plans_publish.add_argument("--base-interval",type=int,default=300)
+    daily_quality = commands.add_parser('daily-quality-report', help='离线分析已保存日曲线的接收覆盖与断档；不查询来源')
+    daily_quality.add_argument('--projection-file', required=True)
+    daily_quality.add_argument('--store-id', required=True)
+    daily_quality.add_argument('--date', required=True)
+    daily_quality.add_argument('--as-of', required=True)
+    daily_quality.add_argument('--interval', type=int, default=60)
+    daily_quality.add_argument('--max-gap', type=int, default=90)
     window_quality = commands.add_parser("remote-window-quality",help="只读终态窗口的完整结果链、间隔缺口与日期分布；不认证源新鲜度")
     window_quality.add_argument("--db",required=True)
     window_quality.add_argument("--task-file",required=True)
@@ -963,6 +970,21 @@ def main(argv: list[str] | None = None) -> int:
                   'eta_available':False,'business_writes':0});return 1
         except (OSError,ValueError,TypeError,KeyError,OverflowError):
             emit({'ok':False,'error_code':'personal_response_invalid','business_writes':0});return 1
+    if args.command == 'daily-quality-report':
+        from .dailycontroller import read_daily_archive
+        from .dailyquality import daily_quality_report
+        from .remotetasks import RemoteTaskError, _json
+        try:
+            projection = _json(read_daily_archive(args.projection_file))
+            emit(daily_quality_report(projection, store_id=args.store_id, day=args.date,
+                as_of=args.as_of, interval_seconds=args.interval, max_gap_seconds=args.max_gap))
+            return 0
+        except RemoteTaskError as error:
+            emit({'ok': False, 'error_code': str(error), 'network_performed_by_report': False})
+            return 2
+        except (OSError, ValueError, TypeError, KeyError, OverflowError, RecursionError):
+            emit({'ok': False, 'error_code': 'daily_quality_input_error', 'network_performed_by_report': False})
+            return 2
     if args.command == "remote-window-quality":
         from .remote import RemoteStore
         from .remotequality import terminal_checkpoint,window_quality_report

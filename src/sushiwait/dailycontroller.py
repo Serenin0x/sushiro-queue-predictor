@@ -295,6 +295,10 @@ class DailyController(RemoteTask):
                     'policy_sha256': _digest({k: v for k, v in day.items() if k != 'phase'}),
                     'official_requests_added_by_archive': 0, 'independent_backup': False,
                     'actual_call_verified': False, 'eta_available': False})
+            from .dailyquality import daily_quality_report
+            _immutable(folder/'quality.json', daily_quality_report(projection,
+                store_id=c['store_id'], day=day['local_date'], as_of=projection['generated_at'],
+                interval_seconds=c['base_interval']))
             value = deepcopy(self.value)
             value.update(current=None, last_finished_date=day['local_date'], updated_at=_now(wall_clock()))
             self._commit(value)

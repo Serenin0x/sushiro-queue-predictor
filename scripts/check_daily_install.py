@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from sushiwait.businesshours import read_hours
 from sushiwait.dailycontroller import DailyController,daily_config,daily_controller_status
+from sushiwait.dailyquality import daily_quality_report
 from sushiwait.dailyservice import DailyCollectorService
 from sushiwait.remote import RemoteClient,QUEUE_NAMES
 from sushiwait.remoteservice import RemoteASGI
@@ -46,6 +47,13 @@ def check(source_root):
                         emit=lambda _:None,client_factory=lambda:RemoteClient(opener=Transport()))
             assert len(calls)==8
             assert daily_controller_status(root)['last_finished_date']=='2026-10-10'
+            for day in ['2026-10-09', '2026-10-10']:
+                projection = json.loads((root/day/'projection.json').read_bytes())
+                quality = json.loads((root/day/'quality.json').read_bytes())
+                assert quality == daily_quality_report(projection, store_id='900001', day=day,
+                    as_of=projection['generated_at'])
+                assert quality['quality_state'] == 'declared_day_observed'
+                assert quality['projection_content_sha256'] == hashlib.sha256((root/day/'projection.json').read_bytes()).hexdigest()
         service=DailyCollectorService(root=root,store_id='900001',business_hours=hours,
             not_before=base.isoformat(),wall_clock=wall)
         before=len(calls)
@@ -89,7 +97,7 @@ def check(source_root):
     print(json.dumps({'installed_daily_lifecycle_ok':True,'synthetic_days':2,'synthetic_http_attempts':8,
         'archive_reads_add_origin_requests':0,'legacy_export_read_in_place':True,
         'legacy_receipt_times_preserved':True,'disjoint_old_and_new_dates':2,
-        'private_roots_preserved':True,'eta_available':False}))
+        'private_roots_preserved':True,'daily_receipt_quality_archived':True,'eta_available':False}))
 
 
 if __name__=='__main__':
