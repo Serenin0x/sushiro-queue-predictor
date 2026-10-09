@@ -24,6 +24,7 @@ from .remotetasks import RemoteTaskError, _at, _now, _json
 
 MAX_STORES = 256
 INDEX_MAX_BYTES = 8 * 1024 * 1024
+CALENDAR_READ_WAIT_SECONDS = 1
 SUMMARY_KEYS = ('store_id', 'local_date', 'observations', 'successful_pairs', 'failed_pairs',
     'scheduled_pause_slots', 'expected_background_slots_so_far', 'observed_background_slots',
     'observed_slot_fraction_so_far', 'last_observation_at')
@@ -184,6 +185,14 @@ class DailyFleetService:
         self.children = {}
         self.lock_fd = None
         self.started = False
+        # One archive reader, one selected month; HTTP cannot spawn an
+        # unbounded set of full-month scans or block the ASGI event loop.
+        self.calendar_condition = threading.Condition()
+        self.calendar_thread = None
+        self.calendar_month = None
+        self.calendar_generation = 0
+        self.calendar_days, self.calendar_unavailable = {}, []
+        self.calendar_pending = list(self.names)
         for store in self.names:
             def factory():
                 return FleetRemoteClient(self.gate,
@@ -226,7 +235,13 @@ class DailyFleetService:
         deadline = time.monotonic() + 35
         for child in self.children.values():
             if child.thread is not None: child.thread.join(max(0, deadline-time.monotonic()))
+        with self.calendar_condition:
+            calendar_thread = self.calendar_thread
+            self.calendar_condition.notify_all()
+        if calendar_thread is not None:
+            calendar_thread.join(max(0, deadline-time.monotonic()))
         pending = any(c.thread is not None and c.thread.is_alive() for c in self.children.values())
+        pending = pending or calendar_thread is not None and calendar_thread.is_alive()
         if not pending and self.lock_fd is not None:
             os.close(self.lock_fd); self.lock_fd = None
         if pending: raise RemoteServiceError('fleet_shutdown_unconfirmed')
@@ -260,6 +275,65 @@ class DailyFleetService:
     def daily_index(self, store, month=None): return self.child(store).daily_index(store, month)
     def daily_detail(self, store, day): return self.child(store).daily_detail(store, day)
 
+    def daily_http_index(self, month=None):
+        """Return verified progress in bounded time; read archives off-thread.
+
+        Pending stores are unavailable, never zero observations. Each refresh
+        rechecks file identities through the existing strict archive reader.
+        No collector, database, or origin transport is started here.
+        """
+        month = month or self.wall_clock().astimezone(ZONE).strftime('%Y-%m')
+        selected_month(month)
+        with self.calendar_condition:
+            if self.stop.is_set(): raise RemoteServiceError('fleet_calendar_stopped')
+            if self.calendar_month != month or self.calendar_thread is None:
+                self.calendar_generation += 1
+                self.calendar_month = month
+                self.calendar_days, self.calendar_unavailable = {}, []
+                self.calendar_pending = list(self.names)
+            if self.calendar_thread is None:
+                self.calendar_thread = threading.Thread(target=self._read_calendar,
+                    name='sushiwait-calendar-reader', daemon=True)
+                self.calendar_thread.start()
+            self.calendar_condition.wait_for(lambda: self.calendar_month != month
+                or not self.calendar_pending or self.stop.is_set(), timeout=CALENDAR_READ_WAIT_SECONDS)
+            if self.calendar_month == month:
+                days = deepcopy(self.calendar_days)
+                unavailable, pending = list(self.calendar_unavailable), list(self.calendar_pending)
+            else:
+                # A superseded caller must never receive another month's rows.
+                days, unavailable, pending = {}, [], list(self.names)
+        return self._calendar_result(month, days, unavailable, pending=pending)
+
+    def _read_calendar(self):
+        while True:
+            with self.calendar_condition:
+                month, generation = self.calendar_month, self.calendar_generation
+            for store in self.names:
+                with self.calendar_condition:
+                    if self.stop.is_set() or generation != self.calendar_generation: break
+                summaries, unavailable = [], False
+                try:
+                    value = self.daily_index(store, month)
+                    summaries = [{k: summary[k] for k in SUMMARY_KEYS} for summary in value['days']]
+                    unavailable = bool(value['unavailable_archive_dates'])
+                except Exception:
+                    # A bad store remains unavailable; never publish a half
+                    # validated summary or silently substitute empty data.
+                    unavailable = True
+                with self.calendar_condition:
+                    if generation != self.calendar_generation: break
+                    for summary in summaries:
+                        self.calendar_days.setdefault(summary['local_date'], {})[store] = summary
+                    if unavailable: self.calendar_unavailable.append(store)
+                    self.calendar_pending.remove(store)
+                    self.calendar_condition.notify_all()
+            with self.calendar_condition:
+                if self.stop.is_set() or generation == self.calendar_generation:
+                    self.calendar_thread = None
+                    self.calendar_condition.notify_all()
+                    return
+
     def daily_batch_index(self, month=None):
         month = month or self.wall_clock().astimezone(ZONE).strftime('%Y-%m')
         selected_month(month)
@@ -272,11 +346,14 @@ class DailyFleetService:
                     days.setdefault(summary['local_date'], {})[store] = {k: summary[k] for k in SUMMARY_KEYS}
             except (RemoteServiceError, RemoteTaskError, OSError, ValueError):
                 unavailable.append(store)
+        return self._calendar_result(month, days, unavailable)
+
+    def _calendar_result(self, month, days, unavailable, *, pending=None):
         status=self.status()
         failures=status['failed_store_ids']
         if status['origin_gate']['origin_halted']:
             failures=list(self.names)
-        unavailable=list(dict.fromkeys(unavailable+failures))
+        unavailable=list(dict.fromkeys(unavailable+failures+(pending or [])))
         result = {'daily_schema_version': 1, 'source': SOURCE, 'month': month,
             'days': days, 'store_names': deepcopy(self.names), 'configured_store_ids': list(self.names),
             'unavailable_store_ids': unavailable,
@@ -289,6 +366,10 @@ class DailyFleetService:
             'directory_observed_at': self.catalog['directory_observed_at'],
             'current_mainland_completeness_verified': False,
             'network_performed_by_read': False, 'eta_available': False}
+        if pending is not None:
+            result.update(calendar_index_state='preparing' if pending else 'ready',
+                calendar_pending_store_ids=pending,
+                calendar_verified_store_count=len(self.names)-len(pending))
         if len(json.dumps(result, ensure_ascii=False).encode()) > INDEX_MAX_BYTES:
             raise RemoteServiceError('fleet_index_too_large')
         return result

@@ -368,19 +368,23 @@ class RemoteASGI:
                     else:payload=self.service.status(store)
                 elif path=='/api/v1/days':
                     if self.service.daily_view is None:status,payload=503,{'error_code':'daily_view_not_enabled'}
-                    elif hasattr(self.service, 'daily_batch_index'):payload=self.service.daily_batch_index()
+                    elif hasattr(self.service, 'daily_http_index'):
+                        try:payload=await asyncio.to_thread(self.service.daily_http_index)
+                        except (RemoteServiceError,RemoteTaskError):status,payload=503,{'error_code':'daily_view_unavailable'}
+                    elif hasattr(self.service, 'daily_batch_index'):payload=await asyncio.to_thread(self.service.daily_batch_index)
                     else:payload=self.service.daily_view.batch_index(now=self.service.wall_clock())
                 elif re.fullmatch(r'/api/v1/months/20[0-9]{2}-[0-9]{2}', path):
                     from .dailyarchive import selected_month
                     month = path.rsplit('/', 1)[1]
                     try:
                         selected_month(month)
-                        if hasattr(self.service, 'daily_batch_index'):payload=self.service.daily_batch_index(month)
+                        if hasattr(self.service, 'daily_http_index'):payload=await asyncio.to_thread(self.service.daily_http_index,month)
+                        elif hasattr(self.service, 'daily_batch_index'):payload=await asyncio.to_thread(self.service.daily_batch_index,month)
                         else:
                             payload=self.service.daily_view.batch_index(now=self.service.wall_clock())
                             payload['days']={d:v for d,v in payload['days'].items() if d.startswith(month+'-')}
                             payload['month']=month
-                    except (RemoteTaskError, ValueError, AttributeError):
+                    except (RemoteServiceError, RemoteTaskError, ValueError, AttributeError):
                         status,payload=503,{'error_code':'daily_view_unavailable'}
                 elif re.fullmatch(r'/api/v1/stores/[1-9][0-9]{0,18}/months/20[0-9]{2}-[0-9]{2}',path):
                     from .dailyarchive import selected_month

@@ -218,6 +218,15 @@ class MonitorHub:
                 or set(value['unavailable_store_ids']) - set(self.names)):
             raise HubError('monitor_hub_scope_mismatch')
         from .dailyfleet import SUMMARY_KEYS
+        if 'calendar_index_state' in value:
+            pending=value.get('calendar_pending_store_ids')
+            if (type(pending) is not list or any(type(s) is not str for s in pending)
+                    or len(set(pending))!=len(pending) or set(pending)-set(self.names)
+                    or not set(pending)<=set(value['unavailable_store_ids'])
+                    or value['calendar_index_state']!=('preparing' if pending else 'ready')
+                    or type(value.get('calendar_verified_store_count')) is not int
+                    or value['calendar_verified_store_count']!=len(self.names)-len(pending)):
+                raise HubError('monitor_hub_scope_mismatch')
         for day, summaries in value['days'].items():
             if (not re.fullmatch(r'20[0-9]{2}-[0-9]{2}-[0-9]{2}', day)
                     or not day.startswith(value.get('month', '')+'-') or type(summaries) is not dict
@@ -256,7 +265,9 @@ class MonitorHub:
                     return self._error(404, 'store_or_route_not_in_scope')
                 value = self.status(match[1]) if match[2] == 'status' else self.projection(match[1], match[2])
             body = json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
-            if len(body) > MAX_BODY:
+            bound=MAX_FLEET_INDEX if self.config['schema_version']==3 and (
+                parsed.path=='/api/v1/days' or re.fullmatch(r'/api/v1/months/20[0-9]{2}-[0-9]{2}',parsed.path)) else MAX_BODY
+            if len(body) > bound:
                 raise HubError('monitor_hub_invalid_response')
             return 200, body, 'application/json; charset=utf-8'
         except Exception as error:

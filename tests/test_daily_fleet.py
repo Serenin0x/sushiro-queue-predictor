@@ -110,6 +110,88 @@ class FleetTests(unittest.TestCase):
                        dict(legacy_store_ids=['900001'])]:
             with self.assertRaises(RemoteServiceError):self.fleet(**kwargs)
 
+    def test_slow_calendar_returns_pending_without_blocking_status_or_new_reader(self):
+        f=self.fleet();entered,release=threading.Event(),threading.Event();calls=[]
+        def slow(store,month):
+            calls.append((store,month));entered.set();release.wait(3)
+            return {'days':[],'unavailable_archive_dates':[]}
+        async def exercise():
+            app=RemoteASGI(f)
+            task=asyncio.create_task(request(app,'/api/v1/months/2026-10'))
+            self.assertTrue(await asyncio.to_thread(entered.wait,1))
+            status,_,_=await asyncio.wait_for(request(app,'/api/v1/status'),.3)
+            self.assertEqual(status,200)
+            status,value,_=await asyncio.wait_for(task,.3)
+            self.assertEqual(status,200);self.assertEqual(value['calendar_index_state'],'preparing')
+            self.assertEqual(value['calendar_pending_store_ids'],list(f.names))
+            self.assertEqual(value['unavailable_store_ids'],list(f.names))
+            self.assertEqual(value['days'],{})
+            thread=f.calendar_thread
+            again=await request(app,'/api/v1/days')
+            self.assertEqual(again[0],200);self.assertIs(f.calendar_thread,thread)
+            self.assertEqual(len(calls),1)
+        try:
+            with patch.object(f,'daily_index',side_effect=slow),patch('sushiwait.dailyfleet.CALENDAR_READ_WAIT_SECONDS',.02):
+                asyncio.run(exercise());release.set()
+                wait_for(lambda:f.calendar_thread is None)
+                value=f.daily_http_index('2026-10')
+                self.assertEqual(value['calendar_index_state'],'ready')
+                self.assertEqual(value['calendar_pending_store_ids'],[])
+                self.assertEqual(value['calendar_verified_store_count'],2)
+                self.assertFalse(f.started);self.assertEqual(f.gate.status()['transport_admissions_this_process'],0)
+        finally:release.set();f.shutdown()
+
+    def test_month_switch_discards_superseded_rows_with_one_reader(self):
+        f=self.fleet();entered,release=threading.Event(),threading.Event();calls=[]
+        def read(store,month):
+            calls.append((store,month))
+            if month=='2026-10':entered.set();release.wait(3)
+            row={k:0 for k in SUMMARY_KEYS};row.update(store_id=store,local_date=month+'-01',
+                last_observation_at=fixture.BASE.isoformat(),observed_slot_fraction_so_far=None)
+            return {'days':[row],'unavailable_archive_dates':[]}
+        try:
+            with patch.object(f,'daily_index',side_effect=read),patch('sushiwait.dailyfleet.CALENDAR_READ_WAIT_SECONDS',.02):
+                first=f.daily_http_index('2026-10');self.assertTrue(entered.is_set())
+                thread=f.calendar_thread;second=f.daily_http_index('2026-11')
+                self.assertEqual(second['month'],'2026-11');self.assertEqual(second['days'],{})
+                self.assertIs(thread,f.calendar_thread)
+                release.set();wait_for(lambda:f.calendar_thread is None)
+                final=f.daily_http_index('2026-11')
+                self.assertEqual(set(final['days']),{'2026-11-01'})
+                self.assertEqual(final['calendar_pending_store_ids'],[])
+                self.assertEqual(len([m for _,m in calls if m=='2026-10']),1)
+                self.assertEqual(first['month'],'2026-10')
+        finally:release.set();f.shutdown()
+
+    def test_calendar_keeps_corrupt_store_unavailable_and_stops_reader_on_shutdown(self):
+        f=self.fleet();entered,release=threading.Event(),threading.Event()
+        def read(store,month):
+            if store=='900001':raise RemoteTaskError('bad_archive')
+            return {'days':[],'unavailable_archive_dates':[]}
+        with patch.object(f,'daily_index',side_effect=read):
+            value=f.daily_http_index('2026-10')
+            self.assertEqual(value['calendar_pending_store_ids'],[])
+            self.assertEqual(value['unavailable_store_ids'],['900001'])
+        def slow(store,month):entered.set();release.wait(3);return {'days':[],'unavailable_archive_dates':[]}
+        with patch.object(f,'daily_index',side_effect=slow),patch('sushiwait.dailyfleet.CALENDAR_READ_WAIT_SECONDS',.01):
+            f.daily_http_index('2026-10');self.assertTrue(entered.is_set());thread=f.calendar_thread
+            release.set();f.shutdown()
+            self.assertFalse(thread.is_alive())
+            with self.assertRaises(RemoteServiceError):f.daily_http_index('2026-10')
+
+    def test_hub_rejects_misleading_pending_calendar_counts_and_scope(self):
+        f=self.fleet();value=f.daily_batch_index('2026-10')
+        value.update(calendar_index_state='preparing',calendar_pending_store_ids=['900001'],
+            calendar_verified_store_count=1,unavailable_store_ids=['900001'])
+        h=MonitorHub({'schema_version':3,'mode':'daily_fleet_readonly','workers':[
+            {'endpoint':'http://127.0.0.1:18821','stores':f.names}]},reader=lambda *_:value)
+        self.assertEqual(h.daily_index('2026-10')['calendar_pending_store_ids'],['900001'])
+        for change in [dict(calendar_verified_store_count=2),dict(calendar_index_state='ready'),
+                       dict(calendar_pending_store_ids=['900001','900001']),
+                       dict(calendar_pending_store_ids=['999999']),dict(unavailable_store_ids=[])]:
+            broken={**value,**change};h.reader=lambda *_:broken
+            with self.assertRaises(HubError):h.daily_index('2026-10')
+
     def test_two_real_workers_commit_separate_pairs_through_shared_gate(self):
         f=self.fleet(opener_factory=lambda:self.opener,requests_per_second=6)
         try:

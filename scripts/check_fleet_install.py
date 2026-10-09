@@ -1,5 +1,6 @@
 """Installed fleet startup and optional full-day memory probe; no origin I/O."""
 import argparse
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
@@ -12,6 +13,7 @@ import time
 from sushiwait.businesshours import read_hours
 from sushiwait.dailyfleet import DailyFleetService, read_catalog
 from sushiwait.remote import QUEUE_NAMES, RemoteClient
+from sushiwait.remoteservice import RemoteASGI
 
 
 def check(args):
@@ -59,6 +61,20 @@ def check(args):
                 assert len(index['days'][day])==len(service.names)
                 assert all(r['observations']==args.points for r in index['days'][day].values())
             assert service.gate.status()['transport_admissions_this_process']==0
+            messages=[]
+            async def read_calendar():
+                async def receive():return {'type':'http.request','body':b''}
+                async def send(value):messages.append(value)
+                await RemoteASGI(service)({'type':'http','method':'GET','path':'/api/v1/days',
+                    'query_string':b''},receive,send)
+            asyncio.run(read_calendar())
+            assert messages[0]['status']==200
+            calendar=json.loads(messages[1]['body'])
+            assert calendar['configured_store_ids']==list(service.names)
+            assert calendar['calendar_index_state'] in ('preparing','ready')
+            assert set(calendar['calendar_pending_store_ids'])<=set(calendar['unavailable_store_ids'])
+            assert calendar['network_performed_by_read'] is False
+            assert service.gate.status()['transport_admissions_this_process']==0
         finally:service.shutdown()
         assert service.lock_fd is None and not any(c.thread.is_alive() for c in service.children.values())
     rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -69,6 +85,7 @@ def check(args):
         'fleet_transport_admissions':0,'startup_seconds':round(startup,3),
         'elapsed_seconds':round(time.monotonic()-tick,3),'peak_rss_mib':round(bytes_rss/1024**2,2),
         'all_workers_stopped':True,'current_mainland_completeness_verified':False,'eta_available':False}
+    result['installed_fleet_calendar_http_ok']=True
     print(json.dumps(result));return result
 
 
