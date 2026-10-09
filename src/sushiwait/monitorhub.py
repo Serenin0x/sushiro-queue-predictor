@@ -133,6 +133,7 @@ class MonitorHub:
             '/monitor.css': ('monitor.css', 'text/css; charset=utf-8'),
             '/statistics':('statistics.html','text/html; charset=utf-8'),
             '/statistics.js':('statistics.js','text/javascript; charset=utf-8'),
+            '/reference-model.js':('reference-model.js','text/javascript; charset=utf-8'),
             '/statistics.css':('statistics.css','text/css; charset=utf-8')}[path]
         raw = files('sushiwait').joinpath('web', name).read_text()
         if path == '/monitor.js':
@@ -190,7 +191,7 @@ class MonitorHub:
         if clock >= _time(self.config['deadline_at']):
             return self._error(503, 'monitor_hub_deadline_reached')
         try:
-            if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css'}:
+            if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css','/reference-model.js'}:
                 raw, mime = self.asset(parsed.path)
                 return 200, raw, mime
             if parsed.path == '/api/v1/status':

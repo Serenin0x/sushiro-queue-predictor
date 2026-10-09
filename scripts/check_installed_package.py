@@ -962,7 +962,9 @@ def check() -> None:
                             or str(folder) in fusion_stdout.getvalue()):
                         raise SystemExit('installed_fusion_semantics_failed')
                     from importlib.resources import files
-                    for path,name in (('/monitor','monitor.html'),('/monitor.js','monitor.js'),('/monitor.css','monitor.css')):
+                    for path,name in (('/monitor','monitor.html'),('/monitor.js','monitor.js'),('/monitor.css','monitor.css'),
+                            ('/statistics','statistics.html'),('/statistics.js','statistics.js'),
+                            ('/statistics.css','statistics.css'),('/reference-model.js','reference-model.js')):
                         replies=[]
                         await app({'type':'http','method':'GET','path':path,'query_string':b''},receive_http,send_http)
                         body=replies[1]['body']

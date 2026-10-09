@@ -4,7 +4,7 @@ class Element{constructor(tag){this.tag=tag;this.children=[];this.value="";this.
 const nodes=new Map(),ctx={console,Intl,Date,Math,Number,String,Object,Array,RegExp,JSON,Promise,AbortSignal,setInterval:()=>0,window:{devicePixelRatio:1,addEventListener(){}},document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);},createElement:tag=>new Element(tag)}};
 const summary={store_id:"900001",observations:2,successful_pairs:2,failed_pairs:0,scheduled_pause_slots:0,expected_background_slots_so_far:2,observed_background_slots:2,observed_slot_fraction_so_far:1,last_observation_at:"2026-10-09T03:01:00Z"};
 const index={days:{"2026-10-09":{"900001":summary}},store_names:{"900001":"第一店","900002":"第二店"},unavailable_store_ids:[]};
-let reads=[];ctx.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>index};};vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],"utf8"),ctx);
+let reads=[];ctx.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>index};};vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[3],"utf8"),ctx);ctx.window.SushiWaitReference=ctx.SushiWaitReference;vm.runInContext(fs.readFileSync(process.argv[2],"utf8"),ctx);
 async function settle(){await new Promise(resolve=>setImmediate(resolve));}
 (async()=>{await settle();vm.runInContext('day="2026-10-09";$("month").value="2026-10";calendar();',ctx);
 const buttons=nodes.get("calendar").children.filter(n=>n.tag==="button");assert.equal(buttons.length,31);assert(buttons[8].classList.names.has("partial"));assert(!buttons[8].classList.names.has("covered"));
@@ -12,4 +12,21 @@ nodes.get("store").value="900001";vm.runInContext('calendar();',ctx);assert(node
 let resolveA,resolveB;ctx.fetch=path=>new Promise(resolve=>{reads.push(path);if(!resolveA)resolveA=resolve;else resolveB=resolve;});const a=vm.runInContext('showDay()',ctx),b=vm.runInContext('showDay()',ctx);
 assert.equal(nodes.get("points").children.length,0);assert.equal(vm.runInContext('detail',ctx),null);
 const fresh={points:[],returned_graph_points:0,graph_truncated:false};resolveB({ok:true,json:async()=>fresh});await b;resolveA({ok:true,json:async()=>({points:[{queue_received_at:"2026-10-09T03:00:00Z",queues:{storeQueue:["12"]},count_raw:7,pair_ok:true}],graph_truncated:false})});await a;
-assert.equal(vm.runInContext('detail.points.length',ctx),0);assert.equal(nodes.get("points").children.length,0);assert(reads.every(p=>p.startsWith("/api/v1/")));assert(!reads.some(p=>p.includes("sushiro.com")));console.log("calendar gaps, selected-store coverage, stale-detail rejection and local-only reads passed");})().catch(e=>{console.error(e);process.exitCode=1;});
+assert.equal(vm.runInContext('detail.points.length',ctx),0);assert.equal(nodes.get("points").children.length,0);assert(reads.every(p=>p.startsWith("/api/v1/")));assert(!reads.some(p=>p.includes("sushiro.com")));
+const base=Date.parse("2026-10-09T03:00:00Z"),iso=ms=>new Date(ms).toISOString();
+const modelDetail={daily_schema_version:1,source:"crm_remote_v1_1",requested_store_id:"900001",local_date:"2026-10-09",generated_at:iso(base+30*60000),network_performed_by_read:false,eta_available:false,first_label_is_confirmed_call:false,call_reference_semantics:"user_assumed_first_displayed_label",points:Array.from({length:31},(_,i)=>({request_started_at:iso(base+i*60000-200),queue_received_at:iso(base+i*60000),count_received_at:iso(base+i*60000),count_raw:0,pair_ok:true,scheduled_pause:false,error_codes:{},comparison_state:i?"comparable_display_sets":"insufficient",queues:{mixedQueue:[String(100+i*2)],reservationQueue:[String(7000+i*2)]}}))};
+ctx.Date.now=()=>base+30*60000;nodes.get("queue").value="mixedQueue";nodes.get("ticket-number").value="200";nodes.get("ticket-issued").value="11:00";
+ctx.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>modelDetail};};await vm.runInContext('showDay()',ctx);
+nodes.get("ticket-scope").checked=true;nodes.get("ticket-scope").onchange();assert(nodes.get("prediction").textContent.includes("11:50"));
+const before=reads.length;nodes.get("ticket-number").value="202";nodes.get("ticket-number").oninput();nodes.get("ticket-issued").oninput();assert.equal(reads.length,before);assert(nodes.get("prediction-note").textContent.includes("不是前方桌数"));
+nodes.get("queue").value="reservationQueue";nodes.get("queue").onchange();assert.equal(nodes.get("ticket-scope").checked,false);assert(nodes.get("prediction").textContent.includes("请确认"));
+nodes.get("queue").value="mixedQueue";nodes.get("ticket-scope").checked=true;nodes.get("ticket-scope").onchange();
+let rejectOld,resolveNew;ctx.fetch=path=>new Promise((resolve,reject)=>{reads.push(path);if(!rejectOld)rejectOld=reject;else resolveNew=resolve;});
+const old=vm.runInContext('showDay().catch(showError)',ctx),latest=vm.runInContext('showDay().catch(showError)',ctx);
+resolveNew({ok:true,json:async()=>modelDetail});await latest;rejectOld(Error("old failure"));await old;
+assert(nodes.get("prediction").textContent.includes("参考位置预计"));
+ctx.Date.now=()=>base+30*60000+90001;vm.runInContext('renderPrediction()',ctx);assert(nodes.get("prediction").textContent.includes("超过90秒"));
+ctx.fetch=async()=>{throw Error("latest read failed");};await vm.runInContext('showDay().catch(showError)',ctx);
+assert.equal(vm.runInContext('detail',ctx),null);assert(!nodes.get("prediction").textContent.includes("参考位置预计"));
+assert(reads.every(p=>/^\/api\/v1\/(?:days|stores\/900001\/days\/2026-10-09)$/.test(p)));
+assert(!reads.some(p=>p.includes("ticket")||p.includes("11:00")||p.includes("?")));console.log("calendar, response races, stale forecasts, queue confirmation and private local-only inputs passed");})().catch(e=>{console.error(e);process.exitCode=1;});

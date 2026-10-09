@@ -21,7 +21,7 @@ class StatisticsGateway:
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00'))
 
     def allowed(self, path):
-        if path in {'/statistics', '/statistics.js', '/statistics.css', '/api/v1/days'}:
+        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/api/v1/days'}:
             return True
         match = re.fullmatch(r'/api/v1/stores/([1-9][0-9]{0,9})/days/([0-9]{4}-[0-9]{2}-[0-9]{2})', path)
         return bool(match and match[1] in self.hub.names)
