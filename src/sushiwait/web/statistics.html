@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUSHIWAIT · 每日统计</title><link rel="stylesheet" href="/statistics.css"><script src="/reference-model.js" defer></script><script src="/statistics.js" defer></script></head><body><main>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUSHIWAIT · 每日统计</title><link rel="stylesheet" href="/statistics.css"><script src="/reference-model.js" defer></script><script src="/experience-model.js" defer></script><script src="/experience-ui.js" defer></script><script src="/statistics.js" defer></script></head><body><main>
 <h1>SUSHIWAIT · 每日统计</h1><p>按北京时间查看营业时段内已保存的门店观测。</p>
 <nav><a href="/monitor">最近观测</a><label>月份 <input id="month" type="month"></label><label>门店 <select id="store"><option value="">全部门店</option></select></label><button id="refresh" type="button">刷新统计</button></nav>
 <p id="status" role="status">正在加载…</p><p class="note">日历颜色当前表示采集覆盖：白色为无观测，浅黄色为覆盖不足，浅绿色为已覆盖至少 80% 的背景采样格。人流量配色将在积累数据后校准。</p>
@@ -14,4 +14,18 @@
 <h3>原始数量随时间变化</h3><p class="note">数量单位尚未核实；失败或缺口不补零。</p><canvas id="count" role="img" aria-label="原始数量随时间变化"></canvas>
 <h3>展示集合变化速度</h3><p class="note">连续观测间消失的不同号码数／分钟；不等于真实叫号速度或过号率，长缺口和重启边界不比较。</p><canvas id="speed" role="img" aria-label="展示集合变化速度"></canvas><p id="graph-note"></p>
 <details><summary>观测明细（最近 60 条）</summary><div class="table"><table><thead><tr><th>队列响应时间</th><th>展示号码</th><th>原始数量</th><th>状态</th></tr></thead><tbody id="points"></tbody></table></div></details></section>
+
+<section class="experiment" aria-labelledby="experience-title"><h2 id="experience-title">记录本次正常用餐</h2>
+<p class="note">留下本人实际取号、签到和叫号时间，帮助以后核对真实等待误差。这里只生成本机私有草稿，不上传、不自动审核；关闭页面会丢失未下载的修订。未知事件先不记录，记不清的时间填上下限；输入到分钟时保留该分钟的范围，不补成精确秒。</p>
+<p id="experience-scope"></p>
+<div class="experiment-inputs"><label>本人队列 <select id="experience-queue"><option value="unknown">未知</option><option value="ordinary">堂食</option><option value="reservation">预约</option></select></label><label>人数 <input id="experience-party" type="number" min="1" step="1" placeholder="未知可留空"></label><label>桌型 <select id="experience-table"><option value="unknown">未知</option><option value="booth">卡座</option><option value="counter">吧台</option><option value="either">两者均可</option></select></label></div>
+<div class="experiment-inputs"><label>时间下限 <input id="experience-lower" type="datetime-local" step="1" autocomplete="off"></label><label>时间上限 <input id="experience-upper" type="datetime-local" step="1" autocomplete="off"></label></div>
+<label class="scope"><input id="experience-confirm" type="checkbox" autocomplete="off"> 这是本人实际观察的事件，时间均按北京时间填写</label>
+<button id="experience-start" type="button">用这个时间范围记录取号</button>
+<label>接下来记录 <select id="experience-kind"><option value="checked_in">签到</option><option value="called">首次实际叫号</option><option value="seated">入座</option><option value="no_show">本人确认过号</option><option value="cancelled">取消</option><option value="observation_ended">停止观察</option></select></label>
+<button id="experience-add" type="button" disabled>用填写的范围记录事件</button><button id="experience-now" type="button" disabled>该事件刚刚发生</button>
+<ol id="experience-events"></ol><button id="experience-download" type="button" disabled>下载私有草稿（全部修订）</button><label class="scope"><input id="experience-saved" type="checkbox" autocomplete="off"> 我已确认当前草稿文件保存成功</label><button id="experience-clear" type="button">下载后清空</button>
+<label>读入本机草稿 <input id="experience-import" type="file" accept="application/json,.json"></label><p id="experience-status" role="status"></p>
+<p class="note">草稿不包含本人号码、微信身份或凭证。后续私有接收与人工审核仍需另一步；下载成功不表示资料已收到，也不意味着模型已认证该经历。</p></section>
+
 <footer>只读取已提交副本，不增加寿司郎查询。营业时间采用声明的默认规则，可按门店覆盖；持续质量由真实运行核验，未观测号码不自动算作过号。</footer></main></body></html>

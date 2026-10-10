@@ -969,7 +969,8 @@ def check() -> None:
                     from importlib.resources import files
                     for path,name in (('/monitor','monitor.html'),('/monitor.js','monitor.js'),('/monitor.css','monitor.css'),
                             ('/statistics','statistics.html'),('/statistics.js','statistics.js'),
-                            ('/statistics.css','statistics.css'),('/reference-model.js','reference-model.js')):
+                            ('/statistics.css','statistics.css'),('/reference-model.js','reference-model.js'),
+                            ('/experience-model.js','experience-model.js'),('/experience-ui.js','experience-ui.js')):
                         replies=[]
                         await app({'type':'http','method':'GET','path':path,'query_string':b''},receive_http,send_http)
                         body=replies[1]['body']

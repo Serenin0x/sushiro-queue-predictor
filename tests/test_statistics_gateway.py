@@ -39,10 +39,10 @@ class StatisticsGatewayTests(unittest.TestCase):
         return asyncio.run(run())
 
     def test_fixed_statistics_and_known_store_date_only(self):
-        for path in ['/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/api/v1/days',
+        for path in ['/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/experience-model.js', '/experience-ui.js', '/api/v1/days',
                      '/api/v1/stores/3014/days/2026-10-09']:
             self.assertEqual(self.request(path)[0]['status'], 200)
-        self.assertEqual(len(self.hub.calls), 6)
+        self.assertEqual(len(self.hub.calls), 8)
 
     def test_no_management_status_ticket_queue_or_file_routes(self):
         for path in ['/api/v1/status', '/monitor', '/api/v1/stores/3014/queue',

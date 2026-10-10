@@ -800,6 +800,10 @@ def build_parser() -> argparse.ArgumentParser:
     experience.add_argument('--issued-upper')
     experience.add_argument('--previous-file')
     experience.add_argument('--output', required=True)
+    bundle = commands.add_parser('experience-bundle-receive', help='把本机下载的经历修订接入私有首次接收库；不自动认证标签')
+    bundle.add_argument('--input', required=True)
+    bundle.add_argument('--database', required=True)
+    bundle.add_argument('--synthetic', action='store_true', help='仅用于明确合成资料')
     track = commands.add_parser('ticket-track-observe', help='绑定已提交公开投影与本人号码；不查询上游')
     track.add_argument('--state-dir', required=True)
     track.add_argument('--view-file', required=True)
@@ -1462,6 +1466,16 @@ def main(argv: list[str] | None = None) -> int:
                     'committed': getattr(error, 'committed', False), 'durability_confirmed': False,
                     'network_performed': False, 'provider_called': False, 'business_writes': 0,
                     'notification_sent': False, 'verified_training_labels': 0, 'eta_available': False})
+                return 1
+        if args.command == 'experience-bundle-receive':
+            from .experiencebundle import ExperienceBundleError, receive_bundle
+            try:
+                emit({'ok':True, **receive_bundle(args.input,database=args.database,synthetic=args.synthetic)})
+                return 0
+            except ExperienceBundleError as error:
+                emit({'ok':False,'error_code':error.error_code,'new_revisions_before_failure':error.saved,
+                    'failed_append_commit_status':error.commit_status,'network_performed':False,
+                    'verified_training_labels':0,'eta_available':False})
                 return 1
         if args.command == 'ticket-outcome-draft':
             from .experience import ExperienceError, write_experience

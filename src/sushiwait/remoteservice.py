@@ -35,6 +35,8 @@ _MONITOR_FILES = {'/monitor': ('monitor.html', b'text/html; charset=utf-8'),
 _MONITOR_FILES.update({'/statistics':('statistics.html',b'text/html; charset=utf-8'),
     '/statistics.js':('statistics.js',b'text/javascript; charset=utf-8'),
     '/reference-model.js':('reference-model.js',b'text/javascript; charset=utf-8'),
+    '/experience-model.js':('experience-model.js',b'text/javascript; charset=utf-8'),
+    '/experience-ui.js':('experience-ui.js',b'text/javascript; charset=utf-8'),
     '/statistics.css':('statistics.css',b'text/css; charset=utf-8')})
 _MONITOR_CSP = (b"default-src 'none'; script-src 'self'; style-src 'self'; "
     b"connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")

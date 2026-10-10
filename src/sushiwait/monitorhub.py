@@ -148,6 +148,8 @@ class MonitorHub:
             '/statistics':('statistics.html','text/html; charset=utf-8'),
             '/statistics.js':('statistics.js','text/javascript; charset=utf-8'),
             '/reference-model.js':('reference-model.js','text/javascript; charset=utf-8'),
+            '/experience-model.js':('experience-model.js','text/javascript; charset=utf-8'),
+            '/experience-ui.js':('experience-ui.js','text/javascript; charset=utf-8'),
             '/statistics.css':('statistics.css','text/css; charset=utf-8')}[path]
         raw = files('sushiwait').joinpath('web', name).read_text()
         if path == '/monitor.js':
@@ -248,7 +250,7 @@ class MonitorHub:
         if self.config['schema_version']==1 and clock >= _time(self.config['deadline_at']):
             return self._error(503, 'monitor_hub_deadline_reached')
         try:
-            if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css','/reference-model.js'}:
+            if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css','/reference-model.js','/experience-model.js','/experience-ui.js'}:
                 raw, mime = self.asset(parsed.path)
                 return 200, raw, mime
             if parsed.path == '/api/v1/status':
