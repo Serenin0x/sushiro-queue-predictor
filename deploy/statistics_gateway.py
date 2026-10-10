@@ -14,13 +14,16 @@ from sushiwait.monitorhub import MonitorHub, read_config
 
 
 class StatisticsGateway:
-    def __init__(self, hub):
+    def __init__(self, hub, *, official_view=None):
         self.hub = hub
+        self.official_view = official_view
         self.cache = OrderedDict()
         self.lock = asyncio.Lock()
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
 
     def allowed(self, path):
+        if path.startswith('/api/v1/official/'):
+            return bool(self.official_view is not None and self.official_view.allowed(path))
         if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/statistics-legacy', '/calendar.css', '/calendar.mjs', '/calendar-data.mjs', '/calendar-directory.mjs', '/calendar-icons.mjs', '/statistics-client.mjs', '/api/v1/days'}:
             return True
         if re.fullmatch(r'/api/v1/months/20[0-9]{2}-(?:0[1-9]|1[0-2])',path):
@@ -56,7 +59,8 @@ class StatisticsGateway:
                 if saved and time.monotonic() - saved[0] < 5:
                     _, status, body, mime = saved
                 else:
-                    status, body, mime = await asyncio.to_thread(self.hub.dispatch, path)
+                    reader = self.official_view if path.startswith('/api/v1/official/') else self.hub
+                    status, body, mime = await asyncio.to_thread(reader.dispatch, path)
                     self.cache[path] = (time.monotonic(), status, body, mime)
                     self.cache.move_to_end(path)
                     while len(self.cache) > 16:
@@ -77,8 +81,10 @@ class StatisticsGateway:
 
 async def serve(args):
     import uvicorn
+    from sushiwait.officialview import read_config as read_official_config
     hub = MonitorHub(read_config(args.config_file))
-    app = StatisticsGateway(hub)
+    official = read_official_config(args.official_view_file) if args.official_view_file else None
+    app = StatisticsGateway(hub, official_view=official)
     remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds() if app.deadline is not None else None
     if remaining is not None and remaining <= 0:
         raise ValueError('original_trial_deadline_reached')
@@ -103,6 +109,7 @@ async def serve(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config-file', required=True)
+    parser.add_argument('--official-view-file', help='Optional private official public-field archive configuration; no credentials')
     parser.add_argument('--listen-host', choices=['127.0.0.1', '0.0.0.0'], default='127.0.0.1')
     parser.add_argument('--port', type=int, default=18900)
     args = parser.parse_args()

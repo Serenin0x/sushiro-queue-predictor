@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: sushiwait:0.2.0rc72
+    image: sushiwait:0.2.0rc73
     init: true
     read_only: true
     user: "10001:10001"

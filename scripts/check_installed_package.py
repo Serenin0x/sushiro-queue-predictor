@@ -24,7 +24,9 @@ def check_official_statistics_install(source_root):
     """Installed public projection and explicit CLI source; all input synthetic."""
     from sushiwait.observations import normalize_snapshot
     from sushiwait.officialstats import project_packet
+    from sushiwait.officialview import OfficialStatisticsView
     from sushiwait.packets import build_packet
+    from sushiwait.receipts import PacketArchive
     at='2026-10-10T12:00:00Z';started='2026-10-10T03:00:00Z'
     snapshot=normalize_snapshot({'id':900001,'name':'Synthetic official store',
         'groupQueues':{'mixedQueue':['0012','0014','0012','0016'],'reservationQueue':[]}},
@@ -42,11 +44,24 @@ def check_official_statistics_install(source_root):
         assert day['points'][0]['queues']['mixedQueue']==['0012','0014','0012']
         assert day['summary']['recorded_http_attempts']==1 and not day['full_source_arrays_persisted']
         assert result['source_packet']==packet
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();root.chmod(0o700)
+            archive_file=root/'official-public.sqlite3'
+            with PacketArchive(archive_file) as archive:
+                archive.append(packet,as_of=at)
+                assert archive.append(packet,as_of=at)['duplicate_records']==1
+            view=OfficialStatisticsView(archive_file,store_names={'900001':'Synthetic store'},
+                hours=hours,data_origin='synthetic')
+            saved=view.read('/api/v1/official/stores/900001/days/2026-10-10',
+                now=datetime.fromisoformat(at.replace('Z','+00:00')))
+            assert saved['summary']['observations']==1 and saved['full_source_arrays_persisted']
+            assert saved['collection_state']=='not_proven_by_archive'
+            assert saved['points'][0]['queues']['mixedQueue']==['0012','0014','0012']
         with patch('sushiwait.cli.receive_summary',return_value={'committed':True}) as receive,contextlib.redirect_stdout(io.StringIO()):
             assert main(['context-surge','--credentials-file','synthetic-unread','--revision','2','--query-source','home'])==0
             assert receive.call_args.kwargs['query_source']=='home'
         assert sockets.call_count==0
-    print(json.dumps({'installed_official_projection_ok':True,'installed_explicit_home_cli_ok':True,
+    print(json.dumps({'installed_official_projection_ok':True,'installed_official_archive_view_ok':True,'installed_explicit_home_cli_ok':True,
                      'source_queries':0,'credentials_accessed':False,'live_acceptance':False}))
 
 
