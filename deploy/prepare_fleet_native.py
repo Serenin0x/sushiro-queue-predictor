@@ -79,6 +79,9 @@ def prepare(args, *, now=None):
             release=shlex.quote(str(release)),write=write,command=shlex.join(cmd))
         if fleet_worker:
             content=content.replace('MemoryMax=256M','MemoryMax=1792M').replace('TasksMax=64','TasksMax=512').replace('CPUQuota=100%','CPUQuota=200%')
+            # Controller, campaign, task and SQLite each retain descriptors.
+            # The common 1024 soft limit is insufficient at the catalog bound.
+            content=content.replace('TasksMax=512', 'TasksMax=512\nLimitNOFILE=8192')
         (root/unit).write_text(content);units.append(unit)
     save('collector',command,'ReadWritePaths='+shlex.quote(str(root))+'\n',True)
     save('hub',[str(executable),'collection-hub-serve','--config-file',str(root/'hub.json'),'--port',str(args.hub_port)])

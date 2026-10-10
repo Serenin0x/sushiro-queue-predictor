@@ -43,6 +43,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(len(list(root.glob('store-*'))),147)
         unit=(root/'sushiwait-mainland-collector.service').read_text()
         self.assertIn('MemoryMax=1792M',unit);self.assertIn('TasksMax=512',unit)
+        self.assertIn('LimitNOFILE=8192',unit)
         self.assertIn('remote-daily-fleet-serve',unit);self.assertIn('--requests-per-second 5',unit)
         self.assertEqual(json.loads((root/'hub.json').read_text())['schema_version'],3)
         self.assertNotIn('ssh',unit.lower());self.assertNotIn('sudo',unit)
