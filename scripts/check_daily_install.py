@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime,timedelta,timezone
 import json
 import hashlib
+import shutil
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -11,6 +12,8 @@ from unittest.mock import patch
 from sushiwait.businesshours import read_hours
 from sushiwait.dailycontroller import DailyController,daily_config,daily_controller_status
 from sushiwait.dailyquality import daily_quality_report
+from sushiwait.dailyarchive import read_day
+from sushiwait.daybackup import create_backup, restore_backup
 from sushiwait.dailyservice import DailyCollectorService
 from sushiwait.remote import RemoteClient,QUEUE_NAMES
 from sushiwait.remoteservice import RemoteASGI
@@ -94,10 +97,25 @@ def check(source_root):
             assert detail['archive_lineage']['exported_at']=='2026-10-09T14:05:00Z'
             assert detail['archive_lineage']['full_day_source_quality_verified'] is False
         assert projection.read_bytes()==raw and len(calls)==before and reader.thread is None
+        fleet=root.parent/'backup-source';fleet.mkdir(mode=0o700)
+        shutil.copytree(root,fleet/'store-900001')
+        sources={p:p.read_bytes() for p in fleet.rglob('*') if p.is_file()}
+        bundle=root.parent/'closed-day.zip';destination=root.parent/'restored-day'
+        with patch('socket.socket',side_effect=AssertionError('backup opened network')), \
+             patch('sushiwait.remote.RemoteClient',side_effect=AssertionError('backup started source')):
+            created=create_backup(root=fleet,store_ids=['900001'],day='2026-10-09',output=bundle,now=wall())
+            checked=restore_backup(bundle=bundle)
+            recovered=restore_backup(bundle=bundle,destination=destination)
+            assert created['raw_records']==2 and checked['restored_readable'] and recovered['restored_readable']
+            assert not recovered['collector_started_or_resumed'] and not recovered['independent_machine_verified']
+            assert read_day(fleet/'store-900001','900001','2026-10-09') == read_day(destination/'store-900001','900001','2026-10-09')
+        assert {p:p.read_bytes() for p in sources}==sources and not list(destination.rglob('*.lock'))
     print(json.dumps({'installed_daily_lifecycle_ok':True,'synthetic_days':2,'synthetic_http_attempts':8,
         'archive_reads_add_origin_requests':0,'legacy_export_read_in_place':True,
         'legacy_receipt_times_preserved':True,'disjoint_old_and_new_dates':2,
-        'private_roots_preserved':True,'daily_receipt_quality_archived':True,'eta_available':False}))
+        'private_roots_preserved':True,'daily_receipt_quality_archived':True,
+        'installed_full_raw_backup_recovery_ok':True,'backup_source_files_unchanged':True,
+        'backup_resumes_collector':False,'independent_machine_backup_verified':False,'eta_available':False}))
 
 
 if __name__=='__main__':

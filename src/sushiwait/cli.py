@@ -585,6 +585,16 @@ def build_parser() -> argparse.ArgumentParser:
     daily_quality.add_argument('--as-of', required=True)
     daily_quality.add_argument('--interval', type=int, default=60)
     daily_quality.add_argument('--max-gap', type=int, default=90)
+    backup_create = commands.add_parser('day-backup-create', help='打包明确闭店日期的完整原始库与归档；不联网或启动采集')
+    backup_create.add_argument('--root', required=True)
+    backup_create.add_argument('--store-id', action='append', required=True)
+    backup_create.add_argument('--date', required=True)
+    backup_create.add_argument('--source-kind', choices=('daily', 'legacy'), default='daily')
+    backup_create.add_argument('--output', required=True)
+    for name in ('day-backup-check', 'day-backup-restore'):
+        backup = commands.add_parser(name, help='逐文件校验并实际读取恢复副本；不覆盖原库或恢复采集')
+        backup.add_argument('--input', required=True)
+        if name == 'day-backup-restore': backup.add_argument('--destination', required=True)
     window_quality = commands.add_parser("remote-window-quality",help="只读终态窗口的完整结果链、间隔缺口与日期分布；不认证源新鲜度")
     window_quality.add_argument("--db",required=True)
     window_quality.add_argument("--task-file",required=True)
@@ -985,6 +995,22 @@ def main(argv: list[str] | None = None) -> int:
                   'eta_available':False,'business_writes':0});return 1
         except (OSError,ValueError,TypeError,KeyError,OverflowError):
             emit({'ok':False,'error_code':'personal_response_invalid','business_writes':0});return 1
+    if args.command in ('day-backup-create', 'day-backup-check', 'day-backup-restore'):
+        from .daybackup import BackupError, create_backup, restore_backup
+        try:
+            if args.command == 'day-backup-create':
+                value = create_backup(root=args.root, store_ids=args.store_id, day=args.date,
+                    output=args.output, source_kind=args.source_kind)
+            else:
+                value = restore_backup(bundle=args.input,
+                    destination=args.destination if args.command == 'day-backup-restore' else None)
+            emit(value); return 0
+        except BackupError as error:
+            emit({'ok': False, 'error_code': str(error), 'network_performed': False,
+                'official_requests_added': 0, 'collector_started_or_resumed': False}); return 2
+        except (OSError, ValueError, TypeError, KeyError, OverflowError, RecursionError):
+            emit({'ok': False, 'error_code': 'backup_input_error', 'network_performed': False,
+                'official_requests_added': 0, 'collector_started_or_resumed': False}); return 2
     if args.command == 'daily-quality-report':
         from .dailycontroller import read_daily_archive
         from .dailyquality import daily_quality_report
