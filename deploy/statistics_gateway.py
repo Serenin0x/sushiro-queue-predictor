@@ -21,7 +21,7 @@ class StatisticsGateway:
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
 
     def allowed(self, path):
-        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/experience-model.js', '/experience-ui.js', '/api/v1/days'}:
+        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/api/v1/days'}:
             return True
         if re.fullmatch(r'/api/v1/months/20[0-9]{2}-(?:0[1-9]|1[0-2])',path):
             return True

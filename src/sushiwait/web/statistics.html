@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUSHIWAIT · 每日统计</title><link rel="stylesheet" href="/statistics.css"><script src="/reference-model.js" defer></script><script src="/experience-model.js" defer></script><script src="/experience-ui.js" defer></script><script src="/statistics.js" defer></script></head><body><main>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUSHIWAIT · 每日统计</title><link rel="stylesheet" href="/statistics.css"><script src="/reference-model.js" defer></script><script src="/reference-alerts.js" defer></script><script src="/experience-model.js" defer></script><script src="/experience-ui.js" defer></script><script src="/statistics.js" defer></script></head><body><main>
 <h1>SUSHIWAIT · 每日统计</h1><p>按北京时间查看营业时段内已保存的门店观测。</p>
 <nav><a href="/monitor">最近观测</a><label>月份 <input id="month" type="month"></label><label>门店 <select id="store"><option value="">全部门店</option></select></label><button id="refresh" type="button">刷新统计</button></nav>
 <p id="status" role="status">正在加载…</p><p class="note">日历颜色当前表示采集覆盖：白色为无观测，浅黄色为覆盖不足，浅绿色为已覆盖至少 80% 的背景采样格。人流量配色将在积累数据后校准。</p>
@@ -8,8 +8,9 @@
 <section class="experiment" aria-labelledby="experiment-title"><h3 id="experiment-title">输入已有号码 · 实时参考实验</h3>
 <p class="note">选择今天和取号门店，再输入堂食或预约号码。历史样本足够时先给初估，随后随新观测修正；历史不足时保留实时趋势参考，资料不足不补零。号码与取号时间只在当前页面内计算，不上传、不保存；换门店或队列后需重新确认。这里估计首位参考到达该位置的时间，实际叫到你的时间与误差仍需用餐经历校准。</p>
 <div class="experiment-inputs"><label>本人号码 <input id="ticket-number" type="text" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="例如 4045"></label><label>今天取号时间 <input id="ticket-issued" type="time" step="60" autocomplete="off"></label></div>
+<div class="experiment-inputs"><label>计划到店时间（可选） <input id="ticket-arrival" type="time" step="60" autocomplete="off"></label><label>希望叫号偏移（分钟） <input id="ticket-offset" type="number" value="0" min="-120" max="120" step="1" autocomplete="off"></label></div><p class="note">+10 表示希望到店后十分钟叫号，−10 表示希望提前十分钟叫号；偏移不是预测误差。页面提示仅在本页打开时更新，尚无后台推送，也不会改变服务器采集频率。</p>
 <label class="scope"><input id="ticket-scope" type="checkbox" autocomplete="off"> 我确认这是今天在所选门店、所选队列取得的号码</label>
-<p id="prediction" role="status">输入号码、取号时间并确认门店与队列后计算。</p><p id="prediction-note" class="note"></p></section>
+<p id="ticket-precaution" role="status" aria-live="polite" hidden></p><p id="prediction" role="status">输入号码、取号时间并确认门店与队列后计算。</p><p id="prediction-note" class="note"></p></section>
 <h3>当前叫号参考—时间（第一位）</h3><p class="note">按用户约定，用列表第一位作为当前叫号参考；每次采集的前三个号码和时间仍保留在明细。参考位置尚未认证为实际叫号事件；非纯数字号码不换算。</p><canvas id="numbers" role="img" aria-label="第一位叫号参考随时间的位置"></canvas>
 <h3>原始数量随时间变化</h3><p class="note">数量单位尚未核实；失败或缺口不补零。</p><canvas id="count" role="img" aria-label="原始数量随时间变化"></canvas>
 <h3>展示集合变化速度</h3><p class="note">连续观测间消失的不同号码数／分钟；不等于真实叫号速度或过号率，长缺口和重启边界不比较。</p><canvas id="speed" role="img" aria-label="展示集合变化速度"></canvas><p id="graph-note"></p>
