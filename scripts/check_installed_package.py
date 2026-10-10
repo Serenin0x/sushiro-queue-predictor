@@ -1659,6 +1659,28 @@ def check() -> None:
             print(json.dumps({'installed_history_fusion_ok':True,'synthetic_reviewed_candidate':True,
                 'full_interval_sample_preserved':True,'source_and_reviews_unchanged':True,'socket_calls':0,
                 'provider_calls':0,'realtime_regimes_fitted':False,'verified_training_labels':0,'eta_available':False}))
+            ideal_plan={k:v for k,v in plan.items() if k not in ('mode', 'issued_at', 'call_not_observed')}
+            cutoff=datetime.fromisoformat(plan['as_of'])
+            ideal_plan.update(mode='ideal_time',desired_arrival_at=(cutoff+timedelta(minutes=30)).isoformat(),
+                call_offset_minutes=10,candidate_issue_times=[(cutoff+timedelta(minutes=i)).isoformat() for i in (0,5,10)])
+            ideal_input=baseline_directory/'ideal-plan.json';ideal_output=baseline_directory/'ideal-output.json'
+            ideal_input.write_text(json.dumps(ideal_plan));ideal_input.chmod(0o600)
+            ideal_logs=io.StringIO()
+            with patch('socket.socket',side_effect=AssertionError('ideal_socket')) as ideal_socket,\
+                 patch('sushiwait.cli.read_credentials_file',side_effect=AssertionError('ideal_auth')) as ideal_auth,\
+                 contextlib.redirect_stdout(ideal_logs):
+                assert main(['ideal-time-research','--source-db',intake_database,'--reviews-db',str(review_db),
+                    '--input',str(ideal_input),'--context-file',str(history_context),'--output',str(ideal_output)])==0
+            ideal=json.loads(ideal_output.read_bytes());safe=json.loads(ideal_logs.getvalue())
+            assert len(ideal['candidates'])==3 and ideal['models_generated']==['history']
+            assert not ideal['eta_available'] and not ideal['candidate_bookability_verified']
+            assert ideal['target_call_at']==(cutoff+timedelta(minutes=40)).isoformat(timespec='microseconds').replace('+00:00','Z')
+            assert safe['durability_confirmed'] and not ideal_socket.call_count and not ideal_auth.call_count
+            assert ideal_output.stat().st_mode&0o777==0o600 and str(baseline_directory) not in ideal_logs.getvalue()
+            assert review_before==review_db.read_bytes() and intake_before==hashlib.sha256(Path(intake_database).read_bytes()).digest()
+            print(json.dumps({'installed_ideal_planning_ok':True,'complete_candidate_count':3,
+                'positive_offset_preserved':True,'source_and_reviews_unchanged':True,'socket_calls':0,
+                'provider_calls':0,'booking_or_cancellation_performed':False,'verified_training_labels':0,'eta_available':False}))
             backtest_plan={key:plan[key] for key in ('schema_version','as_of','data_origin','api_profile','store_id','minimum_samples')}
             backtest_plan.update(elapsed_seconds=[0],max_cases=100)
             backtest_input,backtest_output=baseline_directory/'backtest-plan.json',baseline_directory/'backtest.json'

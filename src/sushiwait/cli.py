@@ -772,6 +772,17 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--model-version", default="reviewed-history-intervals-v1")
     history.add_argument("--ai-blend-ppm", type=int, default=0)
     history.add_argument("--max-revisions", type=int, default=10000)
+    ideal = commands.add_parser('ideal-time-research', help='完整取号时间网格的提前／准时／过晚区间评分；未校准，不取号')
+    for field in ('source-db','reviews-db','input','context-file','output'):
+        ideal.add_argument('--'+field, required=True)
+    ideal.add_argument('--advice-file')
+    ideal.add_argument('--early-minutes',type=int,default=0)
+    ideal.add_argument('--late-minutes',type=int,default=10)
+    ideal.add_argument('--minimum-window-mass-ppm',type=int,default=600000)
+    ideal.add_argument('--maximum-early-mass-ppm',type=int,default=200000)
+    ideal.add_argument('--maximum-late-mass-ppm',type=int,default=200000)
+    ideal.add_argument('--ai-blend-ppm',type=int,default=0)
+    ideal.add_argument('--max-revisions',type=int,default=10000)
     replay = commands.add_parser('realtime-backtest', help='按历史接收时点公平比较历史、实时和融合误差；不调用供应商')
     for field in ('source-db','reviews-db','remote-db','input','output'):
         replay.add_argument('--'+field, required=True)
@@ -1546,6 +1557,36 @@ def main(argv: list[str] | None = None) -> int:
                 emit({'ok':False,'error_code':code,'committed':getattr(error,'committed',False),
                     'durability_confirmed':False,'network_performed':False,'provider_called':False,
                     'eta_available':False,'verified_training_labels':0});return 1
+        if args.command == 'ideal-time-research':
+            from .idealplanning import IdealPlanError, write_ideal_plan
+            from .baseline import read_plan as read_ideal_input
+            from .credentials import _read_private_file as read_ideal_bytes
+            from .outcomes import _json as parse_ideal_json
+            try:
+                paths=[Path(p).resolve() for p in (args.source_db,args.reviews_db,args.input,
+                    args.context_file,args.output,args.advice_file) if p is not None]
+                if (len(set(paths))!=len(paths) or paths[0].parent==paths[1].parent
+                        or paths[4].parent in {paths[0].parent,paths[1].parent}):raise IdealPlanError()
+                plan=read_ideal_input(args.input)
+                if plan['mode']!='ideal_time':raise IdealPlanError()
+                context=read_fusion_context(args.context_file)
+                advice=parse_ideal_json(read_ideal_bytes(args.advice_file)) if args.advice_file else None
+                with OutcomeIntakeStore(args.source_db,read_only=True) as source, \
+                        OutcomeReviewStore(args.reviews_db,read_only=True) as reviews:
+                    result=write_ideal_plan(source=source,reviews=reviews,plan=plan,context=context,
+                        destination=args.output,advice=advice,early_minutes=args.early_minutes,
+                        late_minutes=args.late_minutes,minimum_window_mass_ppm=args.minimum_window_mass_ppm,
+                        maximum_early_mass_ppm=args.maximum_early_mass_ppm,
+                        maximum_late_mass_ppm=args.maximum_late_mass_ppm,ai_blend_ppm=args.ai_blend_ppm,
+                        max_revisions=args.max_revisions)
+                durable=result['durability_confirmed']
+                emit({'ok':durable,**result,**({} if durable else {'error_code':'ideal_plan_durability_unconfirmed'})})
+                return 0 if durable else 1
+            except Exception as error:
+                emit({'ok':False,'error_code':getattr(error,'error_code','ideal_plan_invalid'),
+                    'committed':getattr(error,'committed',False),'durability_confirmed':False,
+                    'network_performed':False,'provider_called':False,'verified_training_labels':0,'eta_available':False})
+                return 1
         if args.command == "history-fusion-research":
             try:
                 from .baseline import read_plan as read_history_plan
