@@ -21,7 +21,7 @@ class StatisticsGateway:
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
 
     def allowed(self, path):
-        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/api/v1/days'}:
+        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/statistics-legacy', '/calendar.css', '/calendar.mjs', '/calendar-data.mjs', '/calendar-directory.mjs', '/calendar-icons.mjs', '/statistics-client.mjs', '/api/v1/days'}:
             return True
         if re.fullmatch(r'/api/v1/months/20[0-9]{2}-(?:0[1-9]|1[0-2])',path):
             return True
@@ -61,7 +61,7 @@ class StatisticsGateway:
                     self.cache.move_to_end(path)
                     while len(self.cache) > 16:
                         self.cache.popitem(last=False)
-        if path == '/statistics' and status == 200:
+        if path in {'/statistics', '/statistics-legacy'} and status == 200:
             # The internal monitor is deliberately outside the public scope.
             body = body.replace(b'<a href="/monitor">' + '最近观测'.encode() + b'</a>',
                 '<span>每30秒自动更新</span>'.encode())

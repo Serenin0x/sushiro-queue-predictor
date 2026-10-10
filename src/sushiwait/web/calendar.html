@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUSHIWAIT · 门店统计</title><link rel="stylesheet" href="/calendar.css"><script type="module" src="/calendar.mjs"></script></head><body>
+<div id="sushiwait-month-calendar" aria-label="SUSHIWAIT 门店统计">
+  <div class="sw-shell">
+    <nav class="sw-rail" aria-label="主导航">
+      <button type="button" class="sw-ghost cursor-interaction" id="sw-nav-calendar" aria-label="月历" aria-pressed="true" data-tooltip="月历"><i data-lucide="calendar-days" aria-hidden="true"></i></button>
+      <button type="button" class="sw-ghost cursor-interaction" id="sw-nav-day" aria-label="当日观测" aria-pressed="false" data-tooltip="当日观测"><i data-lucide="chart-no-axes-combined" aria-hidden="true"></i></button>
+      <a class="sw-ghost" href="/statistics-legacy" aria-label="已有号参考与用餐记录" title="已有号参考与用餐记录"><i data-lucide="clock" aria-hidden="true"></i></a>
+      <button type="button" class="sw-ghost sw-theme cursor-interaction" id="sw-theme" aria-label="切换浅色与深色" data-tooltip="切换浅色与深色"><i data-lucide="sun-moon" aria-hidden="true"></i></button>
+    </nav>
+    <main class="sw-main">
+      <header class="sw-header">
+        <p class="sw-brand">SUSHIWAIT</p>
+        <div class="sw-pickers" id="sw-pickers" aria-label="城市与门店">
+          <div class="sw-picker">
+            <button type="button" class="sw-ghost sw-picker-trigger cursor-interaction" id="sw-city" aria-controls="sw-city-menu" aria-expanded="false" aria-label="选择城市"><span id="sw-city-label">全部</span><i data-lucide="chevron-down" aria-hidden="true"></i></button>
+            <div class="sw-menu" id="sw-city-menu" role="group" aria-label="城市选项" hidden>
+              <input type="search" class="sw-search" id="sw-city-search" aria-label="搜索城市" placeholder="搜索城市" autocomplete="off">
+              <div class="sw-options sw-city-options" id="sw-city-options"></div>
+              <p class="sw-menu-empty" id="sw-city-empty" hidden>无匹配城市</p>
+            </div>
+          </div>
+          <span class="sw-picker-separator" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
+          <div class="sw-picker sw-picker-store">
+            <button type="button" class="sw-ghost sw-picker-trigger cursor-interaction" id="sw-store" aria-controls="sw-store-menu" aria-expanded="false" aria-label="选择门店"><span id="sw-store-label">全部</span><i data-lucide="chevron-down" aria-hidden="true"></i></button>
+            <div class="sw-menu sw-menu-store" id="sw-store-menu" role="group" aria-label="门店选项" hidden>
+              <input type="search" class="sw-search" id="sw-store-search" aria-label="搜索门店" placeholder="搜索门店" autocomplete="off">
+              <div class="sw-options" id="sw-store-options"></div>
+              <p class="sw-menu-empty" id="sw-store-empty" hidden>无匹配门店</p>
+            </div>
+          </div>
+        </div>
+        <span class="sw-demo" id="sw-demo"></span><button type="button" class="sw-ghost" id="sw-refresh" aria-label="刷新统计"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
+      </header>
+      <section id="sw-month-view" aria-label="月历">
+        <div class="sw-month-head">
+          <button type="button" class="sw-ghost cursor-interaction" id="sw-previous" aria-label="上个月"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+          <h1 id="sw-month-title"></h1>
+          <button type="button" class="sw-ghost cursor-interaction" id="sw-next" aria-label="下个月"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+        </div>
+        <div class="sw-calendar-tools"><button type="button" class="sw-ghost cursor-interaction" id="sw-this-month">本月</button></div>
+        <div class="sw-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+        <div class="sw-days" id="sw-days" aria-label="日期"></div>
+      </section>
+      <section id="sw-day-view" aria-label="当日观测" hidden>
+        <div class="sw-day-head"><h1 id="sw-day-title"></h1><button type="button" class="sw-ghost cursor-interaction" id="sw-back"><i data-lucide="arrow-left" aria-hidden="true"></i>月历</button></div>
+        <div id="sw-day-empty" class="sw-empty-detail" hidden></div>
+        <div id="sw-all-content" hidden></div>
+        <div id="sw-day-content">
+          <p id="sw-response" class="sw-response"></p><div class="sw-queues">
+            <div><p class="sw-queue-label"><span class="sw-swatch" aria-hidden="true"></span>堂食</p><p class="sw-queue-values sw-numbers" id="sw-queue-dine"></p></div>
+            <div><p class="sw-queue-label"><span class="sw-swatch sw-reservation" aria-hidden="true"></span>预约</p><p class="sw-queue-values sw-numbers" id="sw-queue-reservation"></p></div>
+          </div>
+          <div class="sw-series-controls" aria-label="号码和速度图的队列">
+            <button type="button" class="sw-series-control cursor-interaction" data-series="dine" aria-pressed="true"><span class="sw-swatch" aria-hidden="true"></span>堂食</button>
+            <button type="button" class="sw-series-control cursor-interaction" data-series="reservation" aria-pressed="true"><span class="sw-swatch sw-reservation" aria-hidden="true"></span>预约</button>
+          </div>
+          <div class="sw-charts">
+            <div class="sw-chart-panel"><h2>展示号码变化</h2><svg class="sw-plot" id="sw-number-plot" role="img" aria-label="堂食与预约列表首项展示号码随时间变化"></svg></div>
+            <div class="sw-chart-panel"><h2>展示变化速度</h2><svg class="sw-plot" id="sw-speed-plot" role="img" aria-label="堂食与预约可比展示集合移出号码数除以观测分钟数"></svg></div>
+            <div class="sw-chart-panel sw-wide"><h2>原始数量 <span class="sw-detail-note">单位待确认</span></h2><svg class="sw-plot" id="sw-count-plot" role="img" aria-label="单条原始数量随时间变化，单位未确认"></svg></div>
+          </div>
+          <section class="sw-records" aria-label="最近六十条观测"><h2>最近观测</h2><table><thead><tr><th scope="col">UTC+8</th><th scope="col">堂食即将叫号</th><th scope="col">预约即将叫号</th><th scope="col">状态</th></tr></thead><tbody id="sw-records"></tbody></table></section>
+          <p class="sw-detail-note" id="sw-graph-note"></p>
+        </div>
+      </section>
+      <p class="sw-status" id="sw-status" role="status" aria-live="polite">正在读取…</p>
+    </main>
+  </div>
+  <div class="sw-tooltip" id="sw-tooltip" role="tooltip" hidden></div>
+</div>
+<noscript>请启用 JavaScript 查看统计。</noscript></body></html>

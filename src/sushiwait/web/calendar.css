@@ -1,0 +1,200 @@
+html, body { margin: 0; min-height: 100%; }
+
+    #sushiwait-month-calendar {
+      color-scheme: light dark;
+      --sw-bg: light-dark(#ffffff, #212121);
+      --sw-rail: light-dark(#f7f7f7, #171717);
+      --sw-ink: light-dark(#242424, #eeeeee);
+      --sw-muted: light-dark(#6a6a6a, #b3b3b3);
+      --sw-line: light-dark(#e7e7e7, #3c3c3c);
+      --sw-hover: light-dark(#ececec, #353535);
+      --sw-select: light-dark(#252525, #eeeeee);
+      --sw-select-ink: light-dark(#ffffff, #202020);
+      --sw-red: light-dark(#bc3349, #f29ba7);
+      --sw-paint: light-dark(#c93850, #d94c62);
+      --sw-second: light-dark(#737373, #b9b9b9);
+      --sw-empty: light-dark(#f6f6f6, #282828);
+      --sw-menu-bg: light-dark(#ffffff, #2b2b2b);
+      --sw-menu-shadow: light-dark(rgb(0 0 0 / 9%), rgb(0 0 0 / 24%));
+      --sw-cell-height: 108px;
+      --sw-tint: 1;
+      font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--sw-bg);
+      color: var(--sw-ink);
+      position: relative;
+      isolation: isolate;
+      width: 100%;
+      min-width: 0;
+    }
+    #sushiwait-month-calendar * { box-sizing: border-box; }
+    #sushiwait-month-calendar [hidden] { display: none !important; }
+    #sushiwait-month-calendar button, #sushiwait-month-calendar input { font: inherit; color: inherit; }
+    #sushiwait-month-calendar button { -webkit-tap-highlight-color: transparent; }
+    #sushiwait-month-calendar .sw-shell { display: grid; grid-template-columns: 64px minmax(0, 1fr); min-height: 740px; }
+    #sushiwait-month-calendar .sw-rail { background: var(--sw-rail); padding: 18px 8px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+    #sushiwait-month-calendar .sw-ghost { border: 0; background: transparent; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 12px; min-height: 44px; }
+    #sushiwait-month-calendar .sw-ghost:hover, #sushiwait-month-calendar .sw-ghost[aria-pressed="true"] { background: var(--sw-hover); }
+    #sushiwait-month-calendar .sw-ghost:disabled { opacity: .35; cursor: default; }
+    #sushiwait-month-calendar .sw-rail .sw-ghost { width: 44px; padding: 0; }
+    #sushiwait-month-calendar .sw-theme { margin-top: auto; }
+    #sushiwait-month-calendar .sw-main { padding: 20px 28px 28px; min-width: 0; }
+    #sushiwait-month-calendar .sw-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-right: 88px; margin-bottom: 36px; }
+    #sushiwait-month-calendar .sw-brand { font: 500 16px/1.4 "Avenir Next", -apple-system, sans-serif; letter-spacing: 1.1px; margin: 0 12px 0 0; }
+    #sushiwait-month-calendar .sw-pickers { display: flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; }
+    #sushiwait-month-calendar .sw-picker { position: relative; min-width: 0; }
+    #sushiwait-month-calendar .sw-picker-store { min-width: 0; }
+    #sushiwait-month-calendar .sw-picker-trigger { font-size: 14px; padding: 8px; gap: 9px; max-width: 100%; white-space: nowrap; }
+    #sushiwait-month-calendar .sw-picker-trigger span { overflow: hidden; text-overflow: ellipsis; }
+    #sushiwait-month-calendar .sw-picker-trigger svg { flex-shrink: 0; }
+    #sushiwait-month-calendar .sw-picker-trigger:disabled { opacity: 1; color: var(--sw-muted); }
+    #sushiwait-month-calendar .sw-picker-separator { color: var(--sw-muted); display: inline-flex; flex-shrink: 0; }
+    #sushiwait-month-calendar .sw-picker-separator svg { width: 13px; height: 13px; }
+    #sushiwait-month-calendar .sw-menu { position: absolute; top: calc(100% + 6px); left: 0; width: min(236px, calc(100vw - 60px)); background: var(--sw-menu-bg); border: 1px solid var(--sw-line); border-radius: 12px; padding: 6px; box-shadow: 0 8px 24px var(--sw-menu-shadow); z-index: 6; }
+    #sushiwait-month-calendar .sw-menu-store { width: min(280px, calc(100vw - 48px)); }
+    #sushiwait-month-calendar .sw-search { width: 100%; padding: 10px 9px; min-height: 44px; background: transparent; border: 0; border-bottom: 1px solid var(--sw-line); border-radius: 0; font-size: 14px; margin-bottom: 5px; }
+    #sushiwait-month-calendar .sw-search::placeholder { color: var(--sw-muted); }
+    #sushiwait-month-calendar .sw-options { max-height: 308px; overflow-y: auto; overscroll-behavior: contain; }
+    #sushiwait-month-calendar .sw-city-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
+    #sushiwait-month-calendar .sw-city-options button[data-city="all"] { grid-column: 1 / -1; }
+    #sushiwait-month-calendar .sw-menu-option { width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0; background: transparent; color: var(--sw-ink); font-size: 14px; text-align: left; padding: 10px 9px; border-radius: 6px; }
+    #sushiwait-month-calendar .sw-menu-option:hover, #sushiwait-month-calendar .sw-menu-option[aria-pressed="true"] { background: var(--sw-hover); }
+    #sushiwait-month-calendar .sw-menu-option[aria-pressed="false"] .sw-menu-check { visibility: hidden; }
+    #sushiwait-month-calendar .sw-menu-check { display: inline-flex; flex-shrink: 0; }
+    #sushiwait-month-calendar .sw-menu-empty { padding: 14px 9px; color: var(--sw-muted); font-size: 13px; margin: 0; }
+    #sushiwait-month-calendar .sw-demo { color: var(--sw-muted); font-size: 12px; white-space: nowrap; }
+    #sushiwait-month-calendar .sw-month-head { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; max-width: 310px; margin: 0 auto 18px; }
+    #sushiwait-month-calendar h1 { font-size: 23px; line-height: 1.35; font-weight: 400; text-align: center; margin: 0; }
+    #sushiwait-month-calendar .sw-month-head .sw-ghost { padding: 0; }
+    #sushiwait-month-calendar .sw-calendar-tools { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 12px; gap: 8px; }
+    #sushiwait-month-calendar .sw-calendar-tools .sw-ghost { font-size: 13px; }
+    #sushiwait-month-calendar .sw-weekdays, #sushiwait-month-calendar .sw-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+    #sushiwait-month-calendar .sw-weekdays { color: var(--sw-muted); font-size: 13px; margin-bottom: 9px; }
+    #sushiwait-month-calendar .sw-weekdays span { padding-left: 14px; }
+    #sushiwait-month-calendar .sw-day, #sushiwait-month-calendar .sw-outside { min-height: var(--sw-cell-height); }
+    #sushiwait-month-calendar .sw-day { border: 0; border-radius: 3px; text-align: left; padding: 10px 11px; background: color-mix(in srgb, var(--sw-paint) calc(var(--sw-level) * var(--sw-tint)), var(--sw-bg)); color: var(--sw-ink); display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+    #sushiwait-month-calendar .sw-day:hover { background: color-mix(in srgb, var(--sw-paint) calc(var(--sw-level) * var(--sw-tint) + 7%), var(--sw-bg)); }
+    #sushiwait-month-calendar .sw-day-top { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+    #sushiwait-month-calendar .sw-date { display: inline-flex; justify-content: center; align-items: center; width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; font-size: 14px; }
+    #sushiwait-month-calendar .sw-day[aria-pressed="true"] .sw-date { background: var(--sw-select); color: var(--sw-select-ink); }
+    #sushiwait-month-calendar .sw-kind { font-size: 11px; color: var(--sw-red); white-space: nowrap; }
+    #sushiwait-month-calendar .sw-kind.sw-work { color: var(--sw-muted); }
+    #sushiwait-month-calendar .sw-count { font-size: 21px; line-height: 1.3; padding-left: 4px; font-weight: 400; }
+    #sushiwait-month-calendar .sw-count small { font-size: 11px; margin-left: 3px; color: var(--sw-muted); }
+    #sushiwait-month-calendar .sw-count-compact { display: none; }
+    #sushiwait-month-calendar .sw-numbers { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-variant-numeric: tabular-nums; }
+    #sushiwait-month-calendar .sw-day.sw-missing { background: var(--sw-empty); }
+    #sushiwait-month-calendar .sw-day.sw-future { background: transparent; color: var(--sw-muted); }
+    #sushiwait-month-calendar .sw-day.sw-missing .sw-count { font: 400 12px/1.5 -apple-system, sans-serif; color: var(--sw-muted); }
+    #sushiwait-month-calendar .sw-outside { color: var(--sw-muted); opacity: .5; padding: 10px 11px; }
+    #sushiwait-month-calendar .sw-day-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    #sushiwait-month-calendar .sw-day-head h1 { text-align: left; }
+    #sushiwait-month-calendar .sw-queues { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--sw-line); margin-bottom: 28px; }
+    #sushiwait-month-calendar .sw-queue-label { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 14px; }
+    #sushiwait-month-calendar .sw-swatch { display: inline-block; width: 16px; height: 2px; background: var(--sw-red); flex-shrink: 0; }
+    #sushiwait-month-calendar .sw-swatch.sw-reservation { background: repeating-linear-gradient(to right, var(--sw-second) 0 4px, transparent 4px 7px); }
+    #sushiwait-month-calendar .sw-queue-values { font-size: 22px; margin: 0; display: flex; gap: 16px; flex-wrap: wrap; }
+    #sushiwait-month-calendar .sw-detail-note { margin: 12px 0 0; color: var(--sw-muted); font-size: 12px; }
+    #sushiwait-month-calendar .sw-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 24px; }
+    #sushiwait-month-calendar .sw-chart-panel { min-width: 0; }
+    #sushiwait-month-calendar .sw-chart-panel.sw-wide { grid-column: 1 / -1; }
+    #sushiwait-month-calendar h2 { margin: 0 0 12px; font-size: 16px; font-weight: 500; }
+    #sushiwait-month-calendar .sw-plot { width: 100%; display: block; }
+    #sushiwait-month-calendar .sw-plot text { fill: var(--sw-muted); font: 400 11px -apple-system, "PingFang SC", sans-serif; }
+    #sushiwait-month-calendar .sw-plot .sw-axis-name { fill: var(--sw-ink); font-size: 11px; }
+    #sushiwait-month-calendar .sw-plot .domain, #sushiwait-month-calendar .sw-plot .tick line { stroke: var(--sw-line); }
+    #sushiwait-month-calendar .sw-series { fill: none; stroke: var(--sw-red); stroke-width: 1.8; }
+    #sushiwait-month-calendar .sw-series.sw-series-reservation { stroke: var(--sw-second); stroke-dasharray: 5 4; }
+    #sushiwait-month-calendar .sw-tooltip { position: absolute; pointer-events: none; background: var(--sw-rail); color: var(--sw-ink); padding: 10px 12px; font-size: 12px; border: 1px solid var(--sw-line); border-radius: 6px; z-index: 3; max-width: 230px; }
+    #sushiwait-month-calendar .sw-tooltip-row { display: flex; justify-content: space-between; gap: 18px; }
+    #sushiwait-month-calendar .sw-tooltip-time { color: var(--sw-muted); margin-bottom: 4px; }
+    #sushiwait-month-calendar .sw-series-controls { display: flex; flex-wrap: wrap; gap: 18px; margin: -4px 0 22px; }
+    #sushiwait-month-calendar .sw-series-control { border: 0; padding: 6px 0; min-height: 32px; background: transparent; display: inline-flex; gap: 8px; align-items: center; font-size: 13px; }
+    #sushiwait-month-calendar .sw-series-control[aria-pressed="false"] { opacity: .4; }
+    #sushiwait-month-calendar .sw-records { margin-top: 28px; }
+    #sushiwait-month-calendar .sw-records table { border-collapse: collapse; width: 100%; font-size: 13px; text-align: left; }
+    #sushiwait-month-calendar .sw-records th { font-weight: 400; color: var(--sw-muted); padding: 10px 8px 10px 0; border-bottom: 1px solid var(--sw-line); }
+    #sushiwait-month-calendar .sw-records td { padding: 10px 8px 10px 0; border-bottom: 1px solid var(--sw-line); }
+    #sushiwait-month-calendar .sw-records td:last-child { padding-right: 0; }
+    #sushiwait-month-calendar .sw-all-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    #sushiwait-month-calendar .sw-all-table th { color: var(--sw-muted); text-align: left; font-weight: 400; padding: 10px 8px; border-bottom: 1px solid var(--sw-line); }
+    #sushiwait-month-calendar .sw-all-table td { padding: 12px 8px; border-bottom: 1px solid var(--sw-line); }
+    #sushiwait-month-calendar .sw-all-table th:first-child, #sushiwait-month-calendar .sw-all-table td:first-child { padding-left: 0; }
+    #sushiwait-month-calendar .sw-all-table td:last-child { text-align: right; padding-right: 0; width: 44px; }
+    #sushiwait-month-calendar .sw-all-store-row { padding: 20px 0; border-bottom: 1px solid var(--sw-line); }
+    #sushiwait-month-calendar .sw-all-store-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    #sushiwait-month-calendar .sw-all-store-heading h2 { margin: 0; }
+    #sushiwait-month-calendar .sw-all-store-queues { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    #sushiwait-month-calendar .sw-empty-detail { padding: 72px 0; text-align: center; color: var(--sw-muted); }
+    #sushiwait-month-calendar .sw-live-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    @media (max-width: 900px) {
+      #sushiwait-month-calendar .sw-multiple .sw-count-full { display: none; }
+      #sushiwait-month-calendar .sw-multiple .sw-count-compact { display: inline; }
+      #sushiwait-month-calendar .sw-multiple .sw-count small { display: none; }
+    }
+    @media (max-width: 700px) {
+      #sushiwait-month-calendar .sw-shell { grid-template-columns: 52px minmax(0, 1fr); }
+      #sushiwait-month-calendar .sw-rail { padding: 14px 4px; }
+      #sushiwait-month-calendar .sw-main { padding: 16px 16px 24px; }
+      #sushiwait-month-calendar .sw-header { gap: 5px 12px; margin-bottom: 24px; }
+      #sushiwait-month-calendar .sw-brand { flex-basis: 100%; }
+      #sushiwait-month-calendar .sw-charts { grid-template-columns: 1fr; }
+      #sushiwait-month-calendar .sw-day { padding: 8px 6px; }
+      #sushiwait-month-calendar .sw-outside { padding: 8px 6px; }
+      #sushiwait-month-calendar .sw-count { font-size: 18px; }
+      #sushiwait-month-calendar .sw-weekdays span { padding-left: 8px; }
+      #sushiwait-month-calendar .sw-queue-values { font-size: 18px; gap: 10px; }
+    }
+    @media (max-width: 480px) {
+      #sushiwait-month-calendar .sw-shell { display: block; min-height: 0; }
+      #sushiwait-month-calendar .sw-rail { flex-direction: row; padding: 4px 8px; gap: 4px; }
+      #sushiwait-month-calendar .sw-theme { margin-top: 0; margin-left: auto; }
+      #sushiwait-month-calendar .sw-main { padding: 14px 8px 22px; }
+      #sushiwait-month-calendar .sw-header { padding-right: 0; margin-bottom: 24px; gap: 8px; }
+      #sushiwait-month-calendar .sw-brand { flex-basis: auto; font-size: 14px; margin-right: 0; }
+      #sushiwait-month-calendar .sw-pickers { flex-basis: 100%; order: 3; }
+      #sushiwait-month-calendar .sw-picker-store { flex: 1; }
+      #sushiwait-month-calendar .sw-menu-store { left: auto; right: 0; }
+      #sushiwait-month-calendar .sw-picker-trigger { font-size: 14px; }
+      #sushiwait-month-calendar .sw-search { font-size: 16px; }
+      #sushiwait-month-calendar .sw-demo { margin-left: auto; }
+      #sushiwait-month-calendar h1 { font-size: 21px; }
+      #sushiwait-month-calendar .sw-days, #sushiwait-month-calendar .sw-weekdays { gap: 3px; }
+      #sushiwait-month-calendar .sw-day { padding: 6px 2px 10px; min-height: max(90px, calc(var(--sw-cell-height) - 12px)); }
+      #sushiwait-month-calendar .sw-day-top { flex-direction: column; align-items: flex-start; min-height: 44px; }
+      #sushiwait-month-calendar .sw-date { width: 27px; height: 27px; font-size: 13px; }
+      #sushiwait-month-calendar .sw-kind { padding-left: 4px; }
+      #sushiwait-month-calendar .sw-count { font-size: 12px; padding-left: 2px; }
+      #sushiwait-month-calendar .sw-count-full { display: none; }
+      #sushiwait-month-calendar .sw-count-compact { display: inline; }
+      #sushiwait-month-calendar .sw-count small { display: none; }
+      #sushiwait-month-calendar .sw-day.sw-missing .sw-count { font-size: 11px; padding-left: 2px; }
+      #sushiwait-month-calendar .sw-outside { padding: 6px 2px; min-height: max(90px, calc(var(--sw-cell-height) - 12px)); }
+      #sushiwait-month-calendar .sw-weekdays span { padding-left: 6px; font-size: 12px; }
+      #sushiwait-month-calendar .sw-queues { gap: 12px; }
+      #sushiwait-month-calendar .sw-queue-values { font-size: 17px; gap: 5px 12px; }
+      #sushiwait-month-calendar .sw-records table { font-size: 12px; }
+      #sushiwait-month-calendar .sw-records td .sw-numbers { display: inline; white-space: normal; }
+      #sushiwait-month-calendar .sw-all-table { font-size: 13px; }
+      #sushiwait-month-calendar .sw-all-table th, #sushiwait-month-calendar .sw-all-table td { padding: 10px 4px; }
+      #sushiwait-month-calendar .sw-all-store-queues { gap: 12px; }
+    }
+
+#sushiwait-month-calendar .sw-header {padding-right:0;}
+#sushiwait-month-calendar .sw-main {width:100%;max-width:1320px;margin:auto;}
+#sushiwait-month-calendar .sw-rail {position:sticky;top:0;height:100vh;}
+#sushiwait-month-calendar .sw-ghost {cursor:pointer;text-decoration:none;color:inherit;}
+#sushiwait-month-calendar .sw-ghost svg {width:20px;height:20px;}
+#sushiwait-month-calendar .sw-status {color:var(--sw-muted);margin:16px 0;}
+#sushiwait-month-calendar .sw-response {color:var(--sw-muted);font-size:13px;margin:0 0 18px;}
+#sushiwait-month-calendar .sw-demo {margin-left:auto;}
+#sushiwait-month-calendar .sw-day[data-state="pending"], #sushiwait-month-calendar .sw-day[data-state="unavailable"] {background:var(--sw-empty);}
+#sushiwait-month-calendar .sw-plot text {fill:var(--sw-muted);font:11px -apple-system,BlinkMacSystemFont,sans-serif;}
+#sushiwait-month-calendar .sw-records {overflow-x:auto;}
+#sushiwait-month-calendar .sw-records table {width:100%;table-layout:fixed;}
+#sushiwait-month-calendar .sw-records th:first-child {width:22%;}
+#sushiwait-month-calendar .sw-records th:last-child {width:18%;}
+#sushiwait-month-calendar .sw-records td {overflow-wrap:anywhere;}
+#sushiwait-month-calendar .sw-all-table .sw-ghost {padding:4px;}
+@media(max-width:480px){#sushiwait-month-calendar .sw-rail{height:auto;position:static;}#sushiwait-month-calendar .sw-response{font-size:12px;}#sushiwait-month-calendar .sw-records th:first-child{width:24%;}#sushiwait-month-calendar .sw-records th:last-child{width:18%;}}
+
+#sushiwait-month-calendar .sw-queue-values span {min-width:0;max-width:100%;overflow-wrap:anywhere;}
