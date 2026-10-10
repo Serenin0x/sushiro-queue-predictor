@@ -8,7 +8,7 @@
       "source": "src/sushiwait/web/calendar.html",
       "public_path": "/statistics",
       "mime": "text/html; charset=utf-8",
-      "sha256": "8635bd2c67f5c80528a3ffae608a4cfa200a9c1954b8f13bb966812ba7138369"
+      "sha256": "d74d00ef5c781219790ccee2d9fde40e9d19d18f2c3ea2b1c16443af8c2980d2"
     },
     {
       "source": "src/sushiwait/web/calendar.css",
@@ -20,7 +20,7 @@
       "source": "src/sushiwait/web/calendar.mjs",
       "public_path": "/calendar.mjs",
       "mime": "text/javascript; charset=utf-8",
-      "sha256": "e58795ecf2c863bdbb67f6017a15cd2e6759da9ee5121b47cedba6ffbe764a5c"
+      "sha256": "cf3a925a02cac2101e87d6cc2599d3bac05e6ded9311d9a3e2700f5297262e43"
     },
     {
       "source": "src/sushiwait/web/calendar-data.mjs",

@@ -149,8 +149,11 @@ function render() {
   else if(snapshot.phase==='partial')message=snapshot.index?.calendar_pending_store_ids?.length?'部分门店正在加载':'部分门店暂不可用';
   else if(snapshot.phase==='idle')message='更新已暂停';
   else if(state.view==='month' && monthCells()?.some(cell=>cell.observations!==null && cell.coverageIsPartial))message='部分日期的门店观测不完整';
+  if(snapshot.index?.origin_halted===true)message='来源查询被拒绝，采集已保护停止。门店号码暂不更新，已保存记录仍可查看。';
+  else if(snapshot.index?.collector_process_state==='failed')message='采集异常，门店号码可能停止更新。请核对最后响应时间。';
   el('sw-status').textContent=message;el('sw-status').hidden=!message;
-  el('sw-demo').textContent=pageUpdatedAt?'刷新 '+timeText(pageUpdatedAt)+' UTC+8':'';
+  el('sw-demo').textContent=pageUpdatedAt?'页面读取 '+timeText(pageUpdatedAt)+' UTC+8':'';
+  el('sw-demo').title='这是网页读取时间，门店号码的实际更新时间见最后响应。';
   root.setAttribute('aria-busy',String(snapshot.phase==='loading'));
 }
 function drawCharts() {
