@@ -51,3 +51,14 @@ ExecStart=/home/ubuntu/sushiwait-rc64-src/.venv/bin/python -I /home/ubuntu/sushi
 ## 当前数据状态
 
 来源在13:53:29收到403而保护停止，早于显示切换；当前页面可读已保存资料，不代表实时采集已恢复。详细事故与剩余问题见 [来源拒绝处理](SOURCE_DENIAL_REVIEW.md)。部署和来源恢复是两个独立结果。
+
+
+## 14:54 显示停采状态增量
+
+703190e7717138efeabb7c8148baf7a6d750a6b9的HTML／MJS与资源清单已于14:54:07 UTC+8应用。停采提示上移页头，“刷新”改“页面读取”，保留最后真实响应时间。此增量不含其他聊天尚未完成的缓存／动效编辑。
+
+首轮GitHub下载超时，未替换运行资源；随后经既有云终端应用精确小补丁。所有旧／新文件均先核验SHA，再替换；没有跳过证书校验。新HTML SHA为d74d00ef5c781219790ccee2d9fde40e9d19d18f2c3ea2b1c16443af8c2980d2，MJS为cf3a925a02cac2101e87d6cc2599d3bac05e6ded9311d9a3e2700f5297262e43，清单为643857349263743ae3267fe9b45b212ac4185584578555e91055783a243459f9。
+
+只重启statistics；collector PID367596和原halt保护保持，餐厅GET0。14:55公网两资源200／SHA一致，147店28604记录保持，西单昨日660点JSON原SHA完全一致；浏览器今日显示停采提示与最后响应13:52:18，陈旧号不列为当前号。原部署证明保留，新增status-patch-proof.json／status-public-proof.json及display-status-patch-20261010-local旧文件私有副本。此增量回退可恢复这三份*.old并仅重启statistics，无需回退整体DS-004或重启采集。
+
+实际来源仍403，来源恢复未完成；不能把此显示修正当作采集修复。详见E0393和SOURCE_DENIAL_REVIEW。
