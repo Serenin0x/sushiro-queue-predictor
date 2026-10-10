@@ -101,3 +101,10 @@ class StartupRecoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             recovery.repair(self.root,['900001','900002'],self.incident,apply=True,now=BASE+timedelta(seconds=60))
         self.assertEqual((good/'controller.json').read_bytes(),before);self.assertFalse(self.incident.exists())
+
+    def test_unpublished_active_state_after_failed_halt_write_is_recovered(self):
+        folder=self.startup('lock')
+        p=folder/'controller.json';v=json.loads(p.read_bytes())
+        v.update(state='active',error_code=None);p.write_text(json.dumps(v))
+        report=self.invoke(apply=True)
+        self.assertTrue(report['applied']);self.assertEqual(report['official_requests_added'],0)

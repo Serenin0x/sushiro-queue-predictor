@@ -66,8 +66,10 @@ def repair(root, store_ids, incident, *, apply=False, now=None):
             lock(folder/'controller.json.lock',stack)
             raw=read_daily_archive(folder/'controller.json');v=_decode(raw)
             day=v['current']
-            if (v['config']['store_id']!=store or v['state']!='halted'
-                    or v['error_code']!='daily_controller_storage_or_input_error'
+            # Descriptor exhaustion can also prevent persisting the halt.
+            startup_state=(v['state']=='halted' and v['error_code']=='daily_controller_storage_or_input_error'
+                or v['state']=='active' and v['error_code'] is None)
+            if (v['config']['store_id']!=store or not startup_state
                     or day is None or day['phase']!='collecting'
                     or not _at(v['updated_at'])<=now<_at(day['deadline_at'])
                     or now.astimezone(_at(day['created_at']).tzinfo).date()!=_at(day['created_at']).date()):
