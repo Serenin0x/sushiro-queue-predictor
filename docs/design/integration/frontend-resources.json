@@ -14,19 +14,19 @@
       "source": "src/sushiwait/web/calendar.css",
       "public_path": "/calendar.css",
       "mime": "text/css; charset=utf-8",
-      "sha256": "92fa9d1cc0b3d31834979ec8705fa102f2eca8b3de5fc9db8797c50067788f2c"
+      "sha256": "fdf0f860459715dfac66e9a928323b5aa96791a4c8a2e88115b6b0ffff07cc9e"
     },
     {
       "source": "src/sushiwait/web/calendar.mjs",
       "public_path": "/calendar.mjs",
       "mime": "text/javascript; charset=utf-8",
-      "sha256": "cf3a925a02cac2101e87d6cc2599d3bac05e6ded9311d9a3e2700f5297262e43"
+      "sha256": "6b321510b71dd56f77ed89668c2aac16caccf4ac15ea629a31b9a7c61e5a81ef"
     },
     {
       "source": "src/sushiwait/web/calendar-data.mjs",
       "public_path": "/calendar-data.mjs",
       "mime": "text/javascript; charset=utf-8",
-      "sha256": "9acb6d4d233bcaca23d05d20590bb54b613ed1b9694a35d843fb9b461dd76629"
+      "sha256": "f5b2cdf4e589ecfc1ad6812613de06254bf48def410f0883ff8aa8f50e6651a4"
     },
     {
       "source": "src/sushiwait/web/calendar-directory.mjs",
@@ -64,5 +64,6 @@
     "/api/v1/months/YYYY-MM",
     "/api/v1/stores/STORE_ID/days/YYYY-MM-DD"
   ],
-  "runtime_dependencies": "local only; same-origin read-only API"
+  "runtime_dependencies": "local only; same-origin read-only API",
+  "interaction_spec": "DS-005"
 }

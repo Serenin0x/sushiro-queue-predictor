@@ -1,5 +1,5 @@
 import {createStatisticsClient, createStatisticsController} from './statistics-client.mjs';
-import {directory, scopeStores, calendarForScope, dayKind, moveMonth, queuePresentation, recentRecords, plots, nearestPoint, shanghaiDate, timeText} from './calendar-data.mjs';
+import {createDisplayCache, directory, scopeStores, calendarForScope, dayKind, moveMonth, queuePresentation, recentRecords, plots, nearestPoint, shanghaiDate, timeText} from './calendar-data.mjs';
 import {icons} from './calendar-icons.mjs';
 
 const root=document.getElementById('sushiwait-month-calendar');
@@ -8,6 +8,9 @@ const today=shanghaiDate();
 const state={month:today.slice(0,7),date:today,city:'all',store:'all',view:'month',series:{dine:true,reservation:true},theme:'system'};
 let snapshot={phase:'idle',index:null,detail:null,detailState:'unselected',error:null};
 let openPickerKind=null, menuVersion='', pageUpdatedAt=null;
+const displayCache=createDisplayCache(), chartCache=new WeakMap(), detailVersions=new WeakMap();
+let display=snapshot, pendingRender=false, renderedScope='', calendarMonth='', detailVersion='', chartVersion='', dayLayoutScope='', dayLayoutHeight=0;
+const setText=(node,value)=>{if(node.textContent!==value)node.textContent=value;};
 const compact=new Intl.NumberFormat('zh-CN',{notation:'compact',maximumFractionDigits:0});
 const make=(tag, className='', text='')=>{const node=document.createElement(tag);node.className=className;node.textContent=text;return node;};
 const svgNS='http://www.w3.org/2000/svg';
@@ -24,8 +27,10 @@ function applyTheme() {root.style.colorScheme=state.theme==='system'?'light dark
 applyTheme();
 
 const controller=createStatisticsController({client:createStatisticsClient(),onChange(next) {
+  const completedRead=snapshot.phase==='loading' && ['ready','partial'].includes(next.phase);
   snapshot=next;
-  if (['ready','partial'].includes(next.phase)) pageUpdatedAt=Date.now();
+  displayCache.remember(next);
+  if(completedRead)pageUpdatedAt=Date.now();
   if (next.index && state.store!=='all' && !next.index.configured_store_ids.includes(state.store)) {
     state.store='all';state.city='all';queueMicrotask(selectStatistics);
   }
@@ -57,91 +62,120 @@ function optionButton(kind,value,label,selected,onSelect) {
   button.append(make('span','',label),check);button.addEventListener('click',onSelect);return button;
 }
 function renderPickers() {
-  const stores=directory(snapshot.index), cities=[...new Set(stores.map(item=>item.city))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+  const stores=directory(display.index), cities=[...new Set(stores.map(item=>item.city))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
   if(state.city!=='all' && stores.length && !cities.includes(state.city)) {state.city='all';state.store='all';}
   const selected=stores.find(item=>item.id===state.store);
   const cityLabel=state.city==='all'?'全部':state.city, storeLabel=selected?.name || '全部';
   el('sw-city-label').textContent=cityLabel;el('sw-store-label').textContent=storeLabel;
   el('sw-city').setAttribute('aria-label','选择城市，当前'+cityLabel);el('sw-store').setAttribute('aria-label','选择门店，当前'+storeLabel);
-  el('sw-city').disabled=!snapshot.index;el('sw-store').disabled=!snapshot.index || state.city==='all';
+  el('sw-city').disabled=!display.index;el('sw-store').disabled=!display.index || state.city==='all';
   const version=JSON.stringify([stores,state.city,state.store]);if(version===menuVersion)return;menuVersion=version;closePickers();
   const cityOptions=el('sw-city-options');cityOptions.replaceChildren();
   ['all',...cities].forEach(city=>cityOptions.append(optionButton('city',city,city==='all'?'全部':city,state.city===city,()=>{
     if(state.city!==city){state.city=city;state.store='all';}render();selectStatistics();
-    if(city!=='all'){el('sw-store').focus();openPicker('store');}else el('sw-city').focus();
+    requestAnimationFrame(()=>{if(city!=='all'){el('sw-store').focus({preventScroll:true});openPicker('store');}else el('sw-city').focus({preventScroll:true});});
   })));
   const storeOptions=el('sw-store-options');storeOptions.replaceChildren();
   [{id:'all',name:'全部'},...stores.filter(item=>item.city===state.city)].forEach(store=>storeOptions.append(optionButton('store',store.id,store.name,state.store===store.id,()=>{state.store=store.id;render();selectStatistics();closePickers();el('sw-store').focus();})));
 }
-function monthCells() {return snapshot.index?calendarForScope(snapshot.index,state.month,state.city,state.store):null;}
+function monthCells() {return display.index?calendarForScope(display.index,state.month,state.city,state.store):null;}
 function renderMonth() {
   const year=Number(state.month.slice(0,4)), month=Number(state.month.slice(5));
   el('sw-month-title').textContent=`${year} 年 ${month} 月`;el('sw-previous').disabled=state.month==='2000-01';el('sw-next').disabled=state.month==='2099-12';
   const days=el('sw-days'), cells=monthCells(), today=shanghaiDate();
-  days.classList.toggle('sw-multiple',scopeStores(snapshot.index,state.city,state.store).length>1);
-  days.setAttribute('aria-label',`${year} 年 ${month} 月日期`);days.replaceChildren();
+  days.classList.toggle('sw-multiple',scopeStores(display.index,state.city,state.store).length>1);
+  days.setAttribute('aria-label',`${year} 年 ${month} 月日期`);
+  if(calendarMonth!==state.month){days.replaceChildren();calendarMonth=state.month;}
   const first=(new Date(state.month+'-01T00:00:00Z').getUTCDay()+6)%7, count=new Date(Date.UTC(year,month,0)).getUTCDate();
   const previousCount=new Date(Date.UTC(year,month-1,0)).getUTCDate();
   for(let slot=0;slot<Math.ceil((first+count)/7)*7;slot++){
     const day=slot-first+1;
-    if(day<1 || day>count){const outside=make('div','sw-outside sw-numbers');outside.setAttribute('aria-hidden','true');outside.append(make('span','sw-date',String(day<1?previousCount+day:day-count)));days.append(outside);continue;}
+    if(day<1 || day>count){if(!days.querySelector(`[data-slot="${slot}"]`)){const outside=make('div','sw-outside sw-numbers');outside.dataset.slot=slot;outside.setAttribute('aria-hidden','true');outside.append(make('span','sw-date',String(day<1?previousCount+day:day-count)));days.append(outside);}continue;}
     const date=state.month+'-'+String(day).padStart(2,'0'),kind=dayKind(date),cell=cells?.[day-1];
     const future=date>today, loading=!cell && snapshot.phase!=='error';
     let label=future?'—':!cell?loading?'加载':'失败':cell.state==='pending'?'加载':cell.state==='unavailable'?(cell.observations===null?'不可用':'部分'):cell.observations===null?'暂无':String(cell.observations);
     const hasCount=!future && cell?.observations!==null && cell?.observations!==undefined;
     if(hasCount)label=String(cell.observations);
-    const button=make('button','sw-day'+(!cell || cell.observations===null?' sw-missing':'')+(future?' sw-future':''));button.type='button';button.dataset.date=date;button.dataset.state=future?'future':cell?.state || (loading?'loading':'error');
+    let button=days.querySelector(`[data-date="${date}"]`);
+    if(!button){button=make('button','sw-day');button.type='button';button.dataset.date=date;
+      const top=make('span','sw-day-top');top.append(make('span','sw-date sw-numbers',String(day)),make('span','sw-kind'+(kind.work?' sw-work':''),kind.short));button.append(top,make('span','sw-count sw-numbers'));days.append(button);
+    }
+    button.className='sw-day'+(!cell || cell.observations===null?' sw-missing':'')+(future?' sw-future':'');button.dataset.state=future?'future':cell?.state || (loading?'loading':'error');
     // Incomplete coverage remains distinct and is never painted as complete.
     const level=!future && cell?.coverage!==null && cell?.coverage!==undefined ? 2+Math.min(cell.coverage,cell.coverageIsPartial ? .45 : 1)*22 : 0;
     button.style.setProperty('--sw-level',level+'%');button.setAttribute('aria-pressed',String(date===state.date));
     button.title=date+'，'+kind.name+'，'+(future?'未来日期':!cell?label:cell.coverageIsPartial?'部分资料，'+label:hasCount?`${cell.observations}组观测，采集覆盖${cell.coverage===null?'未知':Math.round(cell.coverage*100)+'%'}`:label);
     button.setAttribute('aria-label',button.title+'，查看当日');
-    const top=make('span','sw-day-top');top.append(make('span','sw-date sw-numbers',String(day)),make('span','sw-kind'+(kind.work?' sw-work':''),kind.short));
-    const number=make('span','sw-count sw-numbers');
-    if(hasCount){number.append(make('span','sw-count-full',label),make('span','sw-count-compact',compact.format(cell.observations)),make('small','','组'));}else number.textContent=label;
-    button.append(top,number);button.addEventListener('click',()=>{state.date=date;state.view='day';closePickers();selectStatistics();render();el('sw-day-title').focus();});days.append(button);
+    const number=button.querySelector('.sw-count'), countKey=hasCount+'|'+label;
+    if(button.dataset.countKey!==countKey){number.replaceChildren();if(hasCount){number.append(make('span','sw-count-full',label),make('span','sw-count-compact',compact.format(cell.observations)),make('small','','组'));}else number.textContent=label;button.dataset.countKey=countKey;}
   }
 }
 function summaryRow(ids) {
-  const rows=ids.map(id=>snapshot.index.days[state.date]?.[id]).filter(Boolean);
-  const pending=ids.some(id=>snapshot.index.calendar_pending_store_ids?.includes(id));
-  const unavailable=ids.some(id=>snapshot.index.unavailable_store_ids.includes(id));
+  const rows=ids.map(id=>display.index.days[state.date]?.[id]).filter(Boolean);
+  const pending=ids.some(id=>display.index.calendar_pending_store_ids?.includes(id));
+  const unavailable=ids.some(id=>display.index.unavailable_store_ids.includes(id));
   return pending?'加载中':unavailable?(rows.length?`${rows.reduce((n,r)=>n+r.observations,0)}组 · 部分`:'暂不可用'):rows.length?rows.reduce((n,r)=>n+r.observations,0)+'组'+(rows.length!==ids.length?' · 部分':''):'暂无观测';
 }
 function renderAllDay() {
-  const container=el('sw-all-content');container.replaceChildren();
-  if(!snapshot.index){container.append(make('p','sw-empty-detail',snapshot.phase==='error'?'读取失败，请重试':'正在读取…'));return;}
-  const stores=scopeStores(snapshot.index,state.city),table=make('table','sw-all-table');
-  const head=make('thead'), headings=make('tr');[state.city==='all'?'城市':'门店','观测',''].forEach(label=>headings.append(make('th','',label)));head.append(headings);table.append(head);
-  const body=make('tbody');const groups=state.city==='all'?[...new Set(stores.map(item=>item.city))].sort((a,b)=>a.localeCompare(b,'zh-CN')).map(city=>({label:city,ids:stores.filter(item=>item.city===city).map(item=>item.id),city})):stores.map(store=>({label:store.name,ids:[store.id],store}));
-  for(const group of groups){const row=make('tr');row.append(make('td','',group.label),make('td','sw-numbers',summaryRow(group.ids)));const action=make('td');const button=make('button','sw-ghost');button.type='button';button.setAttribute('aria-label','查看'+group.label);button.append(icon('chevron-right'));button.addEventListener('click',()=>{state.city=group.city || group.store.city;state.store=group.store?.id || 'all';selectStatistics();render();});action.append(button);row.append(action);body.append(row);}
-  table.append(body);container.append(table);
+  const container=el('sw-all-content'),stores=scopeStores(display.index,state.city);
+  const groups=state.city==='all'?[...new Set(stores.map(item=>item.city))].sort((a,b)=>a.localeCompare(b,'zh-CN')).map(city=>({label:city,ids:stores.filter(item=>item.city===city).map(item=>item.id),city})):stores.map(store=>({label:store.name,ids:[store.id],store}));
+  const structure=JSON.stringify([state.city,groups.map(group=>[group.label,group.ids])]);
+  if(container.dataset.structure!==structure){
+    const table=make('table','sw-all-table'),head=make('thead'),headings=make('tr');[state.city==='all'?'城市':'门店','观测',''].forEach(label=>headings.append(make('th','',label)));head.append(headings);table.append(head);
+    const body=make('tbody');
+    for(const group of groups){const row=make('tr');row.append(make('td','',group.label),make('td','sw-numbers'));const action=make('td');const button=make('button','sw-ghost');button.type='button';button.setAttribute('aria-label','查看'+group.label);button.append(icon('chevron-right'));button.addEventListener('click',()=>{state.city=group.city || group.store.city;state.store=group.store?.id || 'all';selectStatistics();render();});action.append(button);row.append(action);body.append(row);}
+    table.append(body);container.replaceChildren(table);container.dataset.structure=structure;
+  }
+  groups.forEach((group,i)=>setText(container.querySelector('tbody').children[i].children[1],summaryRow(group.ids)));
 }
 function renderDay() {
   el('sw-day-title').textContent=state.date.replaceAll('-',' / ');el('sw-day-title').tabIndex=-1;
   const content=el('sw-day-content'),all=el('sw-all-content'),empty=el('sw-day-empty');
-  content.hidden=true;all.hidden=true;empty.hidden=true;
-  if(state.date>shanghaiDate()){empty.textContent='这一天还未到来';empty.hidden=false;return;}
-  if(state.store==='all'){all.hidden=false;renderAllDay();return;}
-  if(snapshot.detailState!=='ready' || !snapshot.detail){empty.textContent=snapshot.phase==='error'||snapshot.detailState==='error'?'读取失败，请重试':snapshot.phase==='idle'?'更新已暂停':'正在读取…';empty.hidden=false;return;}
-  if(!snapshot.detail.points.length){empty.textContent='这一天暂无已保存观测';empty.hidden=false;return;}
-  content.hidden=false;
-  const dine=queuePresentation(snapshot.detail,'mixedQueue'),reservation=queuePresentation(snapshot.detail,'reservationQueue');
+  const scope=state.city+'|'+state.store+'|'+state.date;
+  if(dayLayoutScope!==scope){dayLayoutScope=scope;dayLayoutHeight=0;detailVersion='';chartVersion='';}
+  function showEmpty(message){
+    content.hidden=true;all.hidden=true;empty.hidden=false;empty.style.minHeight=dayLayoutHeight+'px';
+    if(!empty.firstElementChild)empty.append(make('span','sw-empty-message'));
+    setText(empty.firstElementChild,message);
+  }
+  if(state.date>shanghaiDate()){showEmpty('这一天还未到来');return;}
+  if(state.store==='all'){if(!display.index){showEmpty(snapshot.phase==='error'?'读取失败，请重试':'正在读取…');return;}content.hidden=true;empty.hidden=true;all.hidden=false;renderAllDay();dayLayoutHeight=all.getBoundingClientRect().height;return;}
+  if(!display.detail){showEmpty(snapshot.phase==='error'||snapshot.detailState==='error'?'读取失败，请重试':snapshot.phase==='idle'?'更新已暂停':'正在读取…');return;}
+  if(!display.detail.points.length){showEmpty('这一天暂无已保存观测');return;}
+  content.hidden=false;all.hidden=true;empty.hidden=true;
+  const updating=snapshot.phase==='loading'||snapshot.phase==='idle';
+  const unavailable={state:'unavailable',observedAt:null,labels:null,display:snapshot.phase==='loading'?'更新中…':'更新已暂停'};
+  const dine=updating?unavailable:queuePresentation(display.detail,'mixedQueue'),reservation=updating?unavailable:queuePresentation(display.detail,'reservationQueue');
   for(const [id,data] of [['sw-queue-dine',dine],['sw-queue-reservation',reservation]]){
-    const container=el(id);container.replaceChildren();
-    if(data.labels && ['fresh','historical'].includes(data.state) && data.labels.length)data.labels.forEach(label=>container.append(make('span','',label)));else container.append(make('span','',data.display));
+    const container=el(id), labels=data.labels?.length?data.labels:[data.display];
+    if(updating && !container.style.minHeight)container.style.minHeight=container.getBoundingClientRect().height+'px';
+    if(!updating)container.style.minHeight='';
+    if(container.dataset.labels!==JSON.stringify(labels)){container.replaceChildren(...labels.map(label=>make('span','',label)));container.dataset.labels=JSON.stringify(labels);}
   }
   const responseLabel={fresh:'响应',historical:'历史响应',stale:'资料较旧 · 最后响应',unavailable:'最近一次未取得可用号码'}[dine.state];
-  el('sw-response').textContent=responseLabel+(dine.observedAt?' '+timeText(dine.observedAt)+' UTC+8':'');
-  const records=el('sw-records');records.replaceChildren();
-  recentRecords(snapshot.detail).forEach(record=>{const row=make('tr');[timeText(record.at),record.dine,record.reservation,record.state].forEach(value=>row.append(make('td','sw-numbers',value)));records.append(row);});
-  el('sw-graph-note').textContent='第一位是展示参考；展示变化不等于实际叫号。'+(snapshot.detail.graph_truncated?'图点已截断，显示范围内资料。':'');
+  setText(el('sw-response'),updating?snapshot.phase==='loading'?'正在更新已保存观测':'更新已暂停':responseLabel+(dine.observedAt?' '+timeText(dine.observedAt)+' UTC+8':''));
+  if(!detailVersions.has(display.detail))detailVersions.set(display.detail,JSON.stringify([display.detail.points,display.detail.graph_truncated]));
+  const version=detailVersions.get(display.detail),records=el('sw-records');
+  if(detailVersion!==version){
+    const rows=recentRecords(display.detail);
+    rows.forEach((record,i)=>{let row=records.children[i];if(!row){row=make('tr');for(let col=0;col<4;col++)row.append(make('td','sw-numbers'));records.append(row);}[timeText(record.at),record.dine,record.reservation,record.state].forEach((value,col)=>setText(row.children[col],value));});
+    while(records.children.length>rows.length)records.lastElementChild.remove();detailVersion=version;
+  }
+  setText(el('sw-graph-note'),'第一位是展示参考；展示变化不等于实际叫号。'+(display.detail.graph_truncated?'图点已截断，显示范围内资料。':''));
   drawCharts();
+  dayLayoutHeight=content.getBoundingClientRect().height;
 }
 function render() {
+  if(pendingRender)return;pendingRender=true;
+  requestAnimationFrame(()=>{pendingRender=false;renderNow();});
+}
+function renderNow() {
+  const scope=[state.view,state.month,state.date,state.city,state.store].join('|');
+  const preserveScroll=renderedScope===scope, left=window.scrollX, top=window.scrollY;
+  display=displayCache.view(snapshot,state);
   renderPickers();el('sw-month-view').hidden=state.view!=='month';el('sw-day-view').hidden=state.view!=='day';
   el('sw-nav-calendar').setAttribute('aria-pressed',String(state.view==='month'));el('sw-nav-day').setAttribute('aria-pressed',String(state.view==='day'));
-  el('sw-tooltip').hidden=true;renderMonth();if(state.view==='day')renderDay();
+  if(state.view==='month')renderMonth();else renderDay();
   let message='';
   if(snapshot.phase==='loading')message='正在读取…';
   else if(snapshot.phase==='error')message='读取失败，请重试';
@@ -155,10 +189,20 @@ function render() {
   el('sw-demo').textContent=pageUpdatedAt?'页面读取 '+timeText(pageUpdatedAt)+' UTC+8':'';
   el('sw-demo').title='这是网页读取时间，门店号码的实际更新时间见最后响应。';
   root.setAttribute('aria-busy',String(snapshot.phase==='loading'));
+  const busy=snapshot.phase==='loading';
+  el('sw-refresh').setAttribute('aria-busy',String(busy));
+  if(busy)el('sw-refresh').classList.add('sw-refreshing');else if(matchMedia('(prefers-reduced-motion:reduce)').matches)el('sw-refresh').classList.remove('sw-refreshing');
+  for(const id of ['sw-days','sw-all-content','sw-day-content']){const region=el(id);region.classList.toggle('sw-updating',busy);region.setAttribute('aria-busy',String(busy));}
+  el('sw-tooltip').hidden=busy||el('sw-tooltip').hidden;
+  if(preserveScroll && (window.scrollX!==left||window.scrollY!==top))window.scrollTo({left,top,behavior:'instant'});
+  renderedScope=scope;
 }
 function drawCharts() {
-  if(state.view!=='day'||el('sw-day-content').hidden||!snapshot.detail)return;
-  const chart=plots(snapshot.detail);
+  if(state.view!=='day'||el('sw-day-content').hidden||!display.detail)return;
+  const version=[detailVersions.get(display.detail),state.series.dine,state.series.reservation,...['sw-number-plot','sw-speed-plot','sw-count-plot'].map(id=>Math.floor(el(id).getBoundingClientRect().width))].join('|');
+  if(version===chartVersion)return;chartVersion=version;
+  if(!chartCache.has(display.detail))chartCache.set(display.detail,plots(display.detail));
+  const chart=chartCache.get(display.detail);el('sw-tooltip').hidden=true;
   // Independent reference axes keep unrelated queue numbering scales apart.
   drawPlot('sw-number-plot','reference',[{key:'dine',label:'堂食',segments:chart.dine.reference},{key:'reservation',label:'预约',segments:chart.reservation.reference}]);
   drawPlot('sw-speed-plot','turnover',[{key:'dine',label:'堂食',segments:[chart.dine.turnover]},{key:'reservation',label:'预约',segments:[chart.reservation.turnover]}]);
@@ -214,6 +258,11 @@ function drawPlot(id,kind,allSeries) {
   el('sw-'+kind).addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();if(openPickerKind!==kind)openPicker(kind);const options=[...el('sw-'+kind+'-options').querySelectorAll('button')].filter(button=>!button.hidden);options[event.key==='ArrowUp'?options.length-1:0]?.focus();}});
   el('sw-'+kind+'-menu').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closePickers(true);return;}if(!['ArrowDown','ArrowUp'].includes(event.key))return;event.preventDefault();const options=[...el('sw-'+kind+'-options').querySelectorAll('button')].filter(button=>!button.hidden);if(!options.length)return;const i=options.indexOf(document.activeElement),direction=event.key==='ArrowDown'?1:-1;options[i<0?direction>0?0:options.length-1:(i+direction+options.length)%options.length].focus();});
 });
+el('sw-days').addEventListener('click',event=>{
+  const button=event.target.closest('button[data-date]');if(!button)return;
+  state.date=button.dataset.date;state.view='day';closePickers();selectStatistics();render();
+  requestAnimationFrame(()=>el('sw-day-title').focus({preventScroll:true}));
+});
 document.addEventListener('pointerdown',event=>{if(!el('sw-pickers').contains(event.target))closePickers();});
 el('sw-pickers').addEventListener('focusout',event=>{if(!el('sw-pickers').contains(event.relatedTarget))closePickers();});
 el('sw-theme').addEventListener('click',()=>{const dark=state.theme==='dark'||state.theme==='system'&&matchMedia('(prefers-color-scheme:dark)').matches;state.theme=dark?'light':'dark';applyTheme();try{localStorage.setItem('sushiwait-calendar-theme',state.theme);}catch(_){} });
@@ -223,6 +272,7 @@ el('sw-this-month').addEventListener('click',()=>{state.month=shanghaiDate().sli
 ['sw-back','sw-nav-calendar'].forEach(id=>el(id).addEventListener('click',()=>{state.view='month';selectStatistics();render();}));
 el('sw-nav-day').addEventListener('click',()=>{state.view='day';selectStatistics();render();});
 el('sw-refresh').addEventListener('click',()=>controller.refresh());
+el('sw-refresh').addEventListener('animationiteration',()=>{if(snapshot.phase!=='loading')el('sw-refresh').classList.remove('sw-refreshing');});
 root.querySelectorAll('.sw-series-control').forEach(button=>button.addEventListener('click',()=>{const key=button.dataset.series;state.series[key]=!state.series[key];button.setAttribute('aria-pressed',String(state.series[key]));el('sw-tooltip').hidden=true;drawCharts();}));
 const resize=new ResizeObserver(drawCharts);root.querySelectorAll('.sw-chart-panel').forEach(panel=>resize.observe(panel));
 function resume() {

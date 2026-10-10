@@ -2,6 +2,34 @@ import {calendarCells, latestQueue, chartSeries, shanghaiDate} from './statistic
 import {cityById, calendar2026} from './calendar-directory.mjs';
 
 export {shanghaiDate};
+// Display-only memory: keep the same scope in place while the controller reads.
+// It never supplies numbers to latestQueue or revives a failed response as fresh.
+export function createDisplayCache(limit=4) {
+  if(!Number.isInteger(limit)||limit<1||limit>12)throw new RangeError('invalid_display_cache_limit');
+  const months=new Map(), days=new Map();
+  const key=(store,date)=>store+'|'+date;
+  const put=(map,id,value)=>{map.delete(id);map.set(id,value);while(map.size>limit)map.delete(map.keys().next().value);};
+  return {
+    remember(snapshot) {
+      const selection=snapshot.selection;
+      if(snapshot.phase==='error') {
+        if(selection){months.delete(selection.month);days.delete(key(selection.storeId,selection.date));}
+        return;
+      }
+      if(snapshot.index)put(months,snapshot.index.month,snapshot.index);
+      if(snapshot.detailState==='error' && selection)days.delete(key(selection.storeId,selection.date));
+      if(snapshot.detailState==='ready' && snapshot.detail)put(days,key(snapshot.detail.requested_store_id,snapshot.detail.local_date),snapshot.detail);
+    },
+    view(snapshot,{month,date,store}) {
+      const pending=['loading','idle'].includes(snapshot.phase);
+      const index=snapshot.index?.month===month?snapshot.index:pending?months.get(month)||null:null;
+      const current=snapshot.detailState==='ready'?snapshot.detail:null;
+      const detail=current?.requested_store_id===store && current.local_date===date?current:
+        pending && index?.configured_store_ids.includes(store)?days.get(key(store,date))||null:null;
+      return {...snapshot,index,detail,retainedDetail:!!detail && detail!==current};
+    }
+  };
+}
 export const timeText = value => value ? new Intl.DateTimeFormat('zh-CN', {timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(new Date(value)) : '—';
 export function directory(index) {
   return (index?.configured_store_ids || []).map(id => ({id,name:index.store_names[id],city:cityById[id] || '城市待核'}));

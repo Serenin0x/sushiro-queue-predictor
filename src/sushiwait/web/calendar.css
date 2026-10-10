@@ -198,3 +198,27 @@ html, body { margin: 0; min-height: 100%; }
 @media(max-width:480px){#sushiwait-month-calendar .sw-rail{height:auto;position:static;}#sushiwait-month-calendar .sw-response{font-size:12px;}#sushiwait-month-calendar .sw-records th:first-child{width:24%;}#sushiwait-month-calendar .sw-records th:last-child{width:18%;}}
 
 #sushiwait-month-calendar .sw-queue-values span {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+
+/* Animate paint properties rather than fading or replacing the whole page. */
+#sushiwait-month-calendar {min-height:100vh;--sw-motion:180ms;--sw-day-hover:light-dark(rgb(0 0 0 / 6%),rgb(255 255 255 / 9%));transition:background-color var(--sw-motion) ease,color var(--sw-motion) ease;}
+#sushiwait-month-calendar :where(.sw-rail,.sw-ghost,.sw-menu,.sw-menu-option,.sw-search,.sw-day,.sw-date,.sw-tooltip,.sw-queues,.sw-swatch,.sw-demo,.sw-kind,.sw-response,.sw-status,.sw-weekdays,.sw-detail-note,.sw-outside,small,th,td) {transition:background-color var(--sw-motion) ease,color var(--sw-motion) ease,border-color var(--sw-motion) ease,opacity var(--sw-motion) ease;}
+#sushiwait-month-calendar .sw-plot :where(text,line,path,circle) {transition:fill var(--sw-motion) ease,stroke var(--sw-motion) ease;}
+#sushiwait-month-calendar .sw-day {position:relative;cursor:pointer;}
+#sushiwait-month-calendar .sw-day::after {content:"";position:absolute;inset:0;border-radius:inherit;background:var(--sw-day-hover);opacity:0;pointer-events:none;transition:opacity var(--sw-motion) ease;}
+#sushiwait-month-calendar .sw-day:is(:hover,:focus-visible)::after {opacity:1;}
+#sushiwait-month-calendar #sw-refresh svg {transform-origin:center;}
+#sushiwait-month-calendar #sw-refresh.sw-refreshing svg {animation:sw-refresh-turn 700ms linear infinite;}
+@keyframes sw-refresh-turn {to {transform:rotate(360deg);}}
+#sushiwait-month-calendar :where(.sw-days,.sw-all-table,.sw-charts,.sw-records tbody) {overflow-anchor:none;filter:blur(0);transition:filter 160ms ease,opacity 160ms ease;}
+#sushiwait-month-calendar .sw-days.sw-updating,
+#sushiwait-month-calendar .sw-updating :where(.sw-all-table,.sw-charts,.sw-records tbody) {filter:blur(1.6px);opacity:.72;}
+#sushiwait-month-calendar .sw-updating .sw-charts {pointer-events:none;}
+#sushiwait-month-calendar .sw-empty-message {display:block;position:sticky;top:32px;}
+#sushiwait-month-calendar .sw-menu-option {cursor:pointer;}
+#sushiwait-month-calendar .sw-series-control {cursor:pointer;border-radius:6px;padding:6px 8px;margin-inline:-8px;transition:background-color var(--sw-motion) ease,opacity var(--sw-motion) ease;}
+#sushiwait-month-calendar .sw-series-control:hover {background:var(--sw-hover);opacity:1;}
+@media (prefers-reduced-motion:reduce) {
+  #sushiwait-month-calendar {--sw-motion:0ms;}
+  #sushiwait-month-calendar .sw-plot *,#sushiwait-month-calendar :where(.sw-days,.sw-all-table,.sw-charts,.sw-records tbody) {transition:none;}
+  #sushiwait-month-calendar #sw-refresh.sw-refreshing svg {animation:none;}
+}

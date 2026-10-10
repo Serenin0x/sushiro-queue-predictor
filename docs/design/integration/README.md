@@ -6,6 +6,7 @@
 - [statistics.synthetic.json](statistics.synthetic.json)：由真实后端投影代码产生的**合成**样例，店号900001只用于离线设计，不能查询真实来源。
 - [行为检查](../../../tests/statistics-client.test.mjs)：请求竞态、超时、数据语义与缺口。
 - [当前大月历原型的具体对应表](PROTOTYPE_MAPPING.md)：按设计原型元素、示例函数及部署资源列出实际替换位置。
+- [DS-005交互与刷新更新](FRONTEND_INTERACTION.md)：渐变反馈、数据局部更新和滚动保持，以及缓存的状态边界。
 
 本模块为本项目原创，沿用仓库MIT许可。无框架依赖、账号凭证、外部模型调用或固定服务器地址；React、Vue、Svelte与普通JavaScript页面均可导入。开发服务只将固定`/api/v1/`转发到部署配置中的网关，生产页面与API同源。
 

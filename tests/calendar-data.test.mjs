@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {directory,calendarForScope,dayKind,moveMonth,queuePresentation,recentRecords,plots,nearestPoint,timeText,shanghaiDate} from '../src/sushiwait/web/calendar-data.mjs';
+import {createDisplayCache,directory,calendarForScope,dayKind,moveMonth,queuePresentation,recentRecords,plots,nearestPoint,timeText,shanghaiDate} from '../src/sushiwait/web/calendar-data.mjs';
 import {createStatisticsClient,createStatisticsController} from '../src/sushiwait/web/statistics-client.mjs';
 const fixture=JSON.parse(await readFile(new URL('../docs/design/integration/statistics.synthetic.json',import.meta.url),'utf8'));
 const copy=v=>JSON.parse(JSON.stringify(v));let passed=0;
@@ -49,6 +49,32 @@ await check('all scope reads month only; one selected store reads only one detai
   const calls=[];const client=createStatisticsClient({fetchImpl:async path=>{calls.push(path);return {ok:true,text:async()=>JSON.stringify(path.includes('/months/')?fixture.month_index:fixture.day_detail)};}});
   const controller=createStatisticsController({client});await controller.select({month:'2026-10',date:'2026-10-06',storeId:null});assert.equal(calls.length,1);
   await controller.select({month:'2026-10',date:'2026-10-06',storeId:'900001'});assert.deepEqual(calls.slice(1),['/api/v1/months/2026-10','/api/v1/stores/900001/days/2026-10-06']);controller.stop();
+});
+await check('same-scope loading retains saved table data without declaring it fresh',()=>{
+  const cache=createDisplayCache(),selection={month:'2026-10',date:'2026-10-06',storeId:'900001'};
+  cache.remember({phase:'ready',selection,index:fixture.month_index,detail:fixture.day_detail,detailState:'ready'});
+  const next={phase:'loading',selection,index:null,detail:null,detailState:'loading'},view=cache.view(next,{month:selection.month,date:selection.date,store:selection.storeId});
+  assert.equal(view.index,fixture.month_index);assert.equal(view.detail,fixture.day_detail);assert.equal(view.retainedDetail,true);assert.equal(view.detailState,'loading');
+  assert.equal(next.detail,null);assert.equal(cache.view(next,{month:'2026-09',date:'2026-09-06',store:'900001'}).detail,null);
+  assert.equal(cache.view(next,{month:selection.month,date:'2026-10-07',store:'900001'}).detail,null);
+  assert.equal(cache.view(next,{month:selection.month,date:selection.date,store:'3004'}).detail,null);
+});
+await check('failed refresh discards display cache and never revives earlier success',()=>{
+  const cache=createDisplayCache(),selection={month:'2026-10',date:'2026-10-06',storeId:'900001'},scope={month:'2026-10',date:'2026-10-06',store:'900001'};
+  const ready={phase:'ready',selection,index:fixture.month_index,detail:fixture.day_detail,detailState:'ready'};cache.remember(ready);
+  const partial={phase:'partial',selection,index:fixture.month_index,detail:null,detailState:'error'};cache.remember(partial);
+  assert.equal(cache.view(partial,scope).detail,null);assert.equal(cache.view({...partial,phase:'loading',detailState:'loading'},scope).detail,null);
+  cache.remember(ready);const failed={phase:'error',selection,index:null,detail:null,detailState:'error'};cache.remember(failed);
+  const retry=cache.view({...failed,phase:'loading',detailState:'loading'},scope);assert.equal(retry.index,null);assert.equal(retry.detail,null);
+});
+await check('display cache is bounded and removed directory IDs cannot reappear',()=>{
+  const cache=createDisplayCache(2);
+  for(const date of ['2026-10-04','2026-10-05','2026-10-06'])cache.remember({phase:'ready',index:fixture.month_index,detailState:'ready',detail:{...fixture.day_detail,local_date:date}});
+  const loading={phase:'loading',detail:null,detailState:'loading'};
+  assert.equal(cache.view(loading,{month:'2026-10',date:'2026-10-04',store:'900001'}).detail,null);
+  assert.equal(cache.view(loading,{month:'2026-10',date:'2026-10-05',store:'900001'}).detail.local_date,'2026-10-05');
+  cache.remember({phase:'ready',index:{...fixture.month_index,configured_store_ids:[]},detailState:'unselected'});
+  assert.equal(cache.view(loading,{month:'2026-10',date:'2026-10-06',store:'900001'}).detail,null);
 });
 assert.equal(await readFile(new URL('../src/sushiwait/web/statistics-client.mjs',import.meta.url),'utf8'),await readFile(new URL('../docs/design/integration/statistics-client.mjs',import.meta.url),'utf8'));
 console.log(`${passed} calendar integration cases passed`);

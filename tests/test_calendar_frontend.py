@@ -64,7 +64,7 @@ class CalendarFrontendTests(unittest.TestCase):
         self.assertIsNotNone(node)
         result=subprocess.run([node,str(ROOT/'tests/calendar-data.test.mjs')],capture_output=True,text=True,timeout=15)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
-        self.assertIn('8 calendar integration cases passed',result.stdout)
+        self.assertIn('11 calendar integration cases passed',result.stdout)
 
     def test_mainland_city_map_covers_the_known_catalog_only(self):
         import json
