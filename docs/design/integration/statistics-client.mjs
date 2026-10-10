@@ -14,6 +14,8 @@ const integer = v => Number.isSafeInteger(v) && v >= 0;
 const store = v => typeof v === "string" && /^[1-9][0-9]{0,9}$/.test(v);
 const stamp = v => typeof v === "string" && Number.isFinite(Date.parse(v));
 const queues = new Set(["mixedQueue", "reservationQueue"]);
+const sources = new Set(["crm_remote_v1_1", "sapi_miniapp_gateway"]);
+const officialSuccess = "one_official_detail_response_not_two_query_pair";
 const freeze = v => {
   if (v && typeof v === "object") { Object.values(v).forEach(freeze); Object.freeze(v); }
   return v;
@@ -41,9 +43,11 @@ function summary(v, id, date) {
   if (fraction !== null && !(Number.isFinite(fraction) && fraction >= 0 && fraction <= 1)) fail("invalid_summary");
   if (v.last_observation_at !== null && !stamp(v.last_observation_at)) fail("invalid_summary");
 }
-export function validateMonth(value, month) {
+export function validateMonth(value, month, {source = "crm_remote_v1_1"} = {}) {
+  if (!sources.has(source)) fail("invalid_source");
   monthValue(month);
-  if (!object(value) || value.daily_schema_version !== 1 || value.source !== "crm_remote_v1_1" || value.month !== month || value.network_performed_by_read !== false || value.eta_available !== false || value.heatmap_semantics !== "coverage_only_traffic_not_calibrated") fail("month_scope_mismatch");
+  if (!object(value) || value.daily_schema_version !== 1 || value.source !== source || value.month !== month || value.network_performed_by_read !== false || value.eta_available !== false || value.heatmap_semantics !== "coverage_only_traffic_not_calibrated") fail("month_scope_mismatch");
+  if (source === "sapi_miniapp_gateway" && value.api_profile !== "miniapp_gateway") fail("month_scope_mismatch");
   const ids = list(value.configured_store_ids);
   if (ids.length < 1 || ids.length > 256) fail("invalid_directory");
   if (!object(value.store_names) || Object.keys(value.store_names).length !== ids.length || ids.some(id => typeof value.store_names[id] !== "string")) fail("invalid_directory");
@@ -54,6 +58,7 @@ export function validateMonth(value, month) {
     for (const [id, row] of Object.entries(rows)) {
       if (!ids.includes(id)) fail("summary_scope_mismatch");
       summary(row, id, date);
+      if (source === "sapi_miniapp_gateway" && row.success_semantics !== officialSuccess) fail("invalid_summary");
     }
   }
   if (value.calendar_index_state !== undefined) {
@@ -62,12 +67,15 @@ export function validateMonth(value, month) {
   }
   return value;
 }
-export function validateDay(value, id, date) {
+export function validateDay(value, id, date, {source = "crm_remote_v1_1"} = {}) {
+  if (!sources.has(source)) fail("invalid_source");
   dateValue(date);
-  if (!object(value) || value.daily_schema_version !== 1 || value.source !== "crm_remote_v1_1" || value.requested_store_id !== id || value.local_date !== date || value.network_performed_by_read !== false || value.eta_available !== false || value.first_label_is_confirmed_call !== false || value.call_reference_semantics !== "user_assumed_first_displayed_label") fail("day_scope_mismatch");
+  if (!object(value) || value.daily_schema_version !== 1 || value.source !== source || value.requested_store_id !== id || value.local_date !== date || value.network_performed_by_read !== false || value.eta_available !== false || value.first_label_is_confirmed_call !== false || value.call_reference_semantics !== "user_assumed_first_displayed_label") fail("day_scope_mismatch");
+  if (source === "sapi_miniapp_gateway" && (value.api_profile !== "miniapp_gateway" || value.summary !== null && value.summary.success_semantics !== officialSuccess)) fail("day_scope_mismatch");
   if (!Array.isArray(value.points) || value.points.length > 2048 || value.returned_graph_points !== value.points.length || typeof value.graph_truncated !== "boolean") fail("invalid_points");
   if (value.summary !== null) summary(value.summary, id, date);
   for (const p of value.points) {
+    if (source === "sapi_miniapp_gateway" && p.success_semantics !== officialSuccess) fail("invalid_point");
     if (!object(p) || !stamp(p.request_started_at) || typeof p.pair_ok !== "boolean" || typeof p.scheduled_pause !== "boolean" || !object(p.error_codes)) fail("invalid_point");
     for (const key of ["queue_received_at", "count_received_at"]) if (p[key] !== null && !stamp(p[key])) fail("invalid_point");
     if (p.count_raw !== null && !integer(p.count_raw)) fail("invalid_point");
@@ -80,7 +88,9 @@ export function validateDay(value, id, date) {
   return value;
 }
 
-export function createStatisticsClient({fetchImpl = globalThis.fetch, timeoutMs = 15000} = {}) {
+export function createStatisticsClient({fetchImpl = globalThis.fetch, timeoutMs = 15000, source = "crm_remote_v1_1"} = {}) {
+  if (!sources.has(source)) fail("invalid_source");
+  const prefix = source === "sapi_miniapp_gateway" ? "/api/v1/official" : "/api/v1";
   if (typeof fetchImpl !== "function" || !integer(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) fail("invalid_client_options");
   async function read(path, externalSignal, limit) {
     if (externalSignal?.aborted) fail("read_cancelled");
@@ -109,12 +119,12 @@ export function createStatisticsClient({fetchImpl = globalThis.fetch, timeoutMs 
   return Object.freeze({
     async readMonth(month, {signal} = {}) {
       monthValue(month);
-      return freeze(validateMonth(await read(`/api/v1/months/${month}`, signal, 8 * 1024 * 1024), month));
+      return freeze(validateMonth(await read(`${prefix}/months/${month}`, signal, 8 * 1024 * 1024), month, {source}));
     },
     async readDay(id, date, directory, {signal} = {}) {
       dateValue(date); list(directory);
       if (!store(id) || !directory.includes(id)) fail("unknown_store");
-      return freeze(validateDay(await read(`/api/v1/stores/${id}/days/${date}`, signal, 2 * 1024 * 1024), id, date));
+      return freeze(validateDay(await read(`${prefix}/stores/${id}/days/${date}`, signal, 2 * 1024 * 1024), id, date, {source}));
     }
   });
 }
@@ -135,7 +145,10 @@ export function createStatisticsController({client, onChange = () => {}, pollMs 
       if (storeId !== null && !index.configured_store_ids.includes(storeId)) fail("unknown_store");
       let detail = null;
       if (storeId !== null) {
-        try { detail = await client.readDay(storeId, date, index.configured_store_ids, {signal}); }
+        try {
+          detail = await client.readDay(storeId, date, index.configured_store_ids, {signal});
+          if (detail.source !== index.source) fail("day_scope_mismatch");
+        }
         catch (e) {
           if (token === revision) emit({phase: "partial", detail: null, detailState: "error", error: {code: e.code || "read_failed", httpStatus: e.httpStatus ?? null}});
           return;

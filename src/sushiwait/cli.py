@@ -640,11 +640,13 @@ def build_parser() -> argparse.ArgumentParser:
     bridge.add_argument("--seconds", type=int, default=60, help="接收窗口1–60秒")
     bridge.add_argument("--diagnostics", action="store_true",
                         help="只报告本机有效投递计数和固定拒绝原因，不输出请求或凭证")
-    surge = commands.add_parser("context-surge", help="最多60秒观察电脑Surge中的正常目录查询，无需HAR；不启用解密或登录")
+    surge = commands.add_parser("context-surge", help="最多60秒观察电脑Surge中的正常目录或北京首页查询，无需HAR；不启用解密或登录")
     surge.add_argument("--credentials-file", required=True, help="现有gateway完整私有上下文")
     surge.add_argument("--revision", required=True, type=int, help="正常新上下文的递增修订号")
     surge.add_argument("--seconds", type=int, default=60, help="观察窗口1–60秒；须另行及时关闭临时解密")
-    guard = commands.add_parser("surge-guard", help="独立1–45秒仅关闭本机Surge解密；不启用、不更新凭证或恢复域名")
+    surge.add_argument("--query-source", choices=("directory", "home"), default="directory",
+                       help="显式选择已观察的目录或北京首页；不自动回退、不重放签名请求")
+    guard = commands.add_parser("surge-guard", help="独立1–45秒关闭本机Surge解密和捕获；不启用、不更新凭证或恢复域名")
     guard.add_argument("--seconds", type=int, default=40,
                        help="准备后1–45秒发出关闭并核验；须在另一个进程运行，初始三开关须关闭")
     window = commands.add_parser("context-window", help="协调私有暂存接入与独立限时关闭；不启用解密、不改主配置")
@@ -653,6 +655,8 @@ def build_parser() -> argparse.ArgumentParser:
     window.add_argument("--revision", required=True, type=int)
     window.add_argument("--seconds", type=int, default=40, help="5–40秒独立关闭上限")
     window.add_argument("--collector-paused", action="store_true", help="确认相关采集均已暂停或未运行；工具不认证此状态")
+    window.add_argument("--query-source", choices=("directory", "home"), default="directory",
+                        help="显式选择正常目录或北京首页上下文，不自动回退")
     promotion = commands.add_parser("context-promote", help="调试关闭后显式原子提交完整私有暂存上下文；不查询或登录")
     promotion.add_argument("--credentials-file", required=True, help="当前gateway私有上下文")
     promotion.add_argument("--staged-file", required=True, help="完整新gateway私有暂存上下文")
@@ -1809,7 +1813,8 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 result = run_window(credentials_file=args.credentials_file, staged_file=args.staged_file,
                                     revision=args.revision, seconds=args.seconds,
-                                    collector_paused=args.collector_paused, on_ready=emit)
+                                    collector_paused=args.collector_paused, on_ready=emit,
+                                    query_source=args.query_source)
                 emit({"ok": result["durability_confirmed"], **result})
                 return 0 if result["durability_confirmed"] else 1
             except WindowError as error:
@@ -1995,7 +2000,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "context-surge":
             try:
                 result = receive_summary(credentials_file=args.credentials_file,
-                    revision=args.revision, seconds=args.seconds, on_ready=emit)
+                    revision=args.revision, seconds=args.seconds, on_ready=emit,
+                    query_source=args.query_source)
                 emit({"ok": True, **result})
                 return 0
             except (SurgeError, CaptureError, CredentialError) as error:

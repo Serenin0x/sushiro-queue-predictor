@@ -1,6 +1,6 @@
 """Explicit, bounded intake from an existing local Surge Mac query summary.
 
-Only the observed fixed directory GET supplies a complete query context. No
+An explicitly selected observed directory or Beijing home GET supplies a complete query context. No
 request body, response body, initialization, UI control or external query is
 performed here. An observed HTTP 200 is not independent server acceptance.
 """
@@ -31,6 +31,7 @@ _MAX_RECENT_ROWS = 200
 _MAC_EPOCH = 978307200
 _PATH = "/gateway/wechat/api/2.0/stores"
 _QUERY = {"latitude": "1", "longitude": "1", "numresults": "10000"}
+QUERY_SOURCES = ("directory", "home")
 _HEADERS = {"authorization": "authorization", "x-app-client": "app_client",
             "x-app-code": "app_code", "user-agent": "user_agent",
             "referer": "referer", "content-type": "content_type"}
@@ -66,21 +67,44 @@ def _directory_url(value: object) -> bool:
         return False
 
 
+def _home_url(value: object) -> bool:
+    """Only the observed Beijing startup shape; never replay signed home GETs."""
+    if (not isinstance(value, str) or len(value) > 512 or "%" in value
+            or any(ord(c) < 33 or ord(c) > 126 for c in value)):
+        return False
+    try:
+        url = urlsplit(value)
+        pairs = parse_qsl(url.query, keep_blank_values=True, strict_parsing=True)
+        values = dict(pairs)
+        return (url.scheme == "https" and url.netloc == "sapi.sushiro.com.cn"
+                and url.path == "/api/1.3/home" and not url.fragment
+                and len(pairs) == 4 and set(values) == {"city", "nonce", "ts", "sign"}
+                and values["city"] == "10"
+                and re.fullmatch(r"[A-Za-z0-9]{6}", values["nonce"]) is not None
+                and re.fullmatch(r"[0-9]{10}", values["ts"]) is not None
+                and re.fullmatch(r"[a-f0-9]{64}", values["sign"]) is not None)
+    except ValueError:
+        return False
+
+
 def _app(referer: str | None) -> str | None:
     match = re.fullmatch(r"https://servicewechat\.com/(wx[a-f0-9]{16})/[0-9]+/(?:page-frame\.html|index\.html)", referer or "")
     return match[1] if match else None
 
 
 def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
-                    now: datetime) -> SummaryCandidate:
+                    now: datetime, query_source: str = "directory") -> SummaryCandidate:
     """Parse only recent records in the observed Mac 6.4.3 summary format.
 
     Support verified Unix timestamps plus a Mac-reference representation;
     exactly one must fit the bounded current window. No source time is inferred.
     """
     since, now = _clock(since), _clock(now)
-    if now < since or (now - since).total_seconds() > 60 or previous.api_profile != "miniapp_gateway" or _app(previous.referer) is None:
+    if (type(query_source) is not str or query_source not in QUERY_SOURCES
+            or now < since or (now - since).total_seconds() > 60
+            or previous.api_profile != "miniapp_gateway" or _app(previous.referer) is None):
         raise SurgeError("surge_invalid_input")
+    valid_url = _directory_url if query_source == "directory" else _home_url
     if not isinstance(body, bytes) or len(body) > _MAX_BYTES:
         raise SurgeError("surge_summary_too_large")
     try:
@@ -96,7 +120,7 @@ def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
     candidates = []
     failure = "surge_candidate_not_found"
     for row in rows:
-        if not isinstance(row, dict) or not _directory_url(row.get("URL")):
+        if not isinstance(row, dict) or not valid_url(row.get("URL")):
             continue
         date = row.get("completedDate")
         if type(date) not in (int, float) or not math.isfinite(date):
@@ -112,6 +136,10 @@ def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
         if len(times) != 1:
             continue
         received = times[0]
+        if query_source == "home":
+            stamp = int(dict(parse_qsl(urlsplit(row["URL"]).query))["ts"])
+            if not 0 <= received.timestamp() - stamp <= 60:
+                continue
         response, request = row.get("responseHeader"), row.get("requestHeader")
         if (row.get("method") != "GET" or row.get("completed") is not True
                 or row.get("failed") is not False or row.get("streamHasRequestBody") is not False
@@ -125,7 +153,12 @@ def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
         target = first[1] if first else ""
         if target.startswith("/"):
             target = "https://sapi.sushiro.com.cn" + target
-        if not _directory_url(target):
+        if not valid_url(target):
+            continue
+        # Home contains variable signed parameters. Metadata and request line
+        # must identify the same request, not merely two valid home URLs.
+        if (query_source == "home" and dict(parse_qsl(urlsplit(target).query))
+                != dict(parse_qsl(urlsplit(row["URL"]).query))):
             continue
         values = {}
         invalid = False
@@ -217,9 +250,12 @@ def _read_summary(timeout: float) -> bytes:
 
 
 def receive_summary(*, credentials_file: str | Path, revision: int, seconds: int = 60,
-                    on_ready: Callable[[dict], None] | None = None) -> dict:
-    """Observe one new normal directory context; never enable MitM or query SAPI."""
-    if type(seconds) is not int or not 1 <= seconds <= 60 or type(revision) is not int or not 1 <= revision <= 2**63 - 1:
+                    on_ready: Callable[[dict], None] | None = None,
+                    query_source: str = "directory") -> dict:
+    """Observe one new selected normal context; never enable MitM or query SAPI."""
+    if (type(query_source) is not str or query_source not in QUERY_SOURCES
+            or type(seconds) is not int or not 1 <= seconds <= 60
+            or type(revision) is not int or not 1 <= revision <= 2**63 - 1):
         raise SurgeError("surge_invalid_input")
     previous = read_credentials_file(credentials_file, api_profile="miniapp_gateway")
     if revision <= previous.revision or _app(previous.referer) is None:
@@ -230,6 +266,7 @@ def receive_summary(*, credentials_file: str | Path, revision: int, seconds: int
     deadline = time.monotonic() + seconds
     if on_ready:
         on_ready({"event": "surge_ready", "window_seconds": seconds,
+                  "query_source": query_source,
                   "external_network_performed": False, "raw_logging": False})
     last = "surge_candidate_not_found"
     while time.monotonic() < deadline:
@@ -237,7 +274,8 @@ def receive_summary(*, credentials_file: str | Path, revision: int, seconds: int
             raise SurgeError("surge_current_context_changed")
         body = _read_summary(min(5, max(0.001, deadline - time.monotonic())))
         try:
-            candidate = inspect_summary(body, previous=previous, since=since, now=_clock(None))
+            candidate = inspect_summary(body, previous=previous, since=since,
+                                        now=_clock(None), query_source=query_source)
         except SurgeError as error:
             if error.error_code not in {"surge_candidate_not_found", "surge_context_unchanged"}:
                 raise
@@ -257,7 +295,8 @@ def receive_summary(*, credentials_file: str | Path, revision: int, seconds: int
             raise SurgeError("surge_context_invalid")
         durability = _write_private(body, credentials_file, revision, context, None)
         return {"committed": True, "durability_confirmed": durability, "revision": revision,
-                "api_profile": "miniapp_gateway", "credential_source": "normal_directory_query_summary",
+                "api_profile": "miniapp_gateway", "query_source": query_source,
+                "credential_source": "normal_" + query_source + "_query_summary",
                 "observed_http_status": 200, "response_body_inspected": False,
                 "query_response_received_at": candidate.received_at.isoformat().replace("+00:00", "Z"),
                 "authorization_status": describe_authorization(context.authorization),

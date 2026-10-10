@@ -12,7 +12,7 @@ import time
 
 from .capture import CaptureError, _check_parent, _open_parent
 from .credentials import CredentialError, read_credentials_file
-from .surge import SurgeError, _app, receive_summary
+from .surge import QUERY_SOURCES, SurgeError, _app, receive_summary
 from .surgeguard import GuardError, read_state
 
 
@@ -158,7 +158,7 @@ def _changed(path, previous) -> bool | None:
 
 def run_window(*, credentials_file: str | Path, staged_file: str | Path,
                revision: int, seconds: int = 40, collector_paused: bool = False,
-               on_ready=None) -> dict:
+               on_ready=None, query_source: str = "directory") -> dict:
     """Needs installed package and operator-controlled normal client action.
 
     Caller must actually pause all relevant collectors and select only SAPI.
@@ -167,7 +167,8 @@ def run_window(*, credentials_file: str | Path, staged_file: str | Path,
     Main directory advisory lock coordinates other capture/promotion writers.
     It is not a global Surge lock and cannot bind uncooperative operators.
     """
-    if (type(seconds) is not int or not 5 <= seconds <= 40
+    if (type(query_source) is not str or query_source not in QUERY_SOURCES
+            or type(seconds) is not int or not 5 <= seconds <= 40
             or type(revision) is not int or not 1 <= revision < 2**63
             or collector_paused is not True or (on_ready is not None and not callable(on_ready))):
         raise WindowError('window_invalid_input')
@@ -212,6 +213,7 @@ def run_window(*, credentials_file: str | Path, staged_file: str | Path,
                 raise WindowError('window_guard_not_ready')
             if on_ready:
                 on_ready({'event': 'context_window_ready', 'seconds': seconds,
+                          'query_source': query_source,
                           'expires_at': ready['expires_at'], 'baseline_revision': current.revision,
                           'requested_revision': revision, 'normal_client_action_required': True,
                           'collector_pause_verified': False, 'hostnames_verified': False,
@@ -219,7 +221,7 @@ def run_window(*, credentials_file: str | Path, staged_file: str | Path,
                           'main_context_updated': False, 'external_network_performed': False})
 
         result = receive_summary(credentials_file=stage_path, revision=revision,
-                                 seconds=seconds, on_ready=receiving)
+                                 seconds=seconds, on_ready=receiving, query_source=query_source)
         if (result.get('committed') is not True or result.get('revision') != revision
                 or type(result.get('durability_confirmed')) is not bool):
             raise WindowError('window_staging_result_invalid')
@@ -275,6 +277,7 @@ def run_window(*, credentials_file: str | Path, staged_file: str | Path,
         raise WindowError(failure or 'window_cleanup_unconfirmed', staging_changed=changed,
                           cleanup_confirmed=cleaned) from None
     return {'event': 'staged_context_window_finished', 'staging_committed': True,
+            'query_source': query_source,
             'durability_confirmed': result['durability_confirmed'], 'staged_revision': revision,
             'debug_off_confirmed': True, 'main_context_updated': False, 'staging_preserved': True,
             'hostnames_restored': False, 'client_updated': False, 'server_acceptance': 'unverified',

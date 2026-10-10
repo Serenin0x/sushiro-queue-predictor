@@ -95,9 +95,19 @@ class WindowTests(unittest.TestCase):
 
     def test_invalid_or_unacknowledged_window_is_side_effect_free(self):
         for changes in ({'seconds':0},{'seconds':41},{'seconds':True},{'seconds':5.0},
-                        {'revision':True},{'revision':2**63},{'collector_paused':False},{'collector_paused':1},{'on_ready':1}):
+                        {'revision':True},{'revision':2**63},{'collector_paused':False},{'collector_paused':1},{'on_ready':1},
+                        {'query_source':'auto'},{'query_source':[]},{'query_source':None}):
             with self.subTest(changes=changes): self.error('window_invalid_input',**changes)
         self.state.assert_not_called(); self.spawn.assert_not_called()
+
+    def test_home_window_passes_explicit_source_to_guarded_staging_intake(self):
+        events = []
+        result = self.run_window(query_source="home", on_ready=events.append)
+        self.assertEqual(self.intake.call_args.kwargs["query_source"], "home")
+        self.assertEqual(result["query_source"], "home")
+        self.assertEqual(events[0]["query_source"], "home")
+        self.assertTrue(result["debug_off_confirmed"])
+        self.assertFalse(result["main_context_updated"])
 
     def test_baseline_or_revision_mismatch_refuses_before_guard(self):
         self.save(self.staging,bundle(2)); self.error('window_baseline_mismatch')

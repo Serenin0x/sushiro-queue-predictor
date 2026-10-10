@@ -16,7 +16,8 @@ from typing import Callable
 _CLI = "/Applications/Surge.app/Contents/Applications/surge-cli"
 _MAX_BYTES = 65536
 _COMMAND_TIMEOUT = 3.0
-_COMMANDS = (("environment", "--raw"), ("set", "MitMEnabled=0"))
+_SHUTDOWN_COMMANDS = (("set", "MitMEnabled=0"), ("set", "Replica=0"))
+_COMMANDS = (("environment", "--raw"), *_SHUTDOWN_COMMANDS)
 
 
 class GuardError(Exception):
@@ -100,9 +101,19 @@ def read_state() -> dict[str, bool]:
 
 
 def _shutdown() -> dict[str, bool]:
-    _command(_COMMANDS[1])
-    result = read_state()
-    if any(result.values()):
+    # Always try both OFF operations: a failed MitM call must not leave disk
+    # capture running. Neither command can enable a feature or quit Surge.
+    failed = False
+    for command in _SHUTDOWN_COMMANDS:
+        try:
+            _command(command)
+        except Exception:
+            failed = True
+    try:
+        result = read_state()
+    except Exception:
+        raise GuardError("surge_guard_cleanup_unconfirmed", cleanup_attempted=True) from None
+    if failed or any(result.values()):
         raise GuardError("surge_guard_cleanup_unconfirmed", cleanup_attempted=True)
     return result
 

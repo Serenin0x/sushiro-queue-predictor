@@ -63,7 +63,36 @@ class StateTests(unittest.TestCase):
                 with self.assertRaises(guard.GuardError) as caught:
                     guard._shutdown()
                 self.assertEqual(caught.exception.error_code, "surge_guard_cleanup_unconfirmed")
-                command.assert_called_once_with(("set", "MitMEnabled=0"))
+                self.assertEqual([c.args[0] for c in command.call_args_list],
+                                 list(guard._SHUTDOWN_COMMANDS))
+
+    def test_capture_is_closed_even_if_mitm_command_fails(self):
+        with patch.object(guard, "_command", side_effect=[guard.GuardError("surge_guard_cli_failed"), b"OK"]) as command, \
+                patch.object(guard, "read_state", return_value=OFF):
+            with self.assertRaises(guard.GuardError) as caught:
+                guard._shutdown()
+            self.assertEqual(command.call_count, 2)
+            self.assertTrue(caught.exception.cleanup_attempted)
+            self.assertFalse(caught.exception.cleanup_confirmed)
+
+    def test_realistic_capture_on_is_turned_off_and_read_back(self):
+        state = {**OFF, 'mitm_enabled': True, 'capture_enabled': True}
+        def off(arguments):
+            if arguments == ('set', 'MitMEnabled=0'): state['mitm_enabled'] = False
+            elif arguments == ('set', 'Replica=0'): state['capture_enabled'] = False
+            return b'OK'
+        with patch.object(guard, '_command', side_effect=off), \
+                patch.object(guard, 'read_state', side_effect=lambda: state.copy()):
+            self.assertEqual(guard._shutdown(), OFF)
+
+    def test_readback_failure_is_reported_after_both_off_commands(self):
+        with patch.object(guard, '_command') as command, \
+                patch.object(guard, 'read_state', side_effect=ValueError(PRIVATE)):
+            with self.assertRaises(guard.GuardError) as caught:
+                guard._shutdown()
+            self.assertEqual(command.call_count, 2)
+            self.assertEqual(caught.exception.error_code, 'surge_guard_cleanup_unconfirmed')
+            self.assertNotIn(PRIVATE, str(caught.exception))
 
 
 class CommandTests(unittest.TestCase):
@@ -113,7 +142,7 @@ class CommandTests(unittest.TestCase):
         self.assertNotIn(PRIVATE, str(caught.exception))
 
     def test_forbidden_commands_do_not_spawn(self):
-        for args in [("set", "MitMEnabled=1"), ("set", "Replica=0"), ("dump", "request", "--raw"),
+        for args in [("set", "MitMEnabled=1"), ("set", "Replica=1"), ("dump", "request", "--raw"),
                      ("environment",), ("set", "MitMEnabled", "0")]:
             with self.subTest(args=args), patch.object(guard.subprocess, "Popen") as spawn:
                 with self.assertRaises(guard.GuardError) as caught:
@@ -281,13 +310,14 @@ env = {{'MitMEnabled':False, 'Replica':False, 'ReplicaSessionParameters':{{'mitm
 def command(args):
     if args == ('environment','--raw'):
         return json.dumps({{'environment':env}}).encode()
-    assert args == ('set','MitMEnabled=0')
-    env['MitMEnabled'] = '0'
+    assert args in g._SHUTDOWN_COMMANDS
+    env['MitMEnabled' if args == ('set','MitMEnabled=0') else 'Replica'] = '0'
     return b'{{}}'
 g._command = command
 def ready(value):
     print(json.dumps(value),flush=True)
     env['MitMEnabled'] = True
+    env['Replica'] = True
 print(json.dumps(g.run_guard(seconds=40,on_ready=ready)),flush=True)
 """
         child = subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.DEVNULL,

@@ -20,6 +20,36 @@ from sushiwait.cli import main
 from sushiwait.cli import _recovery_poll_target
 
 
+def check_official_statistics_install(source_root):
+    """Installed public projection and explicit CLI source; all input synthetic."""
+    from sushiwait.observations import normalize_snapshot
+    from sushiwait.officialstats import project_packet
+    from sushiwait.packets import build_packet
+    at='2026-10-10T12:00:00Z';started='2026-10-10T03:00:00Z'
+    snapshot=normalize_snapshot({'id':900001,'name':'Synthetic official store',
+        'groupQueues':{'mixedQueue':['0012','0014','0012','0016'],'reservationQueue':[]}},
+        '900001',request_started_at=started,received_at=started,elapsed_ms=0,
+        data_origin='synthetic',api_profile='miniapp_gateway')
+    row={'id':1,'run_id':'764c40ca-8f27-41b7-8026-28d046d526cb','store_id':'900001',
+         'api_profile':'miniapp_gateway','data_origin':'synthetic','received_at':started,
+         'ok':1,'payload_json':json.dumps(snapshot)}
+    packet=build_packet([row],as_of=at,store_ids=['900001'],api_profile='miniapp_gateway',data_origin='synthetic')
+    hours=json.loads((source_root/'config/default-business-hours.json').read_bytes())
+    with patch('socket.socket',side_effect=AssertionError('official_stats_network')) as sockets:
+        result=project_packet(packet,as_of=at,hours=hours)
+        day=result['days'][('900001','2026-10-10')]
+        assert day['source']=='sapi_miniapp_gateway' and day['data_origin']=='synthetic'
+        assert day['points'][0]['queues']['mixedQueue']==['0012','0014','0012']
+        assert day['summary']['recorded_http_attempts']==1 and not day['full_source_arrays_persisted']
+        assert result['source_packet']==packet
+        with patch('sushiwait.cli.receive_summary',return_value={'committed':True}) as receive,contextlib.redirect_stdout(io.StringIO()):
+            assert main(['context-surge','--credentials-file','synthetic-unread','--revision','2','--query-source','home'])==0
+            assert receive.call_args.kwargs['query_source']=='home'
+        assert sockets.call_count==0
+    print(json.dumps({'installed_official_projection_ok':True,'installed_explicit_home_cli_ok':True,
+                     'source_queries':0,'credentials_accessed':False,'live_acceptance':False}))
+
+
 def check_deepseek_install():
     """Exercise the installed adapter using a labelled synthetic transport."""
     from sushiwait.deepseek import MODEL, run_deepseek
@@ -1807,6 +1837,7 @@ def check() -> None:
                 or task_summary["network_performed"] or task_summary["eta_available"]):
             raise SystemExit("installed_task_status_semantics_mismatch")
     check_campaign_install()
+    check_official_statistics_install(args.source_root)
     print(json.dumps({"installed_version": expected, "import_outside_checkout": True,
         "cli_help_ok": True, "bridge_diagnostic_option_ok": True, "surge_intake_help_ok": True,
         "surge_guard_help_ok": True, "guard_invalid_window_ok": True,

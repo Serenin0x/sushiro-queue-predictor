@@ -49,6 +49,87 @@ def summary(rows=None):
                        "active-requests": [], "persistent-store": None}).encode()
 
 
+def home_row():
+    value = row()
+    url = ("https://sapi.sushiro.com.cn/api/1.3/home?city=10&nonce=ABC123&ts="
+           + str(int(NOW.timestamp())) + "&sign=" + "a" * 64)
+    value["URL"] = url
+    value["requestHeader"] = value["requestHeader"].replace(
+        URL.removeprefix("https://sapi.sushiro.com.cn"),
+        url.removeprefix("https://sapi.sushiro.com.cn"))
+    return value
+
+
+class HomeSummaryTests(unittest.TestCase):
+    def inspect(self, rows=None, **changes):
+        return surge.inspect_summary(summary([home_row()] if rows is None else rows),
+            **{"previous": previous(), "since": NOW-timedelta(seconds=1),
+               "now": NOW, "query_source": "home", **changes})
+
+    def test_success_is_explicit_and_contains_no_signed_parameters(self):
+        candidate = self.inspect()
+        self.assertEqual(candidate.context.authorization, auth())
+        self.assertEqual(candidate.received_at, NOW)
+        for secret in (auth(), REF, "ABC123", "a" * 64, "ignored-cookie"):
+            self.assertNotIn(secret, repr(candidate))
+
+    def test_sources_do_not_fall_back_or_select_other_kind_in_mixed_summary(self):
+        with self.assertRaisesRegex(surge.SurgeError, "surge_candidate_not_found"):
+            self.inspect([row()])
+        with self.assertRaisesRegex(surge.SurgeError, "surge_candidate_not_found"):
+            self.inspect(query_source="directory")
+        other = row()
+        other["requestHeader"] = other["requestHeader"].replace(auth(), auth("other"))
+        self.assertEqual(self.inspect([other, home_row()]).context.authorization, auth())
+
+    def test_unknown_source_is_rejected_before_processing_content(self):
+        for source in (None, [], True, "auto", "login", "initialize"):
+            with self.subTest(source=source), self.assertRaisesRegex(surge.SurgeError, "surge_invalid_input"):
+                self.inspect(query_source=source)
+
+    def test_only_observed_home_shape_is_accepted(self):
+        original = home_row()["URL"]
+        for url in (original.replace("sapi.", "crm-cn-prd."),
+                    original.replace(".cn/", ".cn:443/"),
+                    original.replace("/home?", "/initialize?"),
+                    original.replace("city=10", "city=11"),
+                    original.replace("nonce=ABC123", "nonce=ABC12"),
+                    original.replace("nonce=ABC123", "nonce=%41BC123"),
+                    original.replace("sign=" + "a" * 64, "sign=" + "a" * 63),
+                    original + "&city=10", original + "&member_id=secret", original + "#fragment"):
+            value = home_row(); value["URL"] = url
+            with self.subTest(url=url), self.assertRaisesRegex(surge.SurgeError, "surge_candidate_not_found"):
+                self.inspect([value])
+
+    def test_request_line_cannot_supply_different_signed_request(self):
+        for before, after in (("ABC123", "DEF456"), ("a" * 64, "b" * 64),
+                              ("city=10", "city=11")):
+            value = home_row()
+            value["requestHeader"] = value["requestHeader"].replace(before, after)
+            with self.subTest(before=before), self.assertRaises(surge.SurgeError):
+                self.inspect([value])
+
+    def test_signed_time_must_be_recent_and_not_in_future(self):
+        original = str(int(NOW.timestamp()))
+        for stamp in (str(int(NOW.timestamp()) - 61), str(int(NOW.timestamp()) + 1)):
+            value = home_row()
+            value["URL"] = value["URL"].replace(original, stamp)
+            value["requestHeader"] = value["requestHeader"].replace(original, stamp)
+            with self.subTest(stamp=stamp), self.assertRaises(surge.SurgeError):
+                self.inspect([value])
+
+    def test_home_still_requires_new_complete_same_app_successful_get(self):
+        for change in (lambda v:v.update(method="POST"), lambda v:v.update(failed=True),
+                       lambda v:v.update(streamHasRequestBody=True),
+                       lambda v:v.update(responseHeader="HTTP/1.1 401 Unauthorized"),
+                       lambda v:v.update(requestHeader=v["requestHeader"].replace(auth(),auth("old"))),
+                       lambda v:v.update(requestHeader=v["requestHeader"].replace(REF,REF.replace("wx0000000000000000","wx1111111111111111"))),
+                       lambda v:v.update(requestHeader=v["requestHeader"].replace("X-App-Code: synthetic-code-secret\r\n","")),
+                       lambda v:v.update(requestHeader=v["requestHeader"].replace(auth(),auth(expiry=NOW+timedelta(seconds=30))))):
+            value = home_row(); change(value)
+            with self.assertRaises(surge.SurgeError): self.inspect([value])
+
+
 class SummaryParserTests(unittest.TestCase):
     def inspect(self, body=None, **kwargs):
         return surge.inspect_summary(summary() if body is None else body, previous=previous(),
@@ -170,6 +251,26 @@ class SummaryIntakeTests(unittest.TestCase):
             reader.assert_not_called()
         self.assertEqual(read_credentials_file(self.file,api_profile="miniapp_gateway").revision,2)
 
+    def test_home_atomic_intake_reuses_private_revision_guards_and_redacts_signed_query(self):
+        ready = []
+        with patch("sushiwait.surge._read_summary", return_value=summary([home_row()])):
+            result = surge.receive_summary(credentials_file=self.file, revision=2,
+                seconds=1, query_source="home", on_ready=ready.append)
+        self.assertEqual(result["query_source"], "home")
+        self.assertEqual(result["credential_source"], "normal_home_query_summary")
+        self.assertEqual(ready[0]["query_source"], "home")
+        self.assertEqual(read_credentials_file(self.file,api_profile="miniapp_gateway").revision,2)
+        self.assertEqual(result["server_acceptance"], "unverified")
+        for secret in (auth(), REF, "ABC123", "a" * 64, str(self.file)):
+            self.assertNotIn(secret, json.dumps([result, ready]))
+
+    def test_unknown_source_never_reads_private_file_or_native_summary(self):
+        with patch("sushiwait.surge.read_credentials_file") as private, patch("sushiwait.surge._read_summary") as native:
+            for source in (None, [], "auto"):
+                with self.assertRaisesRegex(surge.SurgeError, "surge_invalid_input"):
+                    surge.receive_summary(credentials_file=self.file, revision=2, query_source=source)
+            private.assert_not_called(); native.assert_not_called()
+
     def test_invalid_bounds_and_unsafe_file_do_not_invoke_runtime(self):
         with patch("sushiwait.surge._read_summary") as reader:
             for seconds,revision in ((True,2),(0,2),(61,2),(1,True),(1,1)):
@@ -205,6 +306,12 @@ class SummaryReaderTests(unittest.TestCase):
 
 
 class SummaryCliTests(unittest.TestCase):
+    def test_explicit_home_cli_passes_selection(self):
+        with patch("sushiwait.cli.receive_summary", return_value={"committed":True}) as receiver, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["context-surge", "--credentials-file", "/synthetic/private",
+                                  "--revision", "2", "--query-source", "home"]), 0)
+        self.assertEqual(receiver.call_args.kwargs["query_source"], "home")
+
     def test_help_and_dispatch_keep_source_and_no_secrets(self):
         output=io.StringIO()
         value={"committed":True,"server_acceptance":"unverified","network_performed":False}
