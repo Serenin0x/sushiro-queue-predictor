@@ -560,6 +560,8 @@ def build_parser() -> argparse.ArgumentParser:
     fleet.add_argument('--not-before', required=True)
     fleet.add_argument('--daily-pair-cap', type=int, default=1500)
     fleet.add_argument('--requests-per-second', type=float, default=5)
+    fleet.add_argument('--base-interval', type=int, default=60,
+        help='每店背景周期60–3600秒；不改变旧任务，不代表来源允许频率')
     fleet.add_argument('--port', type=int, default=18821)
     fleet.add_argument('--legacy-exports-root')
     fleet.add_argument('--legacy-through-date')
@@ -1091,6 +1093,7 @@ def main(argv: list[str] | None = None) -> int:
             service = DailyFleetService(root=args.root, catalog=read_catalog(args.catalog_file),
                 business_hours=read_hours(args.business_hours_file), not_before=args.not_before,
                 daily_pair_cap=args.daily_pair_cap, requests_per_second=args.requests_per_second,
+                base_interval=args.base_interval,
                 legacy_exports_root=args.legacy_exports_root, legacy_through_date=args.legacy_through_date,
                 legacy_store_ids=args.legacy_store_id)
             serve_local(service, port=args.port, listen_host='127.0.0.1')

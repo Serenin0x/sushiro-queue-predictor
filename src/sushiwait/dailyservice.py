@@ -14,13 +14,14 @@ from .remotetasks import RemoteTaskError
 class DailyCollectorService(RemoteQueueService):
     def __init__(self, *, root, store_id, business_hours, not_before, daily_pair_cap=1500,
                  legacy_exports_root=None, legacy_through_date=None,
-                 wall_clock=_utc, monotonic_clock=time.monotonic, wait=None, client_factory=RemoteClient):
+                 wall_clock=_utc, monotonic_clock=time.monotonic, wait=None, client_factory=RemoteClient,
+                 base_interval=60):
         self.config = daily_config(root, store_id, business_hours,
-            not_before=not_before, daily_pair_cap=daily_pair_cap)
+            not_before=not_before, daily_pair_cap=daily_pair_cap, base_interval=base_interval)
         self.legacy_reader = legacy_reader_config(legacy_exports_root, legacy_through_date,
             activation=not_before, daily_root=root)
         self.view = LiveRemoteView([store_id], stale_after_seconds=120)
-        self.daily_view = DailyView([store_id], hours=business_hours, base_interval=60)
+        self.daily_view = DailyView([store_id], hours=business_hours, base_interval=base_interval)
         self.active_day = None
         self.archive_lock, self.archive_cache = threading.Lock(), OrderedDict()
         self.wall_clock, self.monotonic_clock = wall_clock, monotonic_clock
@@ -95,7 +96,8 @@ class DailyCollectorService(RemoteQueueService):
         try:
             return read_selected_day(self.config['root'], store_id, day, legacy=self.legacy_reader)
         except FileNotFoundError:
-            return DailyView([store_id], hours=self.config['business_hours'], base_interval=60).detail(
+            return DailyView([store_id], hours=self.config['business_hours'],
+                base_interval=self.config['base_interval']).detail(
                 store_id, day, now=self.wall_clock())
         except (ValueError, OSError):
             raise RemoteServiceError('daily_archive_unavailable_or_changed') from None

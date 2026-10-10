@@ -66,6 +66,25 @@ def read_catalog(path):
     return validate_catalog(_json(p.read_bytes()))
 
 
+def fleet_load(store_count, base_interval, requests_per_second):
+    """Worst-case two-GET demand; local capacity is not a source allowance."""
+    if (type(store_count) is not int or not 1 <= store_count <= MAX_STORES
+            or type(base_interval) is not int or not 60 <= base_interval <= 3600
+            or type(requests_per_second) not in (int, float)
+            or not 0.25 <= requests_per_second <= 6):
+        raise RemoteServiceError('fleet_load_configuration_invalid')
+    required = 2 * store_count / base_interval
+    if required > requests_per_second + 1e-9:
+        raise RemoteServiceError('fleet_schedule_exceeds_transport_capacity')
+    return {'base_interval_seconds': base_interval,
+        'maximum_gets_per_store_observation': 2,
+        'planned_gets_per_minute': required * 60,
+        'configured_request_starts_per_second': requests_per_second,
+        'configured_transport_utilization': required / requests_per_second,
+        'near_transport_capacity': required > requests_per_second * .8,
+        'source_allowed_rate_verified': False}
+
+
 class OriginGate:
     """No accumulated tokens/bursts; persistent halt on upstream 403/429.
 
@@ -167,11 +186,12 @@ class DailyFleetService:
     def __init__(self, *, root, catalog, business_hours, not_before, daily_pair_cap=1500,
                  legacy_exports_root=None, legacy_through_date=None, legacy_store_ids=(),
                  requests_per_second=5, wall_clock=_utc, child_factory=DailyCollectorService,
-                 opener_factory=None):
+                 opener_factory=None, base_interval=60):
         self.catalog = validate_catalog(catalog)
         self.root = Path(os.path.abspath(root))
         if len(str(self.root)) > 370: raise RemoteServiceError('fleet_root_invalid')
         self.names = {s['store_id']: s['directory_name'] for s in self.catalog['stores']}
+        self.load_plan = fleet_load(len(self.names), base_interval, requests_per_second)
         if (len(set(legacy_store_ids)) != len(legacy_store_ids)
                 or set(legacy_store_ids) - set(self.names)
                 or (legacy_exports_root is None) != (legacy_through_date is None)
@@ -201,12 +221,16 @@ class DailyFleetService:
                 business_hours=business_hours, not_before=not_before, daily_pair_cap=daily_pair_cap,
                 legacy_exports_root=legacy_exports_root if store in legacy_store_ids else None,
                 legacy_through_date=legacy_through_date if store in legacy_store_ids else None,
-                wall_clock=wall_clock, client_factory=factory)
+                wall_clock=wall_clock, client_factory=factory, base_interval=base_interval)
         self.configuration = {'schema_version': 1, 'catalog': self.catalog,
             'business_hours': deepcopy(business_hours), 'not_before': _now(_at(not_before)),
             'daily_pair_cap': daily_pair_cap, 'requests_per_second': requests_per_second,
             'legacy_exports_root': legacy_exports_root, 'legacy_through_date': legacy_through_date,
             'legacy_store_ids': list(legacy_store_ids)}
+        # Preserve the byte identity of existing 60-second fleet checkpoints.
+        # A changed cadence requires a separately reviewed configuration.
+        if base_interval != 60:
+            self.configuration['base_interval'] = base_interval
 
     def start(self):
         if self.started: raise RemoteServiceError('remote_service_already_started')
@@ -254,7 +278,7 @@ class DailyFleetService:
         if store is not None:
             return {**self.child(store).status(), 'store_names': deepcopy(self.names),
                 'fleet_store_ids': list(self.names), 'status_scope': 'selected_store_worker',
-                'origin_gate': self.gate.status()}
+                'origin_gate': self.gate.status(), 'load_plan': deepcopy(self.load_plan)}
         states = {s: c.status() for s, c in self.children.items()}
         failures = [s for s, v in states.items() if v['service_state'] == 'failed']
         alive = sum(v['worker_alive'] for v in states.values())
@@ -265,6 +289,7 @@ class DailyFleetService:
             'shared_process': True, 'bounded_daily_tasks': True, 'automatic_task_restart': False,
             'network_performed_by_read': False, 'source_freshness': 'unknown', 'eta_available': False,
             'verified_training_labels': 0, 'origin_gate': self.gate.status(),
+            'load_plan': deepcopy(self.load_plan),
             'directory_observed_at': self.catalog['directory_observed_at'],
             'current_mainland_completeness_verified': False}
 

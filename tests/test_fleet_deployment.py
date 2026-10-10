@@ -57,6 +57,24 @@ class DeploymentTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):preparation.prepare(self.args,now=BASE)
         self.assertEqual((Path(self.args.root)/'units.json').read_bytes(),before)
 
+    def test_lower_load_units_are_explicit_and_unstartable_over_capacity(self):
+        self.args.base_interval=60;self.args.requests_per_second=2
+        with self.assertRaisesRegex(ValueError, 'exceeds_transport_capacity'):
+            preparation.prepare(self.args,now=BASE)
+        self.assertFalse(Path(self.args.root).exists())
+        self.args.base_interval=300
+        result=preparation.prepare(self.args,now=BASE)
+        unit=(Path(self.args.root)/'sushiwait-mainland-collector.service').read_text()
+        self.assertIn('--base-interval 300',unit)
+        self.assertIn('--requests-per-second 2',unit)
+        self.assertEqual(result['official_requests'],0)
+        self.assertFalse(result['services_started'])
+        self.assertAlmostEqual(result['load_plan']['planned_gets_per_minute'],58.8)
+        self.assertFalse(result['load_plan']['source_allowed_rate_verified'])
+        meta=json.loads((Path(self.args.root)/'units.json').read_text())
+        self.assertEqual(meta['interval_seconds'],300)
+        self.assertEqual(meta['load_plan'],result['load_plan'])
+
     def test_timer_prepared_without_starting_or_changing_old_units(self):
         old=self.folder/'old';old.mkdir(mode=0o700)
         data={'store_ids':['900001'],'user':'ubuntu','units':['sushiwait-old-store900001.service']}

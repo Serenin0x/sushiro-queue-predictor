@@ -37,7 +37,8 @@ def prepare(args, *, now=None):
     legacy_ids=getattr(args,'legacy_store_id',[])
     fleet=DailyFleetService(root=root,catalog=catalog,business_hours=hours,not_before=_now(activation),
         legacy_exports_root=args.legacy_exports_root,legacy_through_date=args.legacy_through_date,
-        legacy_store_ids=legacy_ids,requests_per_second=args.requests_per_second)
+        legacy_store_ids=legacy_ids,requests_per_second=args.requests_per_second,
+        base_interval=getattr(args,'base_interval',60))
     hub=validate_config({'schema_version':3,'mode':'daily_fleet_readonly',
         'workers':[{'endpoint':f'http://127.0.0.1:{args.port}','stores':fleet.names}]})
     old_root=getattr(args,'old_root',None)
@@ -68,6 +69,7 @@ def prepare(args, *, now=None):
         '--catalog-file',str(release/'config/mainland-store-catalog.json'),
         '--business-hours-file',str(release/'config/default-business-hours.json'),
         '--not-before',_now(activation),'--requests-per-second',str(args.requests_per_second),
+        '--base-interval',str(fleet.load_plan['base_interval_seconds']),
         '--daily-pair-cap','1500','--port',str(args.port)]
     if args.legacy_exports_root:
         command += ['--legacy-exports-root',args.legacy_exports_root,'--legacy-through-date',args.legacy_through_date]
@@ -91,7 +93,8 @@ def prepare(args, *, now=None):
         'release':str(release),'root':str(root),'user':args.user,'port':args.port,'hub_port':args.hub_port,
         'public_port':args.public_port,'maximum_request_starts_per_second':args.requests_per_second,
         'daily_pair_cap_per_store':1500,'daily_maximum_total_http_attempts':3000*len(fleet.names),
-        'interval_seconds':60,'legacy_exports_root':args.legacy_exports_root,
+        'interval_seconds':fleet.load_plan['base_interval_seconds'],'load_plan':fleet.load_plan,
+        'legacy_exports_root':args.legacy_exports_root,
         'legacy_through_date':args.legacy_through_date,'legacy_store_ids':legacy_ids,
         'directory_observed_at':catalog['directory_observed_at'],
         'current_mainland_completeness_verified':False,'same_store_old_writer_stop_verified':False,
@@ -117,6 +120,7 @@ def prepare(args, *, now=None):
             'Unit='+args.prefix+'-cutover.service\n\n[Install]\nWantedBy=timers.target\n')
     return {'prepared_stores':len(fleet.names),'prepared_services':3,'services_started':False,
         'maximum_request_starts_per_second':args.requests_per_second,'official_requests':0,
+        'load_plan':fleet.load_plan,
         'directory_currentness_verified':False,'new_firewall_rules':0,
         'cutover_timer_prepared':bool(cutover),'cutover_timer_started':False}
 
@@ -127,7 +131,9 @@ if __name__=='__main__':
     p.add_argument('--not-before',required=True);p.add_argument('--prefix',default='sushiwait-mainland')
     p.add_argument('--user',default='ubuntu');p.add_argument('--port',type=int,default=18821)
     p.add_argument('--hub-port',type=int,default=18820);p.add_argument('--public-port',type=int,default=18080)
-    p.add_argument('--requests-per-second',type=float,default=5)
+    p.add_argument('--requests-per-second',type=float,default=2)
+    p.add_argument('--base-interval',type=int,default=300,
+        help='新部署背景周期，默认300秒；不修改已有运行配置')
     p.add_argument('--legacy-exports-root');p.add_argument('--legacy-through-date')
     p.add_argument('--legacy-store-id',action='append',default=[])
     p.add_argument('--old-root');p.add_argument('--cutover-at')

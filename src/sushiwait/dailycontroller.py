@@ -106,18 +106,19 @@ def _immutable(path, value):
         os.close(parent)
 
 
-def daily_config(root, store_id, hours, *, not_before, daily_pair_cap=1500):
+def daily_config(root, store_id, hours, *, not_before, daily_pair_cap=1500, base_interval=60):
     _id(store_id)
     rules = validate_hours(hours)
     absolute = os.path.abspath(root)
-    if len(absolute) > 400 or not _integer(daily_pair_cap, 1, 1500):
+    if (len(absolute) > 400 or not _integer(daily_pair_cap, 1, 1500)
+            or not _integer(base_interval, 60, 3600)):
         raise RemoteTaskError('daily_controller_invalid_config')
     # Bound the controller checkpoint independently of the rules' own limit.
     if len(json.dumps(rules).encode()) > 6000:
         raise RemoteTaskError('daily_controller_rules_too_large')
     return {'root': absolute, 'db': str(Path(absolute)/'unused.sqlite3'), 'store_id': store_id,
         'business_hours': rules, 'not_before': _now(_at(not_before)),
-        'base_interval': 60, 'daily_pair_cap': daily_pair_cap, 'transient_recovery_limit': 3}
+        'base_interval': base_interval, 'daily_pair_cap': daily_pair_cap, 'transient_recovery_limit': 3}
 
 
 def _decode(body):
@@ -131,7 +132,8 @@ def _decode(body):
             raise ValueError
         c = value['config']
         if c != daily_config(c['root'], c['store_id'], c['business_hours'],
-                not_before=c['not_before'], daily_pair_cap=c['daily_pair_cap']):
+                not_before=c['not_before'], daily_pair_cap=c['daily_pair_cap'],
+                base_interval=c['base_interval']):
             raise ValueError
         updated = _at(value['updated_at'])
         if updated < _at(c['not_before']) and value['current'] is not None:
@@ -298,7 +300,7 @@ class DailyController(RemoteTask):
             from .dailyquality import daily_quality_report
             _immutable(folder/'quality.json', daily_quality_report(projection,
                 store_id=c['store_id'], day=day['local_date'], as_of=projection['generated_at'],
-                interval_seconds=c['base_interval']))
+                interval_seconds=c['base_interval'], max_gap_seconds=max(90, c['base_interval'] * 3 // 2)))
             value = deepcopy(self.value)
             value.update(current=None, last_finished_date=day['local_date'], updated_at=_now(wall_clock()))
             self._commit(value)
@@ -326,6 +328,7 @@ class DailyController(RemoteTask):
             value['current']['local_date'] if value['current'] else None,
             'phase': value['current']['phase'] if value['current'] else 'waiting_business_day',
             'last_finished_date': value['last_finished_date'], 'daily_pair_cap': c['daily_pair_cap'],
+            'base_interval_seconds': c['base_interval'],
             'calendar_dates_not_observed': value['calendar_dates_not_observed'], 'updated_at': value['updated_at'],
             'off_hours_queries_allowed': False, 'catch_up_requests': 0, 'process_liveness': 'unknown',
             'source_freshness': 'unknown', 'eta_available': False}

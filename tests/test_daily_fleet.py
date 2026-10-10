@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from sushiwait.dailyfleet import (DailyFleetService, OriginGate, FleetRemoteClient,
-    validate_catalog, SUMMARY_KEYS, MAX_STORES)
+    validate_catalog, SUMMARY_KEYS, MAX_STORES, fleet_load)
 from sushiwait.dailycontroller import DailyController
 from sushiwait.monitorhub import MonitorHub, validate_config, HubError
 from sushiwait.remote import RemoteResult
@@ -34,6 +34,38 @@ class FleetTests(unittest.TestCase):
     def fleet(self, **kwargs):
         return DailyFleetService(root=self.root,catalog=catalog(),business_hours=self.hours,
             not_before=fixture.BASE.isoformat(),wall_clock=self.clock.wall,**kwargs)
+
+    def test_load_plan_distinguishes_local_capacity_from_source_permission(self):
+        old = fleet_load(147, 60, 5)
+        self.assertEqual(old['planned_gets_per_minute'], 294)
+        self.assertAlmostEqual(old['configured_transport_utilization'], .98)
+        self.assertTrue(old['near_transport_capacity'])
+        lower = fleet_load(147, 300, 2)
+        self.assertAlmostEqual(lower['planned_gets_per_minute'], 58.8)
+        self.assertAlmostEqual(lower['configured_transport_utilization'], .49)
+        self.assertFalse(lower['source_allowed_rate_verified'])
+        self.assertFalse(lower['near_transport_capacity'])
+        for args in ((147,60,2),(147,60,True),(True,300,2),(147,30,2),
+                     (147,300,float('nan'))):
+            with self.subTest(args=args), self.assertRaises(RemoteServiceError):
+                fleet_load(*args)
+
+    def test_capacity_failure_has_no_files_threads_or_source_calls(self):
+        with patch('socket.socket', side_effect=AssertionError('no source query')):
+            with self.assertRaisesRegex(RemoteServiceError, 'exceeds_transport_capacity'):
+                DailyFleetService(root=self.root,catalog=catalog(147),business_hours=self.hours,
+                    not_before=fixture.BASE.isoformat(),base_interval=60,requests_per_second=2)
+        self.assertFalse(self.root.exists())
+
+    def test_cadence_propagates_to_each_worker_and_status_without_starting(self):
+        f = self.fleet(base_interval=300, requests_per_second=1)
+        self.assertTrue(all(c.config['base_interval'] == 300 for c in f.children.values()))
+        self.assertTrue(all(c.daily_view.interval == 300 for c in f.children.values()))
+        self.assertEqual(f.configuration['base_interval'], 300)
+        self.assertEqual(f.status()['load_plan'], f.load_plan)
+        self.assertEqual(f.status('900001')['load_plan'], f.load_plan)
+        self.assertFalse(f.started)
+        self.assertEqual(f.gate.admissions, 0)
 
     def test_catalog_is_explicit_bounded_unique_and_never_currentness_claim(self):
         self.assertEqual(len(validate_catalog(catalog(256))['stores']),256)

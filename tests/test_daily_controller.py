@@ -54,6 +54,36 @@ class DailyControllerTests(unittest.TestCase):
     def starts(self):
         return [at for url, at in self.opener.calls if 'groupqueues?' in url]
 
+    def test_lower_frequency_keeps_day_deadline_budget_and_archive_coverage(self):
+        self.hours['weekday_intervals']['5'] = [['11:00', '11:11']]
+        cfg = self.config(base_interval=300)
+        with DailyController(config=cfg, now=self.clock.wall()) as controller:
+            self.tick(controller)
+        self.assertEqual(self.starts(), [0, 300, 600])
+        result = self.archive()
+        self.assertEqual(result['task']['maximum_pair_budget'], 7)
+        projection = self.archive(name='projection.json')
+        self.assertEqual(projection['summary']['expected_background_slots_full_day'], 3)
+        self.assertEqual(projection['summary']['observed_background_slots'], 3)
+        self.assertEqual(projection['summary']['observed_slot_fraction_so_far'], 1)
+        self.assertTrue(all(p['comparison_state'] != 'gap' for p in projection['points']))
+        quality = self.archive(name='quality.json')
+        self.assertEqual(quality['parameters']['background_interval_seconds'], 300)
+        self.assertEqual(quality['parameters']['maximum_receipt_gap_seconds'], 450)
+        from sushiwait.dailyarchive import read_day
+        self.assertEqual(read_day(self.root, '900001', '2026-10-09'), projection)
+        before = (self.root/'controller.json').read_bytes()
+        with self.assertRaises(RemoteTaskError):
+            DailyController(config=self.config(base_interval=60), now=self.clock.wall())
+        self.assertEqual((self.root/'controller.json').read_bytes(), before)
+        self.assertEqual(len(self.opener.calls), 6)
+
+    def test_invalid_background_frequency_never_creates_a_task(self):
+        for interval in (True, 30, 59, 3601, 300.0):
+            with self.subTest(interval=interval), self.assertRaises(RemoteTaskError):
+                self.config(base_interval=interval)
+        self.assertFalse(self.root.exists())
+
     def archive(self, day='2026-10-09', name='result.json'):
         return json.loads(read_daily_archive(self.root/day/name))
 
