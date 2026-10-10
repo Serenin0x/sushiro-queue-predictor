@@ -1,0 +1,271 @@
+{
+  "synthetic": true,
+  "description": "Only software and design checks; never real store data. Generated from DailyView public projection.",
+  "month_index": {
+    "daily_schema_version": 1,
+    "source": "crm_remote_v1_1",
+    "days": {
+      "2026-10-06": {
+        "900001": {
+          "store_id": "900001",
+          "local_date": "2026-10-06",
+          "observations": 3,
+          "successful_pairs": 3,
+          "failed_pairs": 0,
+          "scheduled_pause_slots": 0,
+          "expected_background_slots_so_far": 573,
+          "observed_background_slots": 3,
+          "observed_slot_fraction_so_far": 0.005235602094240838,
+          "last_observation_at": "2026-10-06T12:02:00+00:00"
+        }
+      }
+    },
+    "store_names": {
+      "900001": "合成示例门店"
+    },
+    "configured_store_ids": [
+      "900001"
+    ],
+    "unavailable_store_ids": [],
+    "cohort_id": "b792e694115de827e88fb379a0c23685bc6cb43e238734d3be6a96a59b572dc1",
+    "heatmap_semantics": "coverage_only_traffic_not_calibrated",
+    "actual_called_count": null,
+    "network_performed_by_read": false,
+    "eta_available": false,
+    "month": "2026-10"
+  },
+  "day_detail": {
+    "daily_schema_version": 1,
+    "source": "crm_remote_v1_1",
+    "requested_store_id": "900001",
+    "local_date": "2026-10-06",
+    "generated_at": "2026-10-06T12:02:05.000Z",
+    "summary": {
+      "observations": 3,
+      "successful_pairs": 3,
+      "failed_pairs": 0,
+      "scheduled_pause_slots": 0,
+      "recorded_http_attempts": 6,
+      "group_successes": 3,
+      "long_gap_boundaries": 0,
+      "run_boundaries": 0,
+      "first_observation_at": "2026-10-06T12:00:00+00:00",
+      "last_observation_at": "2026-10-06T12:02:00+00:00",
+      "display_removed_labels": {
+        "reservationQueue": 2,
+        "counterQueue": 4,
+        "boothQueue": 4,
+        "mixedQueue": 4,
+        "storeQueue": 4
+      },
+      "local_date": "2026-10-06",
+      "date_type": "holiday",
+      "calendar_status": "available",
+      "rule_scope": "default",
+      "source": "user_assumed",
+      "business_hours_verified": false,
+      "store_id": "900001",
+      "declared_intervals": [
+        [
+          "2026-10-06T02:30:00.000Z",
+          "2026-10-06T14:00:00.000Z"
+        ]
+      ],
+      "expected_background_slots_full_day": 690,
+      "expected_background_slots_so_far": 573,
+      "observed_background_slots": 3,
+      "observed_slot_fraction_so_far": 0.005235602094240838,
+      "slot_fraction_semantics": "successful_queue_response_in_declared_background_bin",
+      "returned_graph_points": 3,
+      "graph_truncated": false,
+      "actual_called_count": null,
+      "no_show_rate": null,
+      "count_unit": "unknown",
+      "full_source_arrays_persisted": true,
+      "source_freshness": "unknown"
+    },
+    "points": [
+      {
+        "request_started_at": "2026-10-06T12:00:00+00:00",
+        "queue_received_at": "2026-10-06T12:00:00+00:00",
+        "count_received_at": "2026-10-06T12:00:00+00:00",
+        "pair_ok": true,
+        "scheduled_pause": false,
+        "queues": {
+          "reservationQueue": [
+            "7000",
+            "7002",
+            "7001"
+          ],
+          "counterQueue": [
+            "0012",
+            "0011",
+            "0014"
+          ],
+          "boothQueue": [
+            "0012",
+            "0011",
+            "0014"
+          ],
+          "mixedQueue": [
+            "0012",
+            "0011",
+            "0014"
+          ],
+          "storeQueue": [
+            "0012",
+            "0011",
+            "0014"
+          ]
+        },
+        "call_reference_labels": {
+          "reservationQueue": "7000",
+          "counterQueue": "0012",
+          "boothQueue": "0012",
+          "mixedQueue": "0012",
+          "storeQueue": "0012"
+        },
+        "display_sizes": {
+          "reservationQueue": 3,
+          "counterQueue": 3,
+          "boothQueue": 3,
+          "mixedQueue": 3,
+          "storeQueue": 3
+        },
+        "count_raw": 0,
+        "comparison_state": "insufficient",
+        "interval_seconds": null,
+        "removed_labels": null,
+        "error_codes": {}
+      },
+      {
+        "request_started_at": "2026-10-06T12:01:00+00:00",
+        "queue_received_at": "2026-10-06T12:01:00+00:00",
+        "count_received_at": "2026-10-06T12:01:00+00:00",
+        "pair_ok": true,
+        "scheduled_pause": false,
+        "queues": {
+          "reservationQueue": [
+            "7001",
+            "7003",
+            "7002"
+          ],
+          "counterQueue": [
+            "0014",
+            "0016",
+            "0015"
+          ],
+          "boothQueue": [
+            "0014",
+            "0016",
+            "0015"
+          ],
+          "mixedQueue": [
+            "0014",
+            "0016",
+            "0015"
+          ],
+          "storeQueue": [
+            "0014",
+            "0016",
+            "0015"
+          ]
+        },
+        "call_reference_labels": {
+          "reservationQueue": "7001",
+          "counterQueue": "0014",
+          "boothQueue": "0014",
+          "mixedQueue": "0014",
+          "storeQueue": "0014"
+        },
+        "display_sizes": {
+          "reservationQueue": 3,
+          "counterQueue": 3,
+          "boothQueue": 3,
+          "mixedQueue": 3,
+          "storeQueue": 3
+        },
+        "count_raw": 0,
+        "comparison_state": "comparable_display_sets",
+        "interval_seconds": 60.0,
+        "removed_labels": {
+          "reservationQueue": 1,
+          "counterQueue": 2,
+          "boothQueue": 2,
+          "mixedQueue": 2,
+          "storeQueue": 2
+        },
+        "error_codes": {}
+      },
+      {
+        "request_started_at": "2026-10-06T12:02:00+00:00",
+        "queue_received_at": "2026-10-06T12:02:00+00:00",
+        "count_received_at": "2026-10-06T12:02:00+00:00",
+        "pair_ok": true,
+        "scheduled_pause": false,
+        "queues": {
+          "reservationQueue": [
+            "7002",
+            "7004",
+            "7003"
+          ],
+          "counterQueue": [
+            "0016",
+            "0017",
+            "0017"
+          ],
+          "boothQueue": [
+            "0016",
+            "0017",
+            "0017"
+          ],
+          "mixedQueue": [
+            "0016",
+            "0017",
+            "0017"
+          ],
+          "storeQueue": [
+            "0016",
+            "0017",
+            "0017"
+          ]
+        },
+        "call_reference_labels": {
+          "reservationQueue": "7002",
+          "counterQueue": "0016",
+          "boothQueue": "0016",
+          "mixedQueue": "0016",
+          "storeQueue": "0016"
+        },
+        "display_sizes": {
+          "reservationQueue": 3,
+          "counterQueue": 3,
+          "boothQueue": 3,
+          "mixedQueue": 3,
+          "storeQueue": 3
+        },
+        "count_raw": 0,
+        "comparison_state": "comparable_display_sets",
+        "interval_seconds": 60.0,
+        "removed_labels": {
+          "reservationQueue": 1,
+          "counterQueue": 2,
+          "boothQueue": 2,
+          "mixedQueue": 2,
+          "storeQueue": 2
+        },
+        "error_codes": {}
+      }
+    ],
+    "returned_graph_points": 3,
+    "graph_truncated": false,
+    "labels_per_array_in_graph": 3,
+    "full_source_arrays_persisted": true,
+    "call_reference_semantics": "user_assumed_first_displayed_label",
+    "first_label_is_confirmed_call": false,
+    "display_turnover_is_no_show_rate": false,
+    "actual_called_count": null,
+    "network_performed_by_read": false,
+    "eta_available": false
+  }
+}
