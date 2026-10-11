@@ -2,9 +2,10 @@
 # Enable only after supplier authorization and private material validation.
 [Unit]
 Description=SUSHIWAIT finite official cloud trial
-After=network-online.target docker.service
+After=network-online.target docker.service sushiwait-official-cloud-supplier.service
 Wants=network-online.target
 Requires=docker.service
+BindsTo=sushiwait-official-cloud-supplier.service
 
 [Service]
 Type=simple

@@ -40,6 +40,10 @@
 
 已准备[有限控制程序](../deploy/official_cloud_controller.py)：私有计划固定上述日期、门店、900秒和42次更新上限；每次供应前先保存不可覆盖的检查点，进程中断后保留未知更新结果，不能直接重新申请。首次启动用schema2设置，既有上下文更新用单独schema1设置；需要在首次扫码后分别制备 `bootstrap-settings.json` 和 `renewal-settings.json`。子采集在每次GET前另有营业门控，关门前16秒保守停止，父进程调度延迟也不能直接放行。原子读者等待完整新上下文，按原collection任务恢复，不补赶请求；失败保留halt。独立的[云内公共同步](../deploy/official_cloud_public_sync.py)只读取正常化记录，不接触凭证或外网；原三表归档完整提交后才保存游标，断线后的原公共包可以幂等核对。公开同步截止10月14日22:02，以便存下停止采集前已完成的记录，没有新增来源查询。
 
-两份systemd[采集模板](../deploy/official_cloud_trial.service.in)与[公共同步模板](../deploy/official_cloud_public_sync.service.in)已准备，未安装／启用；前者可按持久计划在开机后运行，后者使用独立网络命名空间。供应器的开机控制、扫码／私有配置制备、云端unit实测和实际页面接线仍待部署。合成控制、接收及真实SQLite归档／重放边界新增28项通过，连同原归档13项共41项通过；不是云重启或长期稳定性证明。
+systemd[采集模板](../deploy/official_cloud_trial.service.in)与[公共同步模板](../deploy/official_cloud_public_sync.service.in)已准备，未安装／启用；前者按持久计划运行，后者使用独立网络命名空间。E0463另补[供应器启动模板](../deploy/official_cloud_supplier.service.in)、[有限停止服务](../deploy/official_cloud_stop.service.in)与[到期定时器](../deploy/official_cloud_stop.timer.in)。启动调用已预拉取的固定Compose、不构建／拉取新镜像；会话目录保持，不能把模板存在当成云会话重启已通过。新的[时间守卫](../deploy/official_cloud_lifetime.py)拒绝三日试验之外的启动，只有服务器时钟正确才成立。固定UTC定时器在10-14 22:00北京时间停止新的采集及供应器，公开归档同步独立留到22:02，不删除会话、材料或已保存数据。
+
+供应器service通过root访问Docker，本机不执行该模板；云端安装仍在本次具体软件／账号访问授权范围内。采集使用BindsTo和After关联供应器，供应服务停止时停止采集；供应器不循环自动重启。定时器Persistent保留错过的停止任务，不能代替逐GET营业保护或正确时钟。语义依据systemd项目的[unit文档](https://raw.githubusercontent.com/systemd/systemd/main/man/systemd.unit.xml)、[timer文档](https://raw.githubusercontent.com/systemd/systemd/main/man/systemd.timer.xml)与[service文档](https://raw.githubusercontent.com/systemd/systemd/main/man/systemd.service.xml)。实际云端须先确认`docker compose`及固定镜像，再执行`systemd-analyze verify`、`systemd-analyze calendar`，核对四个service和停止timer的关联、实际期限与启用状态；尚未做这些实测。
+
+扫码／私有配置制备、云端unit实测和实际页面接线仍待部署。合成控制、接收及真实SQLite归档／重放边界新增28项、原归档13项共41项已通过；E0463另有2项启动时间边界检查通过，未为纯模板重复旧全套。不是云重启或长期稳定性证明。
 
 接入原三表公共归档和统计页后，要取得电脑离线仍有新记录、同一云读者跨真实声明期限、云会话／来源重启恢复的证据。真实安装和观察尚未完成，不能把准备文件或合成检查写成已经独立采集。详见[阶段目标](CLOUD_OFFICIAL_SUPPLY_PLAN.md)和[四板块交接](PROJECT_HANDOVER.md)。

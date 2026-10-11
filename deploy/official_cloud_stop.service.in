@@ -1,0 +1,15 @@
+# Prepared only. Stop the two new trial units; preserve their private files,
+# persistent session directory, containers, public archive and old services.
+[Unit]
+Description=Stop the finite SUSHIWAIT official cloud trial
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl stop sushiwait-official-cloud-trial.service sushiwait-official-cloud-supplier.service
+TimeoutStartSec=180
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX

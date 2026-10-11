@@ -1,0 +1,42 @@
+# Prepared only. Install after the owner approves this cloud supplier session.
+# @ROOT@ is the same approved private root as the collector, not the Mac root.
+# Pull the pinned image explicitly first; this service never builds or pulls.
+[Unit]
+Description=SUSHIWAIT finite cloud supplier with private persistent session
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service sushiwait-official-cloud-stop.timer
+Before=sushiwait-official-cloud-trial.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=root
+WorkingDirectory=@ROOT@
+ExecStartPre=@ROOT@/venv/bin/python3 -I @ROOT@/official_cloud_lifetime.py
+ExecStart=/usr/bin/docker compose --env-file @ROOT@/supplier.env --project-name sushiwait-official-e0462 -f @ROOT@/yyb_cloud_trial.compose.yaml up --detach --no-build --pull never
+ExecStop=/usr/bin/docker compose --env-file @ROOT@/supplier.env --project-name sushiwait-official-e0462 -f @ROOT@/yyb_cloud_trial.compose.yaml stop --timeout 30
+ExecStopPost=/usr/bin/docker compose --env-file @ROOT@/supplier.env --project-name sushiwait-official-e0462 -f @ROOT@/yyb_cloud_trial.compose.yaml stop --timeout 30
+Restart=no
+UMask=0077
+TimeoutStartSec=90
+TimeoutStopSec=90
+# Compose errors may include interpolated private configuration. Inspect only
+# explicitly selected container metadata after deployment, never raw logs.
+StandardOutput=null
+StandardError=null
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+MemoryMax=256M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

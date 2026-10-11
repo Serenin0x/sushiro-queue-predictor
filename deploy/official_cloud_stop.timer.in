@@ -1,0 +1,13 @@
+# Prepared only. UTC makes this independent of the server's display timezone.
+[Unit]
+Description=Finite official cloud trial deadline: Oct 14 22:00 China time
+
+[Timer]
+OnCalendar=2026-10-14 14:00:00 UTC
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=true
+Unit=sushiwait-official-cloud-stop.service
+
+[Install]
+WantedBy=timers.target
