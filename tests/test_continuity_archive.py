@@ -209,3 +209,14 @@ class ContinuityArchiveTests(unittest.TestCase):
                 with self.assertRaises(ReceiptError):self.append()
                 self.assertEqual(before,self.database.read_bytes())
                 self.database.unlink();self.append()
+
+    def test_completed_anchor_cannot_create_cycle_between_valid_individual_pages(self):
+        self.append(self.bundle(after_id=1))
+        first=self.bundle(limit=1);second=self.bundle()['packet']['records'][1]
+        first['anchors']=[{'record':second,'writer_id':self.bundle()['links'][1]['writer_id']}]
+        first['links'][0].update(predecessor_id=second['observation_id'],predecessor_sha256=second['record_sha256'],
+            predecessor_writer_id=first['anchors'][0]['writer_id']);self.rehash(first['links'][0])
+        validate_continuity_bundle(first,as_of=AT)
+        before=self.database.read_bytes()
+        with self.assertRaisesRegex(ReceiptError,'continuity_archive_graph_cycle'):self.append(first)
+        self.assertEqual(before,self.database.read_bytes())

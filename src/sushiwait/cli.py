@@ -950,6 +950,18 @@ def build_parser() -> argparse.ArgumentParser:
         receipt.add_argument("--with-continuity", action="store_true", help="明确选择独立关联包／关联归档；不升级旧库")
         if name == "packet-archive":
             receipt.add_argument("--db", required=True, help="独立私有归档库schema1，不能用快照/个人结果库")
+    for name, description in (("official-archive-backup", "给明确的新关联归档创建完整私有快照；不联网"),
+                              ("official-archive-backup-check", "逐项只读核对关联快照；不认证来源或采集状态"),
+                              ("official-archive-restore", "把完整关联快照恢复到新私有目录；不启动采集")):
+        backup = commands.add_parser(name, help=description)
+        if name == "official-archive-backup":
+            backup.add_argument("--view-file", required=True, help="明确七字段关联归档配置；不读取查询凭证")
+        else:
+            backup.add_argument("--input", required=True, help="已有0700快照目录")
+            backup.add_argument("--as-of", help="核对截止时刻；默认当前UTC")
+        if name != "official-archive-backup-check":
+            backup.add_argument("--output", required=True, help="已有0700父目录中的新目录，拒绝覆盖")
+        backup.add_argument("--seconds", type=int, default=30, help="1–30秒，最大64MiB／20000记录／1000整包")
     for name, description in (("packet-enqueue", "保存公共字段包到有界私有待确认目录；不上传或删除"),
                               ("pending-status", "只读校验私有待确认目录并输出聚合数量；不上传")):
         pending = commands.add_parser(name, help=description)
@@ -1934,6 +1946,20 @@ def main(argv: list[str] | None = None) -> int:
                       "durability_confirmed":False,"server_received":False,
                       "network_performed":False,"credentials_accessed":False})
                 return 1
+        if args.command in ("official-archive-backup", "official-archive-backup-check", "official-archive-restore"):
+            from .continuitybackup import ContinuityBackupError, snapshot_archive, verify_snapshot, restore_snapshot
+            try:
+                if args.command == "official-archive-backup":
+                    result = snapshot_archive(args.view_file, args.output, clock=_utc_clock, seconds=args.seconds)
+                elif args.command == "official-archive-backup-check":
+                    result = verify_snapshot(args.input, as_of=args.as_of or _utc_clock().isoformat(), seconds=args.seconds)
+                else:
+                    result = restore_snapshot(args.input, args.output, as_of=args.as_of or _utc_clock().isoformat(), seconds=args.seconds)
+                emit({'ok':True, **result});return 0
+            except ContinuityBackupError as error:
+                emit({'ok':False,'error_code':error.error_code,'output_may_exist':error.output_may_exist,
+                      'durability_confirmed':False,'network_performed':False,'origin_queries_added':0,
+                      'query_credentials_accessed':False,'writer_started':False});return 1
         if args.command in ("packet-check", "packet-archive"):
             from .continuity import ContinuityError, read_continuity_bundle
             try:

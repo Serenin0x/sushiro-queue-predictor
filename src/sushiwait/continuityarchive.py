@@ -11,10 +11,11 @@ import os
 import sqlite3
 
 from .capture import CaptureError
-from .continuity import SEMANTICS, _uuid5, read_continuity_bundle, validate_continuity_bundle
+from .continuity import SEMANTICS, _LINK_KEYS, _uuid5, read_continuity_bundle, validate_continuity_bundle
 from .monitoring import _stamp, _time
 from .packets import encoded
 from .receipts import PacketArchive, ReceiptError, _CREATE
+from .storage import _unique_object
 
 _CLAIMS = ('CREATE TABLE continuity_claims(observation_id TEXT PRIMARY KEY NOT NULL,'
     'writer_id TEXT NOT NULL,link_sha256 TEXT,link_json TEXT,claimed_at TEXT NOT NULL,linked_at TEXT,'
@@ -72,6 +73,7 @@ class ContinuityArchive(PacketArchive):
             inserted, duplicates = self._insert_records(list(records.values()), as_of=at)
             # Declare all aliases before inserting links, including anchors
             # whose full link may arrive in a later page. An alias is immutable.
+            existing_aliases=set()
             for identity, alias in writers.items():
                 claim = self.db.execute('SELECT writer_id,claimed_at,linked_at,link_sha256,link_json '
                                         'FROM continuity_claims WHERE observation_id=?',
@@ -80,6 +82,7 @@ class ContinuityArchive(PacketArchive):
                     self.db.execute('INSERT INTO continuity_claims VALUES(?,?,NULL,NULL,?,NULL)',
                                     [identity, alias, at])
                 else:
+                    existing_aliases.add(identity)
                     if claim[0] != alias:
                         raise ReceiptError('continuity_archive_writer_conflict')
                     if (_stamp(_time(claim[1])) != claim[1] or _time(claim[1]) > _time(at)
@@ -90,6 +93,7 @@ class ContinuityArchive(PacketArchive):
                             or (claim[2] is None) != (claim[4] is None)):
                         raise ReceiptError('continuity_archive_incomplete_claim')
             new_links = duplicate_links = 0
+            completed_anchors=[]
             for link in safe['links']:
                 raw = encoded(link).decode('utf8')
                 current = self.db.execute('SELECT link_sha256,link_json FROM continuity_claims WHERE observation_id=?',
@@ -98,10 +102,13 @@ class ContinuityArchive(PacketArchive):
                     self.db.execute('UPDATE continuity_claims SET link_sha256=?,link_json=?,linked_at=? WHERE observation_id=?',
                                     [link['link_sha256'], raw, at, link['observation_id']])
                     new_links += 1
+                    if link['observation_id'] in existing_aliases:
+                        completed_anchors.append(link['observation_id'])
                 elif current == (link['link_sha256'], raw):
                     duplicate_links += 1
                 else:
                     raise ReceiptError('continuity_archive_link_conflict')
+            self._check_completed_anchor_cycles(completed_anchors)
             if existing is None:
                 self.db.execute('INSERT INTO continuity_bundles VALUES(?,?,?)', [digest, body, at])
             self._guard()
@@ -127,6 +134,37 @@ class ContinuityArchive(PacketArchive):
         except (ValueError, TypeError, OverflowError):
             self.db.rollback()
             raise ReceiptError('continuity_archive_invalid_existing_claim', commit_status=status) from None
+
+    def _check_completed_anchor_cycles(self, identities):
+        """New identities cannot be old predecessors; completed anchors can.
+
+        Check those newly completed paths inside the same transaction. A
+        finite 20000-node traversal bound fails explicitly rather than making
+        an unbounded history scan or accepting an unchecked long path.
+        """
+        finished=set()
+        for identity in identities:
+            current=identity;trail=set()
+            while current is not None and current not in finished:
+                if current in trail:
+                    raise ReceiptError('continuity_archive_graph_cycle')
+                if len(trail)>=20000:
+                    raise ReceiptError('continuity_archive_graph_bound')
+                trail.add(current)
+                row=self.db.execute('SELECT link_sha256,CASE WHEN length(CAST(link_json AS BLOB))<=4096 '
+                    'THEN link_json END FROM continuity_claims WHERE observation_id=?',[current]).fetchone()
+                if row is None:
+                    raise ReceiptError('continuity_archive_missing_predecessor')
+                if row==(None,None):break
+                link=json.loads(row[1],object_pairs_hook=_unique_object,
+                    parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                if (type(link) is not dict or set(link)!=_LINK_KEYS or link['observation_id']!=current
+                        or link['link_sha256']!=row[0] or encoded(link).decode()!=row[1]
+                        or hashlib.sha256(encoded({k:v for k,v in link.items() if k!='link_sha256'})).hexdigest()!=row[0]):
+                    raise ReceiptError('continuity_archive_invalid_existing_link')
+                current=link['predecessor_id']
+                if current is not None:_uuid5(current)
+            finished.update(trail)
 
 
 def singleton_bundle(db, record, *, packet):

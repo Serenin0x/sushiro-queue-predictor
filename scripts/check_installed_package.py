@@ -2048,6 +2048,17 @@ def check_continuity_archive_install(root, bundle, hours, as_of):
     value=read_config(config).read('/api/v1/official/stores/900001/days/2026-10-10',now=now)
     assert value['summary']['observations']==2 and value['points'][1]['comparison_state']=='comparable_display_sets'
     assert value['points'][1]['removed_labels']['mixedQueue']==2 and value['summary']['no_show_rate'] is None
+    from sushiwait.continuitybackup import snapshot_archive, verify_snapshot, restore_snapshot
+    copied=snapshot_archive(config,root/'snapshot',clock=lambda:now)
+    checked=verify_snapshot(root/'snapshot',as_of=as_of)
+    restored=restore_snapshot(root/'snapshot',root/'restored',as_of=as_of)
+    assert copied['records']==2 and copied['linked_observations']==1
+    assert checked['snapshot_validated'] and restored['durability_confirmed'] and not restored['writer_started']
+    assert (root/'snapshot/archive.sqlite3').read_bytes()==(root/'restored/archive.sqlite3').read_bytes()
+    from sushiwait.continuityview import ContinuityStatisticsView
+    recovered=ContinuityStatisticsView(root/'restored/archive.sqlite3',store_names={'900001':'Synthetic'},
+        data_origin='synthetic',hours=hours,base_interval=900)
+    assert recovered.read('/api/v1/official/stores/900001/days/2026-10-10',now=now)['points'][1]['comparison_state']=='comparable_display_sets'
     output=io.StringIO()
     with contextlib.redirect_stdout(output):
         assert main(['packet-archive','--input',str(source),'--db',str(root/'cli-archive.sqlite3'),
@@ -2056,6 +2067,8 @@ def check_continuity_archive_install(root, bundle, hours, as_of):
     print(json.dumps({'installed_continuity_archive_and_transport_ok':True,
         'synthetic_subprocess_receiver':True,'real_ssh_authentication_verified':False,
         'source_queries':0,'query_credentials_accessed':False,'cloud_continuity_deployment_verified':False}))
+    print(json.dumps({'installed_continuity_full_backup_restore_ok':True,'restored_original_bytes_identical':True,
+        'all_records_and_relations_audited':True,'writer_started':False,'offsite_location_verified':False}))
 
 
 if __name__ == "__main__":
