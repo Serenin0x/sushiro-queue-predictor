@@ -2011,8 +2011,51 @@ def check_continuity_install(hours, as_of):
                     '--store-id','900001','--api-profile','miniapp_gateway','--data-origin','synthetic',
                     '--as-of',as_of,'--with-continuity'])==0
             assert json.loads(output.getvalue())['continuity_schema_version']==1
+            check_continuity_archive_install(root, bundle, hours, as_of)
     print(json.dumps({'installed_continuity_export_ok':True,'unchanged_v1_records':True,
                       'network_performed':False,'credentials_accessed':False}))
+
+
+def check_continuity_archive_install(root, bundle, hours, as_of):
+    from sushiwait.officialview import read_config
+    from sushiwait.packets import encoded
+    from sushiwait.sshrelay import deliver_public_packet, check_public_confirmation
+    for name in ('bundles','packets'):(root/name).mkdir(mode=0o700)
+    def save(name,value):
+        file=root/name;file.write_bytes(value if isinstance(value,bytes) else encoded(value));file.chmod(0o600)
+        return file
+    source=save('public-continuity.json',bundle)
+    key=save('key',b'SYNTHETIC_KEY');hosts=save('hosts',b'SYNTHETIC_PIN')
+    config=save('view.json',{'schema_version':1,'mode':'official_packet_archive_with_continuity',
+        'database_file':str(root/'new-archive.sqlite3'),'store_names':{'900001':'Synthetic'},
+        'data_origin':'synthetic','hours':hours,'base_interval':900})
+    code=('import sys,json;from datetime import datetime;'
+        'from sushiwait.continuitytransport import receive_public_bundle,COMMAND;'
+        'print(json.dumps(receive_public_bundle(sys.stdin.buffer.read(),'+repr(str(config))+
+        ',original_command=COMMAND,now=datetime.fromisoformat('+repr(as_of.replace('Z','+00:00'))+'))))')
+    args=[]
+    def child(argv,**kwargs):
+        args.append(argv)
+        return subprocess.Popen([sys.executable,'-I','-u','-c',code],**kwargs)
+    now=datetime.fromisoformat(as_of.replace('Z','+00:00'));confirmation=root/'received.json'
+    result=deliver_public_packet(source,ssh_key_file=key,known_hosts_file=hosts,
+        target='test_operator@192.0.2.10',confirmation_file=confirmation,clock=lambda:now,
+        with_continuity=True,_spawn=child)
+    assert result['inserted_records']==2 and result['inserted_links']==1
+    assert result['durability_confirmed'] and args[0][-1]=='sushiwait-official-continuity-v1'
+    checked=check_public_confirmation(source,confirmation,as_of=as_of,with_continuity=True)
+    assert checked['confirmed_links']==1 and checked['confirmed_records_including_anchors']==2
+    value=read_config(config).read('/api/v1/official/stores/900001/days/2026-10-10',now=now)
+    assert value['summary']['observations']==2 and value['points'][1]['comparison_state']=='comparable_display_sets'
+    assert value['points'][1]['removed_labels']['mixedQueue']==2 and value['summary']['no_show_rate'] is None
+    output=io.StringIO()
+    with contextlib.redirect_stdout(output):
+        assert main(['packet-archive','--input',str(source),'--db',str(root/'cli-archive.sqlite3'),
+            '--with-continuity'])==0
+    assert json.loads(output.getvalue())['inserted_links']==1
+    print(json.dumps({'installed_continuity_archive_and_transport_ok':True,
+        'synthetic_subprocess_receiver':True,'real_ssh_authentication_verified':False,
+        'source_queries':0,'query_credentials_accessed':False,'cloud_continuity_deployment_verified':False}))
 
 
 if __name__ == "__main__":

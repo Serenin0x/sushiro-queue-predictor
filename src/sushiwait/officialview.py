@@ -48,15 +48,20 @@ def read_config(path):
         if (type(value) is not dict or set(value) != {'schema_version', 'mode',
                 'database_file', 'store_names', 'data_origin', 'hours', 'base_interval'}
                 or type(value['schema_version']) is not int or value['schema_version'] != 1
-                or value['mode'] != 'official_packet_archive_readonly'):
+                or value['mode'] not in {'official_packet_archive_readonly', 'official_packet_archive_with_continuity'}):
             raise ValueError
-        return OfficialStatisticsView(value['database_file'], store_names=value['store_names'],
+        kind = OfficialStatisticsView
+        if value['mode'] == 'official_packet_archive_with_continuity':
+            from .continuityview import ContinuityStatisticsView
+            kind = ContinuityStatisticsView
+        return kind(value['database_file'], store_names=value['store_names'],
             data_origin=value['data_origin'], hours=value['hours'], base_interval=value['base_interval'])
     except Exception:
         raise OfficialViewError('official_view_invalid_config') from None
 
 
 class OfficialStatisticsView:
+    _schema = (_CREATE,)
     def __init__(self, database, *, store_names, data_origin, hours, base_interval=60):
         try:
             if (not isinstance(database, (str, Path)) or not Path(database).is_absolute()
@@ -114,6 +119,10 @@ class OfficialStatisticsView:
                 or _file_identity(named) != identity or _file_identity(opened) != identity):
             raise OfficialViewError('official_view_database_changed')
 
+    def _project(self, db, packet, store, now):
+        return project_packet(packet, as_of=_stamp(now), hours=self.hours,
+            base_interval=self.base_interval, store_names={store:self.names[store]})
+
     def _day(self, db, store, day, now):
         # UTC canonical strings have a uniform date/time prefix. Boundary
         # prefixes omit Z so .microseconds and whole seconds compare correctly.
@@ -137,8 +146,7 @@ class OfficialStatisticsView:
                     or _stamp(_time(row[7])) != row[7] or _time(row[7]) > now):
                 raise OfficialViewError('official_view_archive_record_mismatch')
             packet['records'].append(record)
-        projection = project_packet(packet, as_of=_stamp(now), hours=self.hours,
-            base_interval=self.base_interval, store_names={store:self.names[store]})
+        projection = self._project(db, packet, store, now)
         if set(projection['days']) != {(store, day)}:
             raise OfficialViewError('official_view_date_mismatch')
         result = projection['days'][(store, day)]
@@ -169,9 +177,10 @@ class OfficialStatisticsView:
             db.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
             db.execute('BEGIN')
             objects = db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchall()
-            if (db.execute('PRAGMA user_version').fetchone()[0] != 1 or len(objects) != 1
-                    or objects[0][:2] != ('table','archive_records')
-                    or ' '.join(objects[0][2].split()) != ' '.join(_CREATE.split())
+            if (db.execute('PRAGMA user_version').fetchone()[0] != 1
+                    or any(item[0] != 'table' for item in objects)
+                    or sorted(' '.join(item[2].split()) for item in objects)
+                    != sorted(' '.join(statement.split()) for statement in self._schema)
                     or db.execute('PRAGMA journal_mode').fetchone()[0] != 'delete'):
                 raise OfficialViewError('official_view_database_schema')
             match = _DAY.fullmatch(path)

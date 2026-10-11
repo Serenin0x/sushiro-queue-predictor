@@ -151,6 +151,11 @@ def validate_packet(packet, *, as_of):
 
 
 def read_packet(path, *, as_of):
+    return validate_packet(_read_packet_value(path), as_of=as_of)
+
+
+def _read_packet_value(path):
+    """Bounded private JSON loader shared by explicit public packet formats."""
     parent_fd = file_fd = None
     try:
         parent_fd,name = _open_parent(path,private=True)
@@ -174,7 +179,7 @@ def read_packet(path, *, as_of):
             raise ReceiptError('packet_input_changed')
         value = json.loads(body.decode('utf8'),object_pairs_hook=_unique_object,
                            parse_constant=_reject_constant)
-        return validate_packet(value,as_of=as_of)
+        return value
     except ReceiptError:
         raise
     except (CaptureError, OSError, ValueError, TypeError, UnicodeError, RecursionError):
@@ -198,6 +203,7 @@ def packet_summary(packet):
 
 class PacketArchive:
     """One private local database, advisory directory lock, transactional batches."""
+    _schema = (_CREATE,)
     def __init__(self,path):
         self.parent_fd = self.db = None
         try:
@@ -219,9 +225,13 @@ class PacketArchive:
             version = self.db.execute('PRAGMA user_version').fetchone()[0]
             objects = self.db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchall()
             if version == 0 and not objects:
-                self.db.execute('BEGIN IMMEDIATE');self.db.execute(_CREATE)
+                self.db.execute('BEGIN IMMEDIATE')
+                for statement in self._schema:
+                    self.db.execute(statement)
                 self.db.execute('PRAGMA user_version=1');self.db.commit()
-            elif version != 1 or len(objects) != 1 or objects[0][:2] != ('table','archive_records') or ' '.join(objects[0][2].split()) != ' '.join(_CREATE.split()):
+            elif (version != 1 or any(item[0] != 'table' for item in objects)
+                    or sorted(' '.join(item[2].split()) for item in objects)
+                    != sorted(' '.join(statement.split()) for statement in self._schema)):
                 raise ReceiptError('archive_database_schema')
             if self.db.execute('PRAGMA journal_mode').fetchone()[0] != 'delete':
                 raise ReceiptError('archive_database_schema')
@@ -245,20 +255,7 @@ class PacketArchive:
         records = packet['records'];inserted = duplicates = 0;commit_status = 'not_started'
         try:
             self._guard();self.db.execute('BEGIN IMMEDIATE')
-            for record in records:
-                body = encoded(record).decode('utf8')
-                previous = self.db.execute('SELECT record_sha256,record_json FROM archive_records WHERE observation_id=?',
-                                           [record['observation_id']]).fetchone()
-                if previous is not None:
-                    if previous != (record['record_sha256'],body):
-                        raise ReceiptError('archive_observation_conflict')
-                    duplicates += 1
-                else:
-                    self.db.execute('INSERT INTO archive_records VALUES(?,?,?,?,?,?,?,?,?)',
-                        [record['observation_id'],record['record_sha256'],record['store_id'],
-                         record['api_profile'],record['data_origin'],record['recorded_at'],
-                         int(record['ok']),_stamp(_time(as_of)),body])
-                    inserted += 1
+            inserted, duplicates = self._insert_records(records, as_of=as_of)
             self._guard()
             commit_status = 'unknown'
             self.db.commit()
@@ -277,6 +274,25 @@ class PacketArchive:
             self.db.rollback()
             raise ReceiptError('archive_commit_unconfirmed' if commit_status != 'not_started'
                                else 'archive_database_error',commit_status=commit_status) from None
+
+    def _insert_records(self, records, *, as_of):
+        """Inside the caller's transaction, after complete boundary validation."""
+        inserted = duplicates = 0
+        for record in records:
+            body = encoded(record).decode('utf8')
+            previous = self.db.execute('SELECT record_sha256,record_json FROM archive_records WHERE observation_id=?',
+                                       [record['observation_id']]).fetchone()
+            if previous is not None:
+                if previous != (record['record_sha256'],body):
+                    raise ReceiptError('archive_observation_conflict')
+                duplicates += 1
+            else:
+                self.db.execute('INSERT INTO archive_records VALUES(?,?,?,?,?,?,?,?,?)',
+                    [record['observation_id'],record['record_sha256'],record['store_id'],
+                     record['api_profile'],record['data_origin'],record['recorded_at'],
+                     int(record['ok']),_stamp(_time(as_of)),body])
+                inserted += 1
+        return inserted, duplicates
 
     def close(self):
         if self.db is not None:

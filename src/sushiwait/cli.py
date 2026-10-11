@@ -947,6 +947,7 @@ def build_parser() -> argparse.ArgumentParser:
                               ("packet-archive", "事务归档公共字段包，重复不新增、冲突整批停止；不启动服务器")):
         receipt = commands.add_parser(name, help=description)
         receipt.add_argument("--input", required=True, help="明确私有0600或0400 JSON/0700目录，最多4MiB")
+        receipt.add_argument("--with-continuity", action="store_true", help="明确选择独立关联包／关联归档；不升级旧库")
         if name == "packet-archive":
             receipt.add_argument("--db", required=True, help="独立私有归档库schema1，不能用快照/个人结果库")
     for name, description in (("packet-enqueue", "保存公共字段包到有界私有待确认目录；不上传或删除"),
@@ -968,10 +969,12 @@ def build_parser() -> argparse.ArgumentParser:
     relay.add_argument("--target", required=True, help="明确的SSH用户@IPv4或域名，端口22")
     relay.add_argument("--confirmation-file", required=True, help="新的私有回执文件，拒绝覆盖；不推进采集游标")
     relay.add_argument("--timeout", type=int, default=30, help="1–60秒，输出最多256KiB；超时保留原包")
+    relay.add_argument("--with-continuity", action="store_true", help="明确发送关联包；要求独立新接收模式")
     relay_check = commands.add_parser("packet-confirmation-ssh", help="离线核对公共包的历史SSH回执；不联网、不读key、不推进游标")
     relay_check.add_argument("--input", required=True, help="原私有公共字段包")
     relay_check.add_argument("--confirmation-file", required=True, help="私有历史SSH确认文件")
     relay_check.add_argument("--as-of", help="明确核对截止时刻；默认当前UTC")
+    relay_check.add_argument("--with-continuity", action="store_true", help="明确核对关联包与版本2回执")
     deliver = commands.add_parser("packet-deliver-local", help="仅投递127.0.0.1并保存核对过的签名回执；不删除原包")
     deliver.add_argument("--input", required=True, help="明确的私有公共字段包")
     deliver.add_argument("--receiver-token-file", required=True, help="独立私有接收端口令；不能使用查询凭证")
@@ -1874,11 +1877,12 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 if args.command == "packet-confirmation-ssh":
                     emit(check_public_confirmation(args.input, args.confirmation_file,
-                        as_of=args.as_of or _utc_clock().isoformat()))
+                        as_of=args.as_of or _utc_clock().isoformat(), with_continuity=args.with_continuity))
                     return 0
                 emit(deliver_public_packet(args.input, ssh_key_file=args.ssh_key_file,
                     known_hosts_file=args.known_hosts_file, target=args.target,
-                    confirmation_file=args.confirmation_file, timeout=args.timeout))
+                    confirmation_file=args.confirmation_file, timeout=args.timeout,
+                    with_continuity=args.with_continuity))
                 return 0
             except SSHRelayError as error:
                 emit({'ok':False, 'error_code':error.error_code,
@@ -1931,18 +1935,28 @@ def main(argv: list[str] | None = None) -> int:
                       "network_performed":False,"credentials_accessed":False})
                 return 1
         if args.command in ("packet-check", "packet-archive"):
+            from .continuity import ContinuityError, read_continuity_bundle
             try:
                 now = _utc_clock()
-                if args.command == "packet-check":
+                if args.with_continuity:
+                    if args.command == "packet-check":
+                        bundle = read_continuity_bundle(args.input, as_of=now.isoformat())
+                        result = {**packet_summary(bundle['packet']), 'validation_only':True,
+                            'continuity_schema_version':1, 'anchor_records':len(bundle['anchors']),
+                            'linked_observations':len(bundle['links'])}
+                    else:
+                        from .continuityarchive import archive_bundle_file
+                        result = archive_bundle_file(args.input, args.db, as_of=now.isoformat())
+                elif args.command == "packet-check":
                     result = packet_summary(read_packet(args.input, as_of=now.isoformat()))
                     result["validation_only"] = True
                 else:
                     result = archive_packet(args.input, args.db, now=now)
                 emit({"ok":True, **result})
                 return 0
-            except ReceiptError as error:
+            except (ReceiptError, ContinuityError) as error:
                 emit({"ok":False, "error_code":error.error_code,
-                      "local_archive_commit_status":error.commit_status,
+                      "local_archive_commit_status":getattr(error,'commit_status','not_started'),
                       "durability_confirmed":False,"network_performed":False,
                       "credentials_accessed":False,"server_received":False})
                 return 1

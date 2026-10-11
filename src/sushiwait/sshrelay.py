@@ -97,7 +97,7 @@ def _guarded_file(path, maximum):
                 os.close(fd)
 
 
-def _argv(target, key_file, known_hosts_file):
+def _argv(target, key_file, known_hosts_file, command=COMMAND):
     # OpenSSH parses -o values as configuration text, including its quoting.
     pinned = '"' + str(known_hosts_file).replace('\\', '\\\\').replace('"', '\\"') + '"'
     options = {'BatchMode': 'yes', 'IdentitiesOnly': 'yes', 'IdentityAgent': 'none',
@@ -110,7 +110,7 @@ def _argv(target, key_file, known_hosts_file):
     args = ['/usr/bin/ssh', '-F', '/dev/null', '-T', '-i', str(key_file)]
     for key, value in options.items():
         args += ['-o', key + '=' + value]
-    return [*args, target, COMMAND]
+    return [*args, target, command]
 
 
 def _exchange(process, body, timeout):
@@ -180,7 +180,8 @@ def _close(process):
 
 
 def deliver_public_packet(packet_file, *, ssh_key_file, known_hosts_file, target,
-                          confirmation_file, timeout=30, clock=None, _spawn=None):
+                          confirmation_file, timeout=30, clock=None, _spawn=None,
+                          with_continuity=False):
     """Deliver once, verify an exact durable receipt, then save it locally.
 
     The operator must separately approve the destination and configure a
@@ -190,7 +191,7 @@ def deliver_public_packet(packet_file, *, ssh_key_file, known_hosts_file, target
     clock = clock or (lambda: datetime.now(timezone.utc))
     process, attempted, write_attempted = None, False, False
     try:
-        if (os.name != 'posix' or type(timeout) not in (int, float)
+        if (os.name != 'posix' or type(with_continuity) is not bool or type(timeout) not in (int, float)
                 or not math.isfinite(timeout) or not 1 <= timeout <= 60):
             raise SSHRelayError('ssh_relay_invalid_bounds')
         destination = _target(target)
@@ -211,14 +212,20 @@ def deliver_public_packet(packet_file, *, ssh_key_file, known_hosts_file, target
                 pass
             else:
                 raise SSHRelayError('ssh_relay_confirmation_exists')
-            packet = read_packet(source, as_of=now.isoformat())
+            reader, validator, command = read_packet, validate_receipt, COMMAND
+            if with_continuity:
+                from .continuity import read_continuity_bundle
+                from .continuitytransport import COMMAND as BUNDLE_COMMAND, validate_bundle_receipt
+                reader, validator, command = read_continuity_bundle, validate_bundle_receipt, BUNDLE_COMMAND
+            value = reader(source, as_of=now.isoformat())
+            packet = value['packet'] if with_continuity else value
             if packet['api_profile'] != 'miniapp_gateway' or not packet['records']:
                 raise SSHRelayError('ssh_relay_invalid_packet_scope')
             for check, _ in guards:
                 check()
-            body = encoded(packet)
+            body = encoded(value)
             spawn = subprocess.Popen if _spawn is None else _spawn
-            process = spawn(_argv(destination, key_file, hosts_file),
+            process = spawn(_argv(destination, key_file, hosts_file, command),
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             attempted = True
             raw = _exchange(process, body, timeout)
@@ -227,7 +234,7 @@ def deliver_public_packet(packet_file, *, ssh_key_file, known_hosts_file, target
             try:
                 receipt = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique_object,
                     parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-                validate_receipt(receipt, packet)
+                validator(receipt, value)
             except Exception:
                 raise SSHRelayError('ssh_relay_receipt_mismatch') from None
             acknowledged = _time(clock().isoformat())
@@ -240,13 +247,18 @@ def deliver_public_packet(packet_file, *, ssh_key_file, known_hosts_file, target
             written = _write_packet(encoded(confirmation_body), confirmation)
             if written['durability_confirmed'] is not True:
                 raise SSHRelayError('ssh_relay_local_confirmation_unconfirmed')
-        return {'ok': True, 'network_attempted': True, 'server_archive_commit_confirmed': True,
+        result = {'ok': True, 'network_attempted': True, 'server_archive_commit_confirmed': True,
                 'confirmation_saved': True, 'durability_confirmed': True,
                 'packet_sha256': receipt['packet_sha256'], 'records': len(packet['records']),
                 'inserted_records': receipt['inserted_records'],
                 'duplicate_records': receipt['duplicate_records'],
                 'original_packet_preserved': True, 'query_credentials_accessed': False,
                 'source_claims_verified': False, 'retry_performed': False}
+        if with_continuity:
+            result.update(bundle_sha256=receipt['bundle_sha256'],
+                records_including_anchors=len(receipt['observations']), links=len(receipt['links']),
+                inserted_links=receipt['inserted_links'], duplicate_links=receipt['duplicate_links'])
+        return result
     except SSHRelayError as error:
         raise SSHRelayError(error.error_code, network_attempted=attempted,
                             local_confirmation_may_exist=write_attempted) from None
@@ -257,13 +269,15 @@ def deliver_public_packet(packet_file, *, ssh_key_file, known_hosts_file, target
         _close(process)
 
 
-def check_public_confirmation(packet_file, confirmation_file, *, as_of):
+def check_public_confirmation(packet_file, confirmation_file, *, as_of, with_continuity=False):
     """Recheck a saved exact receipt without SSH, key access or cursor changes.
 
     This establishes historical correspondence only. It cannot prove that the
     current server still retains the archive or authenticate a new connection.
     """
     try:
+        if type(with_continuity) is not bool:
+            raise SSHRelayError('ssh_relay_invalid_bounds')
         current = _time(as_of)
         source, confirmation = [_path(p) for p in (packet_file, confirmation_file)]
         if source == confirmation:
@@ -271,7 +285,13 @@ def check_public_confirmation(packet_file, confirmation_file, *, as_of):
         with ExitStack() as stack:
             guards = [stack.enter_context(_guarded_file(p, size)) for p, size in
                 ((source, 4 * 1024 * 1024), (confirmation, MAX_REPLY_BYTES + 1024))]
-            packet = read_packet(source, as_of=_stamp(current))
+            reader, validator = read_packet, validate_receipt
+            if with_continuity:
+                from .continuity import read_continuity_bundle
+                from .continuitytransport import validate_bundle_receipt
+                reader, validator = read_continuity_bundle, validate_bundle_receipt
+            source_value = reader(source, as_of=_stamp(current))
+            packet = source_value['packet'] if with_continuity else source_value
             if packet['api_profile'] != 'miniapp_gateway' or not packet['records']:
                 raise SSHRelayError('ssh_relay_invalid_packet_scope')
             _, fd = guards[1]
@@ -295,12 +315,17 @@ def check_public_confirmation(packet_file, confirmation_file, *, as_of):
             if (_stamp(acknowledged) != value['acknowledged_at']
                     or not _time(packet['as_of']) <= acknowledged <= current):
                 raise SSHRelayError('ssh_relay_confirmation_time_invalid')
-            receipt = validate_receipt(value['receipt'], packet)
-        return {'ok':True, 'historical_confirmation_only':True,
+            receipt = validator(value['receipt'], source_value)
+        result = {'ok':True, 'historical_confirmation_only':True,
             'exact_packet_receipt_match':True, 'confirmed_records':len(packet['records']),
             'packet_sha256':receipt['packet_sha256'], 'network_attempted':False,
             'current_server_retention_verified':False, 'query_credentials_accessed':False,
             'ssh_key_accessed':False, 'cursor_advanced':False, 'original_packet_preserved':True}
+        if with_continuity:
+            result.update(bundle_sha256=receipt['bundle_sha256'],
+                confirmed_records_including_anchors=len(receipt['observations']),
+                confirmed_links=len(receipt['links']))
+        return result
     except SSHRelayError:
         raise
     except Exception:

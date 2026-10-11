@@ -79,3 +79,8 @@ selection_scope为`bounded_public_packet_not_full_day`。覆盖率只计算包�
 另修复queuePresentation陈旧状态没有覆盖labels的问题：超过新鲜度门槛，顶端号码为null、显示暂无可用号码和最后响应；历史表／曲线仍保留原始标签。不能用网页读取时刻给旧号续新鲜度。当前五分钟采样试验沿用90秒显示门槛，因此部分间隔会明确显示资料较旧；这不是原始数据被删除或采集已经停机。
 
 本机真实浏览器已完成三店月份→北京→西单当天详情，三店21组、北京14组、西单7条，曲线和原始表可见；16:10:09真实新观测后号码更新，超过门槛后顶端撤下，原始记录不丢失。57项0.724秒与修改后完整1819项38.166秒通过。公共归档16:15实际增至24条，云端尚未启用，长期自然期限更新待；本次私有预览只监听回环且最多600秒，读取已有归档、不读凭证、不查询寿司郎，不作为生产地址。
+
+
+## E0455：明确的关联归档模式（rc78源码，未云切换）
+
+原七字段配置可明确选择mode=official_packet_archive_with_continuity，数据库必须为新独立三表归档，旧库不自动升级。原官方月／日路由和浏览器来源保持；新增每点observation_id、record_sha256、经校验的前序声明与continuity_received_at，以及summary.continuity_states／comparable_display_pairs。无关联原v1点仍保留packet_continuity_unknown，损坏前序或时间返回503。云端当前仍rc76显示／rc74单表接收，设计助手无需更换URL或新增上传入口。详细合同、逐项接收及备份待办见[OFFICIAL_CONTINUITY](../../OFFICIAL_CONTINUITY.md)。

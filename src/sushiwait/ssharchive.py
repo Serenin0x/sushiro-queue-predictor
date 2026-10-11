@@ -114,7 +114,12 @@ def receive_public_packet(raw, config_file, *, original_command, now=None):
             if written['durability_confirmed'] is not True:
                 raise SSHArchiveError('ssh_archive_packet_durability_unconfirmed')
         _sync_preserved_packet(target, canonical)
-        with PacketArchive(view.database) as archive:
+        archive_type = PacketArchive
+        from .continuityview import ContinuityStatisticsView
+        if isinstance(view, ContinuityStatisticsView):
+            from .continuityarchive import ContinuityArchive
+            archive_type = ContinuityArchive
+        with archive_type(view.database) as archive:
             result = archive.append(packet, as_of=clock.isoformat())
         if (result['durability_confirmed'] is not True
                 or result['local_archive_commit_status'] != 'committed'):

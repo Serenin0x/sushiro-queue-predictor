@@ -156,6 +156,11 @@ def select_continuity_packet(database, **scope):
     return _select_packet(database, **scope, with_continuity=True)
 
 
+def read_continuity_bundle(path, *, as_of):
+    from .receipts import _read_packet_value
+    return validate_continuity_bundle(_read_packet_value(path), as_of=as_of)
+
+
 def export_continuity_packet(database, destination, **scope):
     try:
         conflict = os.path.abspath(database) == os.path.abspath(destination)
