@@ -90,6 +90,9 @@ def check_public_relay_install(packet,hours,at):
             ',original_command=COMMAND,now=datetime.fromisoformat('+repr(at.replace('Z','+00:00'))+'))))')
         def child(args,**kwargs):
             argv.append(args)
+            # A same-mode chmod changes ctime without changing this public
+            # packet's identity/permissions/mtime/content during the exchange.
+            source.chmod(0o600)
             return subprocess.Popen([sys.executable,'-I','-u','-c',code],**kwargs)
         with patch('socket.socket',side_effect=AssertionError('relay_source_network')) as sockets:
             result=deliver_public_packet(source,ssh_key_file=key,known_hosts_file=hosts,
@@ -107,6 +110,7 @@ def check_public_relay_install(packet,hours,at):
             assert checked['historical_confirmation_only'] and not checked['current_server_retention_verified']
             assert before==(source.read_bytes(),confirmation.read_bytes()) and sockets.call_count==0
     print(json.dumps({'installed_public_ssh_relay_and_recovery_ok':True,
+        'public_packet_ctime_only_change_confirmed':True,
         'synthetic_subprocess_receiver':True,'real_ssh_authentication_verified':False,
         'source_queries':0,'credentials_accessed':False,'live_acceptance':False}))
 

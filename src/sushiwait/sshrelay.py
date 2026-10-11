@@ -8,6 +8,7 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 import ipaddress
+import hashlib
 import json
 import math
 import os
@@ -82,6 +83,62 @@ def _guarded_file(path, maximum):
             named = os.stat(name, dir_fd=parent, follow_symlinks=False)
             if (_identity(before) != _identity(named)
                     or _identity(before) != _identity(os.fstat(descriptor))):
+                raise SSHRelayError('ssh_relay_access_file_changed')
+
+        check()
+        yield check, descriptor
+        check()
+    except SSHRelayError:
+        raise
+    except Exception:
+        raise SSHRelayError('ssh_relay_unsafe_access_file') from None
+    finally:
+        for fd in (descriptor, parent):
+            if fd is not None:
+                os.close(fd)
+
+
+@contextmanager
+def _guarded_public_file(path, maximum):
+    """Guard public packet/receipt bytes without treating ctime as content.
+
+    The private key and pinned-host files keep the original metadata guard.
+    Public files use stable identity, permissions, size and mtime plus complete
+    descriptor hashes before and after each use, including same-mtime rewrites.
+    """
+    parent = descriptor = None
+    try:
+        parent, name = _open_parent(path, private=True)
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=parent)
+        before = os.fstat(descriptor)
+        if not _private_file(before) or not 0 < before.st_size <= maximum:
+            raise SSHRelayError('ssh_relay_unsafe_access_file')
+        identity = _identity(before)[:-1]
+
+        def metadata():
+            _check_parent(path, parent, private=True)
+            for current in (os.fstat(descriptor),
+                            os.stat(name, dir_fd=parent, follow_symlinks=False)):
+                if not _private_file(current) or _identity(current)[:-1] != identity:
+                    raise SSHRelayError('ssh_relay_access_file_changed')
+
+        def digest():
+            value, offset = hashlib.sha256(), 0
+            while offset < before.st_size:
+                part = os.pread(descriptor, min(131072, before.st_size-offset), offset)
+                if not part:
+                    raise SSHRelayError('ssh_relay_access_file_changed')
+                value.update(part); offset += len(part)
+            metadata()
+            return value.digest()
+
+        metadata()
+        original = digest()
+
+        def check():
+            metadata()
+            if digest() != original:
                 raise SSHRelayError('ssh_relay_access_file_changed')
 
         check()
@@ -201,8 +258,9 @@ def deliver_public_packet(packet_file, *, ssh_key_file, known_hosts_file, target
             raise SSHRelayError('ssh_relay_conflicting_paths')
         now = _time(clock().isoformat())
         with ExitStack() as stack:
-            guards = [stack.enter_context(_guarded_file(p, size)) for p, size in
-                      ((source, 4 * 1024 * 1024), (key_file, 16384), (hosts_file, 262144))]
+            guards = [stack.enter_context(_guarded_public_file(source, 4 * 1024 * 1024)),
+                      stack.enter_context(_guarded_file(key_file, 16384)),
+                      stack.enter_context(_guarded_file(hosts_file, 262144))]
             parent, name = _open_parent(confirmation, private=True)
             stack.callback(os.close, parent)
             _check_parent(confirmation, parent, private=True)
@@ -283,7 +341,7 @@ def check_public_confirmation(packet_file, confirmation_file, *, as_of, with_con
         if source == confirmation:
             raise SSHRelayError('ssh_relay_conflicting_paths')
         with ExitStack() as stack:
-            guards = [stack.enter_context(_guarded_file(p, size)) for p, size in
+            guards = [stack.enter_context(_guarded_public_file(p, size)) for p, size in
                 ((source, 4 * 1024 * 1024), (confirmation, MAX_REPLY_BYTES + 1024))]
             reader, validator = read_packet, validate_receipt
             if with_continuity:

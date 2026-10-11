@@ -171,6 +171,46 @@ class SSHRelayTests(unittest.TestCase):
         self.assertEqual(error.exception.error_code,'ssh_relay_access_file_changed')
         self.assertFalse(self.confirmation.exists())
 
+    def test_public_packet_ctime_only_change_keeps_exact_confirmation(self):
+        def changed():self.input.chmod(0o600)
+        result=self.deliver(_spawn=self.factory(before=changed))
+        self.assertTrue(result['server_archive_commit_confirmed'])
+        self.assertTrue(result['durability_confirmed'])
+
+    def test_public_packet_changed_bytes_with_restored_mtime_are_rejected(self):
+        original=self.input.read_bytes();before=self.input.stat()
+        def changed():
+            self.input.write_bytes(b'X'+original[1:])
+            os.utime(self.input,ns=(before.st_atime_ns,before.st_mtime_ns))
+        with self.assertRaises(relay.SSHRelayError) as error:
+            self.deliver(_spawn=self.factory(before=changed))
+        self.assertTrue(error.exception.network_attempted)
+        self.assertEqual(error.exception.error_code,'ssh_relay_access_file_changed')
+        self.assertFalse(self.confirmation.exists())
+
+    def test_private_key_ctime_only_change_still_rejects(self):
+        def changed():self.key.chmod(0o600)
+        with self.assertRaises(relay.SSHRelayError) as error:
+            self.deliver(_spawn=self.factory(before=changed))
+        self.assertEqual(error.exception.error_code,'ssh_relay_access_file_changed')
+        self.assertFalse(self.confirmation.exists())
+
+    def test_pinned_host_ctime_only_change_still_rejects(self):
+        def changed():self.hosts.chmod(0o600)
+        with self.assertRaises(relay.SSHRelayError) as error:
+            self.deliver(_spawn=self.factory(before=changed))
+        self.assertEqual(error.exception.error_code,'ssh_relay_access_file_changed')
+        self.assertFalse(self.confirmation.exists())
+
+    def test_public_path_replacement_is_not_confirmed(self):
+        def changed():
+            replacement=self.save('replacement',self.input.read_bytes())
+            os.replace(replacement,self.input)
+        with self.assertRaises(relay.SSHRelayError) as error:
+            self.deliver(_spawn=self.factory(before=changed))
+        self.assertEqual(error.exception.error_code,'ssh_relay_access_file_changed')
+        self.assertFalse(self.confirmation.exists())
+
     def test_unconfirmed_local_fsync_never_advances_or_deletes_packet(self):
         with patch.object(relay,'_write_packet',return_value={'durability_confirmed':False}):
             with self.assertRaises(relay.SSHRelayError) as error:self.deliver()
