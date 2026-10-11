@@ -15,7 +15,8 @@ from unittest.mock import Mock, patch
 from sushiwait.capture import CaptureError
 from sushiwait.client import QueryResult
 from sushiwait.credentials import CredentialError, read_credentials_file
-from sushiwait.sessionverification import SessionPreparationError, prepare_verifier, renew_from_yyb
+from sushiwait.sessionverification import (SessionPreparationError, prepare_verifier, renew_from_yyb,
+    prepare_bootstrap_verifier, bootstrap_from_yyb)
 from sushiwait.initialization import InitializationError
 from sushiwait.yyb import ENDPOINT as SUPPLIER_ENDPOINT
 from tests.test_credentials import gateway_bundle, write_bundle
@@ -253,6 +254,201 @@ class SessionVerificationTests(unittest.TestCase):
         transport.assert_not_called()
         self.client.fetch_store.assert_not_called()
         self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_explicit_query_encoding_preserved_after_json_initialization(self):
+        settings, supplier, initialize, source = self.integration()
+        with patch('urllib.request.build_opener', side_effect=[supplier, initialize]):
+            result = renew_from_yyb(source, settings_file=settings, credentials_file=self.path,
+                expected_revision=1, store_id='3014', query_content_type='application/x-www-form-urlencoded')
+        self.assertTrue(result['ok'])
+        self.assertEqual(initialize.open.call_args.args[0].get_header('Content-type'), 'application/json')
+        self.assertEqual(read_credentials_file(self.path, api_profile='miniapp_gateway').content_type,
+                         'application/x-www-form-urlencoded')
+
+    def test_invalid_query_encoding_rejected_before_reference_and_supply(self):
+        with patch('sushiwait.sessionverification.read_credentials_file', side_effect=AssertionError('no read')), \
+                patch('sushiwait.sessionverification.initialize_from_yyb') as supply:
+            for value in ('text/plain', '', False, {}, 'application/json\n'):
+                with self.assertRaises(SessionPreparationError) as caught:
+                    renew_from_yyb(None, settings_file=None, credentials_file=self.path,
+                        expected_revision=1, store_id='3014', query_content_type=value)
+                self.assertEqual(caught.exception.error_code, 'session_invalid_input')
+            supply.assert_not_called()
+
+
+@unittest.skipUnless(os.name == "posix" and hasattr(os, "O_NOFOLLOW"), "private POSIX contexts")
+class BootstrapVerificationTests(unittest.TestCase):
+    def setUp(self):
+        SessionVerificationTests.setUp(self)
+        self.path.unlink()
+        self.destination_dir = self.parent/'startup'
+        self.destination_dir.mkdir(mode=0o700)
+        self.path = self.destination_dir/'context.json'
+
+    def prepared(self, **changes):
+        options = {'credentials_file': self.path, 'expected_app_id': 'wx0000000000000000',
+                   'expected_app_client': self.previous['app_client'], 'store_id': '3014', **changes}
+        return prepare_bootstrap_verifier(**options)
+
+    def rejected(self, result, code, *, no_file=True):
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['error_code'], code)
+        if no_file:
+            self.assertFalse(self.path.exists())
+            self.assertFalse(result['committed'])
+        for private in (token('old'), token('new'), REF, str(self.path)):
+            self.assertNotIn(private, json.dumps(result))
+
+    def test_first_context_created_only_after_independent_store_acceptance(self):
+        real_read = read_credentials_file
+        with patch('sushiwait.sessionverification.read_credentials_file', wraps=real_read) as reads:
+            consume = self.prepared()
+            reads.assert_not_called()
+            self.assertFalse(self.path.exists())
+            result = consume(token('new'), self.heads)
+            reads.assert_called_once_with(self.path, api_profile='miniapp_gateway')
+        self.assertTrue(result['ok'] and result['query_accepted'] and result['committed'] and result['durability_confirmed'])
+        self.assertEqual(result['revision'], 1)
+        self.client.fetch_store.assert_called_once_with('3014')
+        saved = real_read(self.path, api_profile='miniapp_gateway')
+        self.assertEqual(saved.revision, 1)
+        self.assertEqual(saved.authorization, 'Bearer '+token('new'))
+        self.assertEqual(saved.app_code, self.heads['X-App-Code'])
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(list(self.destination_dir.iterdir()), [self.path])
+        self.rejected(consume(token('new'), self.heads), 'session_verifier_used', no_file=False)
+        self.assertEqual(self.client.fetch_store.call_count, 1)
+        self.socket.assert_not_called()
+
+    def test_plan_targets_and_client_pin_validated_before_destination_access(self):
+        with patch('sushiwait.sessionverification._absent_destination', side_effect=AssertionError('no metadata')):
+            variants = [{'expected_app_id': None}, {'expected_app_id': 'wxwrong'},
+                        {'expected_app_id': 'wx0000000000000000\n'},
+                        *[{'expected_app_client': v} for v in (None, True, '', 'bad\nclient', 'x'*4097)],
+                        {'store_id': '0'}, {'store_id': '03014'}, {'timeout': float('nan')}]
+            for change in variants:
+                with self.subTest(change=change), self.assertRaises(SessionPreparationError) as caught:
+                    self.prepared(**change)
+                self.assertEqual(caught.exception.error_code, 'session_invalid_input')
+                self.assertIsNone(caught.exception.__context__)
+        self.factory.assert_not_called()
+
+    def test_existing_target_rejected_without_reading_its_contents(self):
+        write_bundle(self.path, self.previous)
+        before = self.path.read_bytes()
+        with patch('sushiwait.sessionverification.read_credentials_file', side_effect=AssertionError('no contents')):
+            with self.assertRaises(SessionPreparationError) as caught:
+                self.prepared()
+        self.assertEqual(caught.exception.error_code, 'session_destination_not_empty')
+        self.assertEqual(self.path.read_bytes(), before)
+        self.factory.assert_not_called()
+
+    def test_unsafe_or_symlinked_destination_rejected_before_supply(self):
+        self.destination_dir.chmod(0o755)
+        with self.assertRaises(SessionPreparationError) as caught:
+            self.prepared()
+        self.assertEqual(caught.exception.error_code, 'session_destination_unsafe')
+        self.destination_dir.chmod(0o700)
+        self.path.symlink_to(self.parent/'nonexistent')
+        with self.assertRaises(SessionPreparationError) as caught:
+            self.prepared()
+        self.assertEqual(caught.exception.error_code, 'session_destination_unsafe')
+        self.factory.assert_not_called()
+
+    def test_peer_file_before_query_stops_and_preserves_peer(self):
+        consume = self.prepared()
+        write_bundle(self.path, self.previous)
+        before = self.path.read_bytes()
+        self.rejected(consume(token('new'), self.heads), 'session_baseline_changed', no_file=False)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.factory.assert_not_called()
+
+    def test_new_material_app_and_client_must_match_explicit_pins(self):
+        for heads in ({**self.heads, 'X-App-Client': 'wrong'},
+                      {**self.heads, 'Referer': REF.replace('wx0000000000000000', 'wx1111111111111111')}):
+            self.rejected(self.prepared()(token('new'), heads), 'session_app_mismatch')
+        self.factory.assert_not_called()
+
+    def test_no_dummy_context_for_missing_material_or_expiry(self):
+        self.rejected(self.prepared()(token('new'), {}), 'session_material_invalid')
+        for value in ('synthetic-opaque-token', token('new', 0), token('new', 30)):
+            self.rejected(self.prepared()(value, self.heads), 'session_auth_guard_stop')
+        self.factory.assert_not_called()
+
+    def test_401_403_and_wrong_store_never_publish_first_context(self):
+        for status, code in ((401, 'session_query_auth_rejected'), (403, 'session_query_access_denied')):
+            self.client.fetch_store.reset_mock()
+            self.client.fetch_store.return_value = QueryResult(False, None, 'http_error', status,
+                NOW.isoformat(), NOW.isoformat(), 0)
+            self.rejected(self.prepared()(token('new'), self.heads), code)
+            self.client.fetch_store.assert_called_once()
+        self.client.fetch_store.return_value = success(payload={'id': '3004', 'name': 'wrong'})
+        self.rejected(self.prepared()(token('new'), self.heads), 'session_snapshot_invalid')
+
+    def test_peer_appearing_during_query_not_read_or_overwritten(self):
+        def peer(_):
+            write_bundle(self.path, self.previous)
+            return success()
+        self.client.fetch_store.side_effect = peer
+        with patch('sushiwait.capture.read_credentials_file', side_effect=AssertionError('no peer contents')):
+            result = self.prepared()(token('new'), self.heads)
+        self.rejected(result, 'session_baseline_changed', no_file=False)
+        self.assertFalse(result['committed'])
+        self.assertTrue(result['query_accepted'])
+        self.assertIn('snapshot', result)
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_parent_replacement_during_query_stops_first_publication(self):
+        previous_dir = self.parent/'original-startup'
+        def replace_directory(_):
+            self.destination_dir.rename(previous_dir)
+            self.destination_dir.mkdir(mode=0o700)
+            return success()
+        self.client.fetch_store.side_effect = replace_directory
+        result = self.prepared()(token('new'), self.heads)
+        self.rejected(result, 'session_baseline_changed')
+        self.assertTrue(result['query_accepted'])
+        self.assertEqual(list(previous_dir.iterdir()), [])
+        self.assertEqual(list(self.destination_dir.iterdir()), [])
+
+    def test_expiry_during_query_rechecked_before_first_publication(self):
+        with patch('sushiwait.capture._clock', return_value=NOW+timedelta(seconds=3571)):
+            result = self.prepared()(token('new'), self.heads)
+        self.rejected(result, 'session_auth_guard_stop')
+        self.assertTrue(result['query_accepted'])
+
+    def test_durability_uncertainty_retains_committed_context_and_never_retries(self):
+        from sushiwait.capture import _write_private
+        def uncertain(*args, **kwargs):
+            self.assertTrue(_write_private(*args, **kwargs))
+            return False
+        consume = self.prepared()
+        with patch('sushiwait.sessionverification._write_private', side_effect=uncertain) as writer:
+            result = consume(token('new'), self.heads)
+            self.rejected(result, 'session_durability_unconfirmed', no_file=False)
+            self.assertTrue(result['committed'])
+            self.assertEqual(read_credentials_file(self.path, api_profile='miniapp_gateway').revision, 1)
+            self.rejected(consume(token('new'), self.heads), 'session_verifier_used', no_file=False)
+            writer.assert_called_once()
+        self.client.fetch_store.assert_called_once()
+
+    def test_complete_first_supply_initialization_query_publish_chain(self):
+        from sushiwait.credentials import CredentialSource
+        settings, supplier, initialize, source = SessionVerificationTests.integration(self)
+        write_bundle(settings, {'schema_version': 2, 'ref': '1', 'protocol_token': 'a'*64,
+                                'app_id': 'wx0000000000000000'})
+        with patch('urllib.request.build_opener', side_effect=[supplier, initialize]) as transport:
+            result = bootstrap_from_yyb(source, settings_file=settings, credentials_file=self.path,
+                expected_app_id='wx0000000000000000', expected_app_client=self.previous['app_client'], store_id='3014',
+                query_content_type='application/x-www-form-urlencoded')
+        self.assertTrue(result['ok'])
+        self.assertEqual(transport.call_count, 2)
+        self.client.fetch_store.assert_called_once_with('3014')
+        reader = CredentialSource(credentials_file=self.path, api_profile='miniapp_gateway')
+        self.assertEqual(reader.current().revision, 1)
+        self.assertEqual(reader.current().authorization, 'Bearer '+token('new'))
+        self.assertEqual(reader.current().content_type, 'application/x-www-form-urlencoded')
+        self.socket.assert_not_called()
 
 
 if __name__ == "__main__": unittest.main()

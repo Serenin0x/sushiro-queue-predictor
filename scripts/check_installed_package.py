@@ -25,6 +25,10 @@ def check_target_bootstrap_install():
     from email.message import Message
     from unittest.mock import Mock
     from sushiwait.initialization import ENDPOINT, initialize_for_target_from_yyb
+    from sushiwait.sessionverification import bootstrap_from_yyb
+    from sushiwait.client import QueryResult
+    from sushiwait.credentials import read_credentials_file
+    from sushiwait.materialsource import prepare_material_source
     from sushiwait.yyb import ENDPOINT as SUPPLIER, YYBCodeError
     target = 'wx0000000000000000'
     code, token = 'synthetic-bootstrap-code', 'synthetic-bootstrap-token'
@@ -76,7 +80,43 @@ def check_target_bootstrap_install():
             else:
                 raise AssertionError('target mismatch accepted')
             assert opener.open.call_count == 2 and accept.call_count == 1
+            issued = int(datetime.now(timezone.utc).timestamp())
+            claim = base64.urlsafe_b64encode(json.dumps({'iat': issued, 'exp': issued+3600}).encode()).decode().rstrip('=')
+            first_token = 'e30.'+claim+'.c2ln'
+            opener.open.reset_mock()
+            opener.open.side_effect = [Response(SUPPLIER, {'code': 0, 'data': {'result': {
+                'code': code, 'errMsg': 'login:ok'}}}), Response(ENDPOINT, {'data': {'auth_token': first_token}})]
+            client = Mock()
+            at = datetime.now(timezone.utc).isoformat()
+            client.fetch_store.return_value = QueryResult(True, {'id': '900001', 'name': 'Synthetic startup',
+                'groupQueues': {'mixedQueue': ['0012', '0014', '0012']}}, None, 200, at, at, 0)
+            material_file = root/'synthetic-material.json'
+            material_file.write_text(json.dumps({'schema_version': 1, 'target_app_id': target,
+                'source_version': 181, 'source_package_sha256': 'a'*64, 'timezone': 'Asia/Shanghai',
+                'signature_key': 'synthetic-signature-secret', 'long_token': 'synthetic-startup',
+                'app_client': 'synthetic-client', 'device_id': 'synthetic-device',
+                'app_version': 'synthetic-version', 'user_agent': 'Synthetic Runtime',
+                'referer': 'https://servicewechat.com/'+target+'/181/page-frame.html',
+                'initialize_content_type': 'application/json',
+                'query_content_type': 'application/x-www-form-urlencoded',
+                'date_header': {'algorithm': 'aes-cbc-pkcs7-base64', 'key_hex': '00'*16,
+                    'iv_hex': '00'*16, 'base': 5000, 'pieces': [{'field': 'year'}, {'field': 'derived'}]}}))
+            material_file.chmod(0o600)
+            with patch('sushiwait.materialsource._cipher_backend', return_value=lambda *args: 'synthetic-date-code'):
+                normal_source = prepare_material_source(bundle_file=material_file, expected_app_id=target,
+                    expected_source_version=181, expected_package_sha256='a'*64)
+                with patch('sushiwait.sessionverification.SushiroClient', return_value=client):
+                    result = bootstrap_from_yyb(normal_source, settings_file=settings, credentials_file=root/'context.json',
+                        expected_app_id=target, expected_app_client=normal_source.app_client, store_id='900001',
+                        query_content_type=normal_source.query_content_type)
+            assert result['ok'] and result['committed'] and result['durability_confirmed']
+            saved = read_credentials_file(root/'context.json', api_profile='miniapp_gateway')
+            assert saved.revision == 1 and saved.authorization == 'Bearer '+first_token
+            assert saved.content_type == 'application/x-www-form-urlencoded'
+            assert opener.open.call_count == 2 and client.fetch_store.call_count == 1
+            assert not sockets.call_count
     print(json.dumps({'installed_target_bootstrap_ok': True, 'reference_credentials_read': False,
+                     'installed_first_publication_ok': True, 'installed_declarative_source_ok': True,
                      'actual_network_calls': 0, 'cloud_runtime_proven': False}))
 
 
