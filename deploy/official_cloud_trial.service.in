@@ -1,0 +1,33 @@
+# Prepared only; replace @ROOT@ with the approved absolute private trial root.
+# Enable only after supplier authorization and private material validation.
+[Unit]
+Description=SUSHIWAIT finite official cloud trial
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=@ROOT@
+ExecStart=@ROOT@/venv/bin/python3 -I @ROOT@/official_cloud_controller.py @ROOT@
+Restart=no
+UMask=0077
+TimeoutStopSec=120
+KillMode=control-group
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@ROOT@
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+MemoryMax=512M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

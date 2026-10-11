@@ -1,0 +1,32 @@
+# Prepared only. @ARCHIVE@ must be the existing rc79 three-table archive file.
+# @ARCHIVE_ROOT@ is its private parent; the original statistics service stays.
+[Unit]
+Description=SUSHIWAIT finite server-local public archive projection
+After=sushiwait-official-cloud-trial.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=@ROOT@
+ExecStart=@ROOT@/venv/bin/python3 -I @ROOT@/official_cloud_public_sync.py @ROOT@ @ARCHIVE@
+Restart=no
+UMask=0077
+TimeoutStopSec=30
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@ROOT@ @ARCHIVE_ROOT@
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+MemoryMax=256M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target
