@@ -14,9 +14,13 @@ from sushiwait.monitorhub import MonitorHub, read_config
 
 
 class StatisticsGateway:
-    def __init__(self, hub, *, official_view=None):
+    def __init__(self, hub, *, official_view=None, calendar_source='crm_remote_v1_1'):
+        if (calendar_source not in {'crm_remote_v1_1', 'sapi_miniapp_gateway'}
+                or calendar_source == 'sapi_miniapp_gateway' and official_view is None):
+            raise ValueError('calendar_source_requires_configured_view')
         self.hub = hub
         self.official_view = official_view
+        self.calendar_source = calendar_source
         self.cache = OrderedDict()
         self.lock = asyncio.Lock()
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
@@ -69,6 +73,12 @@ class StatisticsGateway:
             # The internal monitor is deliberately outside the public scope.
             body = body.replace(b'<a href="/monitor">' + '最近观测'.encode() + b'</a>',
                 '<span>每30秒自动更新</span>'.encode())
+        if path == '/statistics' and status == 200 and self.calendar_source == 'sapi_miniapp_gateway':
+            marker = b'id="sushiwait-month-calendar"'
+            if body.count(marker) != 1 or b'data-statistics-source=' in body:
+                status, body, mime = 503, b'Calendar source binding unavailable', 'text/plain; charset=utf-8'
+            else:
+                body = body.replace(marker, marker + b' data-statistics-source="sapi_miniapp_gateway"', 1)
         headers = [(b'content-type', mime.encode()), (b'content-length', str(len(body)).encode()),
             (b'cache-control', b'no-store'), (b'x-content-type-options', b'nosniff'),
             (b'referrer-policy', b'no-referrer'),
@@ -84,7 +94,7 @@ async def serve(args):
     from sushiwait.officialview import read_config as read_official_config
     hub = MonitorHub(read_config(args.config_file))
     official = read_official_config(args.official_view_file) if args.official_view_file else None
-    app = StatisticsGateway(hub, official_view=official)
+    app = StatisticsGateway(hub, official_view=official, calendar_source=args.calendar_source)
     remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds() if app.deadline is not None else None
     if remaining is not None and remaining <= 0:
         raise ValueError('original_trial_deadline_reached')
@@ -110,6 +120,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config-file', required=True)
     parser.add_argument('--official-view-file', help='Optional private official public-field archive configuration; no credentials')
+    parser.add_argument('--calendar-source', choices=['crm_remote_v1_1', 'sapi_miniapp_gateway'],
+        default='crm_remote_v1_1', help='Explicit source for the calendar; official mode requires its view file')
     parser.add_argument('--listen-host', choices=['127.0.0.1', '0.0.0.0'], default='127.0.0.1')
     parser.add_argument('--port', type=int, default=18900)
     args = parser.parse_args()

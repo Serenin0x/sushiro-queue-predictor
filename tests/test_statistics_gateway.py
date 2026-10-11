@@ -101,6 +101,32 @@ class StatisticsGatewayTests(unittest.TestCase):
         self.assertNotIn(b'/monitor', body)
         self.assertIn('每30秒自动更新'.encode(), body)
 
+    def test_official_calendar_requires_explicit_view_and_source(self):
+        with self.assertRaises(ValueError):
+            gateway.StatisticsGateway(self.hub, calendar_source='sapi_miniapp_gateway')
+        with self.assertRaises(ValueError):
+            gateway.StatisticsGateway(self.hub, calendar_source='other')
+        html = b'<div id="sushiwait-month-calendar"></div>'
+        self.hub.dispatch = lambda path: (200, html, 'text/html')
+        # Configuring the optional API alone must not switch the calendar.
+        self.app = gateway.StatisticsGateway(self.hub, official_view=object())
+        self.assertEqual(self.request('/statistics')[1]['body'], html)
+        self.app = gateway.StatisticsGateway(self.hub, official_view=object(),
+            calendar_source='sapi_miniapp_gateway')
+        self.assertIn(b'data-statistics-source="sapi_miniapp_gateway"',
+            self.request('/statistics')[1]['body'])
+        self.assertEqual(self.request('/statistics-legacy')[1]['body'], html)
+
+    def test_official_calendar_rejects_missing_or_ambiguous_binding(self):
+        for html in (b'{}', b'<div id="sushiwait-month-calendar"></div>' * 2,
+                     b'<div id="sushiwait-month-calendar" data-statistics-source="other"></div>'):
+            with self.subTest(html=html):
+                self.hub.dispatch = lambda path: (200, html, 'text/html')
+                self.app = gateway.StatisticsGateway(self.hub, official_view=object(),
+                    calendar_source='sapi_miniapp_gateway')
+                self.assertEqual(self.request('/statistics')[0]['status'], 503)
+                self.assertEqual(self.hub.calls, [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -41,7 +41,8 @@ export function calendarForScope(index, month, city = 'all', store = 'all') {
   if (!index) return null;
   const ids = scopeStores(index, city, store).map(item => item.id);
   if (!ids.length) return null;
-  if (store !== 'all') return calendarCells(index, month, store);
+  const source=index.source;
+  if (store !== 'all') return calendarCells(index, month, store, {source});
   const filtered = {...index, configured_store_ids:ids,
     store_names:Object.fromEntries(ids.map(id => [id,index.store_names[id]])),
     unavailable_store_ids:index.unavailable_store_ids.filter(id => ids.includes(id)),
@@ -51,7 +52,7 @@ export function calendarForScope(index, month, city = 'all', store = 'all') {
     filtered.calendar_index_state=filtered.calendar_pending_store_ids.length ? 'preparing' : 'ready';
     filtered.calendar_verified_store_count=ids.length-filtered.calendar_pending_store_ids.length;
   }
-  return calendarCells(filtered,month);
+  return calendarCells(filtered,month,null,{source});
 }
 export function dayKind(date) {
   const known = Number(date.slice(0,4)) === calendar2026.year;
@@ -68,7 +69,7 @@ export function queuePresentation(detail, queue, now=Date.now()) {
   const latest=latestQueue(detail,queue,{now});
   // Old numbers stay in the historical table; they cannot look current on top.
   const labels=['fresh','historical'].includes(latest.state) ? latest.labels : null;
-  return {...latest,display:labels===null?'暂无可用号码':labels.length?labels.join(' · '):'本次未显示号码'};
+  return {...latest,labels,display:labels===null?'暂无可用号码':labels.length?labels.join(' · '):'本次未显示号码'};
 }
 export function recentRecords(detail) {
   return (detail?.points || []).slice(-60).reverse().map(point => ({

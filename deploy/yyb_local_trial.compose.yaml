@@ -1,0 +1,30 @@
+# Original local experiment; local execution approved on 2026-10-11.
+# Owner performs initial website registration and normal WeChat QR authorization.
+# Both variables are required; audit immutable image digest before any execution.
+services:
+  yyb-local-trial:
+    image: ${SUSHIWAIT_YYB_TRIAL_IMAGE:?audited immutable image digest required}
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 64
+    command: ["-host", "0.0.0.0", "-port", "8000", "-resource-root", "/app/resource", "-keepalive-interval", "0"]
+    environment:
+      TZ: Asia/Shanghai
+      YYB_AUTH_DRIVER: sqlite
+      YYB_PROTOCOL_TOKEN: ${SUSHIWAIT_YYB_TRIAL_TOKEN:?private random protocol token required}
+      YYB_ENABLE_PC_LOGIN: "false"
+      YYB_COOKIE_SECURE: "false"
+    ports: ["127.0.0.1:18081:8000"]
+    tmpfs:
+      - /app/resource/db:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700
+      - /app/resource/avatars:rw,noexec,nosuid,size=8m,uid=10001,gid=10001,mode=0700
+      - /app/resource/qr:rw,noexec,nosuid,size=8m,uid=10001,gid=10001,mode=0700
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700
+    logging:
+      driver: none

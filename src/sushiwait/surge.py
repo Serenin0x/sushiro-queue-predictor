@@ -1,6 +1,6 @@
 """Explicit, bounded intake from an existing local Surge Mac query summary.
 
-An explicitly selected observed directory or Beijing home GET supplies a complete query context. No
+An explicitly selected directory, Beijing home, or store-bound detail GET supplies a complete query context. No
 request body, response body, initialization, UI control or external query is
 performed here. An observed HTTP 200 is not independent server acceptance.
 """
@@ -31,7 +31,7 @@ _MAX_RECENT_ROWS = 200
 _MAC_EPOCH = 978307200
 _PATH = "/gateway/wechat/api/2.0/stores"
 _QUERY = {"latitude": "1", "longitude": "1", "numresults": "10000"}
-QUERY_SOURCES = ("directory", "home")
+QUERY_SOURCES = ("directory", "home", "detail")
 _HEADERS = {"authorization": "authorization", "x-app-client": "app_client",
             "x-app-code": "app_code", "user-agent": "user_agent",
             "referer": "referer", "content-type": "content_type"}
@@ -87,24 +87,50 @@ def _home_url(value: object) -> bool:
         return False
 
 
+def _valid_selection(query_source: object, query_store_id: object) -> bool:
+    if type(query_source) is not str or query_source not in QUERY_SOURCES:
+        return False
+    if query_source != "detail":
+        return query_store_id is None
+    return (type(query_store_id) is str
+            and re.fullmatch(r"[0-9]{1,19}", query_store_id, flags=re.ASCII) is not None)
+
+
+def _detail_url(value: object, store_id: str) -> bool:
+    """Only the normal read-only detail request for the explicitly selected store."""
+    if (not isinstance(value, str) or len(value) > 512 or "%" in value
+            or any(ord(c) < 33 or ord(c) > 126 for c in value)):
+        return False
+    try:
+        url = urlsplit(value)
+        pairs = parse_qsl(url.query, keep_blank_values=True, strict_parsing=True)
+        return (url.scheme == "https" and url.netloc == "sapi.sushiro.com.cn"
+                and url.path == "/gateway/wechat/api/2.0/getStoreById"
+                and not url.fragment and pairs == [("storeId", store_id)])
+    except ValueError:
+        return False
+
+
 def _app(referer: str | None) -> str | None:
     match = re.fullmatch(r"https://servicewechat\.com/(wx[a-f0-9]{16})/[0-9]+/(?:page-frame\.html|index\.html)", referer or "")
     return match[1] if match else None
 
 
 def inspect_summary(body: bytes, *, previous: QueryCredentials, since: datetime,
-                    now: datetime, query_source: str = "directory") -> SummaryCandidate:
+                    now: datetime, query_source: str = "directory",
+                    query_store_id: str | None = None) -> SummaryCandidate:
     """Parse only recent records in the observed Mac 6.4.3 summary format.
 
     Support verified Unix timestamps plus a Mac-reference representation;
     exactly one must fit the bounded current window. No source time is inferred.
     """
     since, now = _clock(since), _clock(now)
-    if (type(query_source) is not str or query_source not in QUERY_SOURCES
+    if (not _valid_selection(query_source, query_store_id)
             or now < since or (now - since).total_seconds() > 60
             or previous.api_profile != "miniapp_gateway" or _app(previous.referer) is None):
         raise SurgeError("surge_invalid_input")
-    valid_url = _directory_url if query_source == "directory" else _home_url
+    valid_url = (_directory_url if query_source == "directory" else _home_url
+                 if query_source == "home" else lambda value: _detail_url(value, query_store_id))
     if not isinstance(body, bytes) or len(body) > _MAX_BYTES:
         raise SurgeError("surge_summary_too_large")
     try:
@@ -251,9 +277,9 @@ def _read_summary(timeout: float) -> bytes:
 
 def receive_summary(*, credentials_file: str | Path, revision: int, seconds: int = 60,
                     on_ready: Callable[[dict], None] | None = None,
-                    query_source: str = "directory") -> dict:
+                    query_source: str = "directory", query_store_id: str | None = None) -> dict:
     """Observe one new selected normal context; never enable MitM or query SAPI."""
-    if (type(query_source) is not str or query_source not in QUERY_SOURCES
+    if (not _valid_selection(query_source, query_store_id)
             or type(seconds) is not int or not 1 <= seconds <= 60
             or type(revision) is not int or not 1 <= revision <= 2**63 - 1):
         raise SurgeError("surge_invalid_input")
@@ -275,7 +301,8 @@ def receive_summary(*, credentials_file: str | Path, revision: int, seconds: int
         body = _read_summary(min(5, max(0.001, deadline - time.monotonic())))
         try:
             candidate = inspect_summary(body, previous=previous, since=since,
-                                        now=_clock(None), query_source=query_source)
+                                        now=_clock(None), query_source=query_source,
+                                        query_store_id=query_store_id)
         except SurgeError as error:
             if error.error_code not in {"surge_candidate_not_found", "surge_context_unchanged"}:
                 raise

@@ -38,8 +38,11 @@ await check('failed final queue never becomes fresh, count failure preserves que
 await check('valid empty lists, stale responses and historical day remain distinct',()=>{
   const detail=copy(fixture.day_detail);detail.local_date=shanghaiDate();const now=Date.now();detail.points.at(-1).queue_received_at=new Date(now-5000).toISOString();
   detail.points.at(-1).queues.mixedQueue=[];assert.equal(queuePresentation(detail,'mixedQueue',now).display,'本次未显示号码');
-  detail.points.at(-1).queues.mixedQueue=['99'];assert.equal(queuePresentation(detail,'mixedQueue',now+100000).display,'暂无可用号码');
-  detail.local_date='2026-10-06';assert.equal(queuePresentation(detail,'mixedQueue',now+100000).state,'historical');
+  detail.points.at(-1).queues.mixedQueue=['99'];const stale=queuePresentation(detail,'mixedQueue',now+100000);
+  assert.equal(stale.display,'暂无可用号码');assert.equal(stale.labels,null);assert.equal(stale.state,'stale');
+  assert.equal(recentRecords(detail)[0].dine,'99');
+  detail.local_date='2026-10-06';const historical=queuePresentation(detail,'mixedQueue',now+100000);
+  assert.equal(historical.state,'historical');assert.deepEqual(historical.labels,['99']);
 });
 await check('single quantity stream and nearest real observation, no interpolation',()=>{
   const chart=plots(fixture.day_detail);assert.deepEqual(chart.quantity,chart.dine.rawCount);assert.equal(chart.quantity.length,3);

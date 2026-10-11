@@ -26,7 +26,8 @@ if (!['light','dark','system'].includes(state.theme)) state.theme='system';
 function applyTheme() {root.style.colorScheme=state.theme==='system'?'light dark':state.theme;}
 applyTheme();
 
-const controller=createStatisticsController({client:createStatisticsClient(),onChange(next) {
+const statisticsSource=root.dataset.statisticsSource ?? 'crm_remote_v1_1';
+const controller=createStatisticsController({client:createStatisticsClient({source:statisticsSource}),onChange(next) {
   const completedRead=snapshot.phase==='loading' && ['ready','partial'].includes(next.phase);
   snapshot=next;
   displayCache.remember(next);

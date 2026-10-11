@@ -109,6 +109,14 @@ class WindowTests(unittest.TestCase):
         self.assertTrue(result["debug_off_confirmed"])
         self.assertFalse(result["main_context_updated"])
 
+    def test_detail_window_requires_and_forwards_store_before_native_access(self):
+        self.error('window_invalid_input', query_source="detail")
+        self.error('window_invalid_input', query_source="directory", query_store_id="3030")
+        self.state.assert_not_called(); self.spawn.assert_not_called()
+        result = self.run_window(query_source="detail", query_store_id="3030")
+        self.assertEqual(self.intake.call_args.kwargs["query_store_id"], "3030")
+        self.assertEqual(result["query_source"], "detail")
+
     def test_baseline_or_revision_mismatch_refuses_before_guard(self):
         self.save(self.staging,bundle(2)); self.error('window_baseline_mismatch')
         self.spawn.assert_not_called()

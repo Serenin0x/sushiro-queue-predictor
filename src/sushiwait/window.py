@@ -12,7 +12,7 @@ import time
 
 from .capture import CaptureError, _check_parent, _open_parent
 from .credentials import CredentialError, read_credentials_file
-from .surge import QUERY_SOURCES, SurgeError, _app, receive_summary
+from .surge import SurgeError, _app, _valid_selection, receive_summary
 from .surgeguard import GuardError, read_state
 
 
@@ -158,7 +158,8 @@ def _changed(path, previous) -> bool | None:
 
 def run_window(*, credentials_file: str | Path, staged_file: str | Path,
                revision: int, seconds: int = 40, collector_paused: bool = False,
-               on_ready=None, query_source: str = "directory") -> dict:
+               on_ready=None, query_source: str = "directory",
+               query_store_id: str | None = None) -> dict:
     """Needs installed package and operator-controlled normal client action.
 
     Caller must actually pause all relevant collectors and select only SAPI.
@@ -167,7 +168,7 @@ def run_window(*, credentials_file: str | Path, staged_file: str | Path,
     Main directory advisory lock coordinates other capture/promotion writers.
     It is not a global Surge lock and cannot bind uncooperative operators.
     """
-    if (type(query_source) is not str or query_source not in QUERY_SOURCES
+    if (not _valid_selection(query_source, query_store_id)
             or type(seconds) is not int or not 5 <= seconds <= 40
             or type(revision) is not int or not 1 <= revision < 2**63
             or collector_paused is not True or (on_ready is not None and not callable(on_ready))):
@@ -221,7 +222,8 @@ def run_window(*, credentials_file: str | Path, staged_file: str | Path,
                           'main_context_updated': False, 'external_network_performed': False})
 
         result = receive_summary(credentials_file=stage_path, revision=revision,
-                                 seconds=seconds, on_ready=receiving, query_source=query_source)
+                                 seconds=seconds, on_ready=receiving, query_source=query_source,
+                                 query_store_id=query_store_id)
         if (result.get('committed') is not True or result.get('revision') != revision
                 or type(result.get('durability_confirmed')) is not bool):
             raise WindowError('window_staging_result_invalid')

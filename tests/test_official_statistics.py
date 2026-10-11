@@ -116,12 +116,20 @@ class OfficialStatisticsTests(unittest.TestCase):
         data=json.dumps({'month':value['months']['2026-10'],'day':self.day(value)})
         script = """
 import assert from 'node:assert/strict';
-import {validateMonth,validateDay,createStatisticsClient,createStatisticsController} from './src/sushiwait/web/statistics-client.mjs';
+import {validateMonth,validateDay,createStatisticsClient,createStatisticsController,calendarCells} from './src/sushiwait/web/statistics-client.mjs';
+import {calendarForScope} from './src/sushiwait/web/calendar-data.mjs';
 let body='';for await(const chunk of process.stdin)body+=chunk;
 const {month,day}=JSON.parse(body);const source='sapi_miniapp_gateway';
 assert.throws(()=>validateMonth(month,'2026-10'));
 assert.throws(()=>validateDay(day,'900001','2026-10-10'));
 validateMonth(month,'2026-10',{source});validateDay(day,'900001','2026-10-10',{source});
+assert.throws(()=>calendarCells(month,'2026-10'));
+assert.equal(calendarCells(month,'2026-10',null,{source})[9].observations,day.summary.observations);
+assert.equal(calendarForScope(month,'2026-10')[9].observations,day.summary.observations);
+assert.equal(calendarForScope(month,'2026-10','城市待核')[9].observations,day.summary.observations);
+assert.equal(calendarForScope(month,'2026-10','城市待核','900001')[9].observations,day.summary.observations);
+assert.throws(()=>calendarForScope({...month,source:'auto'},'2026-10'));
+assert.throws(()=>calendarForScope({...month,api_profile:'legacy'},'2026-10'));
 const calls=[];const client=createStatisticsClient({source,fetchImpl:async path=>{
  calls.push(path);return {ok:true,text:async()=>JSON.stringify(path.includes('/months/')?month:day)};
 }});

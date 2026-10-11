@@ -193,8 +193,8 @@ export function shanghaiDate(now = Date.now()) {
   return `${v.year}-${v.month}-${v.day}`;
 }
 
-export function calendarCells(index, month, storeId = null) {
-  validateMonth(index, month);
+export function calendarCells(index, month, storeId = null, {source = "crm_remote_v1_1"} = {}) {
+  validateMonth(index, month, {source});
   if (storeId !== null && !index.configured_store_ids.includes(storeId)) fail("unknown_store");
   const ids = storeId === null ? index.configured_store_ids : [storeId];
   const pending = index.calendar_pending_store_ids || [];

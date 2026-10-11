@@ -130,6 +130,30 @@ class CollectionTaskTests(unittest.TestCase):
         with sqlite3.connect(self.db) as db:
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 2)
 
+    def test_metadata_only_checkpoint_change_with_identical_body_is_allowed(self):
+        def metadata_only(_):
+            os.chmod(self.task, 0o600)
+        self.clock.callback = metadata_only
+        code, rows = self.run_cli(self.args(samples=3))
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.requests), 3)
+        self.assertEqual(rows[-1]['completed_slots'], 3)
+
+    def test_body_tampering_with_restored_mtime_still_stops(self):
+        def tamper(_):
+            info = self.task.stat()
+            body = self.task.read_bytes()
+            changed = body.replace(b'"ready"', b'"other"', 1)
+            self.assertNotEqual(body, changed)
+            self.assertEqual(len(body), len(changed))
+            self.task.write_bytes(changed)
+            os.utime(self.task, ns=(info.st_atime_ns, info.st_mtime_ns))
+        self.clock.callback = tamper
+        code, rows = self.run_cli(self.args(samples=3))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(rows[-1]['error_code'], 'collection_task_changed')
+
     def test_saved_result_before_checkpoint_is_reconciled_once(self):
         self.interrupt_after_commit()
         self.requests.clear()

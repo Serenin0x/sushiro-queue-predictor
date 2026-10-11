@@ -238,6 +238,7 @@ class CollectionTask:
         self.path = Path(os.path.abspath(path))
         self.parent_fd = self.lock_fd = self.database_parent_fd = None
         self.identity = None
+        self.checkpoint_digest = None
         self.loaded = False
         try:
             import fcntl
@@ -259,7 +260,9 @@ class CollectionTask:
             if self.identity is not None:
                 if not resume:
                     raise TaskError("collection_task_exists_use_resume")
-                self.value = _decode(_read_private_file(self.path))
+                body = _read_private_file(self.path)
+                self.value = _decode(body)
+                self.checkpoint_digest = hashlib.sha256(body).digest()
                 if self.value["database_identity"] is None:
                     raise TaskError("collection_task_invalid")
                 if self.value["config"] != config:
@@ -303,7 +306,21 @@ class CollectionTask:
         except FileNotFoundError:
             current = None
         if current != self.identity:
-            raise TaskError("collection_task_changed")
+            # Some filesystems update metadata after an atomic rename. A ctime
+            # change alone is safe only if the pinned file and exact saved
+            # bytes are unchanged; never ignore replacement or body changes.
+            if (current is None or self.identity is None
+                    or current[:-1] != self.identity[:-1]
+                    or self.checkpoint_digest is None):
+                raise TaskError("collection_task_changed")
+            try:
+                body = _read_private_file(self.path)
+                after = self._named_identity()
+            except CredentialError:
+                raise TaskError("collection_task_changed") from None
+            if after != current or hashlib.sha256(body).digest() != self.checkpoint_digest:
+                raise TaskError("collection_task_changed")
+            self.identity = after
 
     def _commit(self, value: dict):
         body = json.dumps(value, ensure_ascii=False, allow_nan=False).encode()
@@ -328,6 +345,7 @@ class CollectionTask:
             os.replace(name, self.name, src_dir_fd=self.parent_fd, dst_dir_fd=self.parent_fd)
             renamed = True
             self.identity = self._named_identity()
+            self.checkpoint_digest = hashlib.sha256(body).digest()
             self.value = value
             os.fsync(self.parent_fd)
         except OSError:
