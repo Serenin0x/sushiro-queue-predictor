@@ -37,6 +37,7 @@ def check_official_statistics_install(source_root):
          'ok':1,'payload_json':json.dumps(snapshot)}
     packet=build_packet([row],as_of=at,store_ids=['900001'],api_profile='miniapp_gateway',data_origin='synthetic')
     hours=json.loads((source_root/'config/default-business-hours.json').read_bytes())
+    check_continuity_install(hours,at)
     check_public_relay_install(packet,hours,at)
     with patch('socket.socket',side_effect=AssertionError('official_stats_network')) as sockets:
         result=project_packet(packet,as_of=at,hours=hours)
@@ -1975,6 +1976,43 @@ def check() -> None:
         "delivery_native_cli_calls": 0, "delivery_child_process_calls": 0,
         "delivery_remote_deployment_verified": False,
         "collection_task_options_ok": True, "private_task_status_ok": True, "task_status_socket_calls": 0}))
+
+
+def check_continuity_install(hours, as_of):
+    from sushiwait.continuity import select_continuity_packet, project_continuity_bundle
+    from sushiwait.observations import normalize_snapshot
+    from sushiwait.packets import select_packet
+    from sushiwait.storage import SnapshotStore
+    with tempfile.TemporaryDirectory() as temporary:
+        root=Path(temporary).resolve();root.chmod(0o700)
+        database=root/'continuity.sqlite3'
+        with SnapshotStore(database) as writer:
+            for stamp,labels in [('2026-10-10T03:00:00Z',['12','13','14','15']),
+                                 ('2026-10-10T03:01:00Z',['13','14','16'])]:
+                writer.save(normalize_snapshot({'id':900001,'groupQueues':{'mixedQueue':labels,
+                    'reservationQueue':[],'boothQueue':[],'counterQueue':[]}},'900001',
+                    request_started_at=stamp,received_at=stamp,elapsed_ms=0,
+                    api_profile='miniapp_gateway',data_origin='synthetic'))
+            private_run=writer.run_id
+        scope=dict(as_of=as_of,store_ids=['900001'],api_profile='miniapp_gateway',data_origin='synthetic')
+        before=database.read_bytes()
+        with patch('socket.socket',side_effect=AssertionError('continuity_network')) as sockets:
+            bundle,local=select_continuity_packet(database,**scope,after_id=1)
+            plain,_=select_packet(database,**scope,after_id=1)
+            assert bundle['packet']==plain and local['record_count']==1
+            assert private_run not in json.dumps(bundle)
+            projected=project_continuity_bundle(bundle,as_of=as_of,hours=hours)
+            point=projected['days'][('900001','2026-10-10')]['points'][0]
+            assert point['comparison_state']=='comparable_display_sets'
+            assert point['removed_labels']['mixedQueue']==2 and not bundle['source_claims_verified']
+            assert database.read_bytes()==before and sockets.call_count==0
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                assert main(['packet-export','--db',str(database),'--output',str(root/'bundle.json'),
+                    '--store-id','900001','--api-profile','miniapp_gateway','--data-origin','synthetic',
+                    '--as-of',as_of,'--with-continuity'])==0
+            assert json.loads(output.getvalue())['continuity_schema_version']==1
+    print(json.dumps({'installed_continuity_export_ok':True,'unchanged_v1_records':True,
+                      'network_performed':False,'credentials_accessed':False}))
 
 
 if __name__ == "__main__":

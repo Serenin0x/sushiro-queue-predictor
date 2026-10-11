@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "mode": "design_only_not_connected_to_collector",
+  "requirement": "R58",
+  "source": "sapi_miniapp_gateway",
+  "api_profile": "miniapp_gateway",
+  "directory_observed_at": "2026-10-03T20:32:51+08:00",
+  "directory_sha256": "75aa2649fa9c5d9758311ca8e1d8f825e16f47db548645fba30e7fa4ef377f9c",
+  "directory_currentness_verified": false,
+  "current_mainland_completeness_verified": false,
+  "priority_cities": [
+    "北京",
+    "成都"
+  ],
+  "candidates": [
+    {
+      "store_id": "2001",
+      "directory_name": "IFS店",
+      "area": "成都锦江区",
+      "city": "成都",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "2003",
+      "directory_name": "来福士广场店",
+      "area": "成都武侯区",
+      "city": "成都",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "2004",
+      "directory_name": "成都万象城店",
+      "area": "成都成华区",
+      "city": "成都",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "2008",
+      "directory_name": "凯德天府店",
+      "area": "成都高新区",
+      "city": "成都",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "2009",
+      "directory_name": "世豪广场店",
+      "area": "成都高新区",
+      "city": "成都",
+      "official_new_route_verified": true
+    },
+    {
+      "store_id": "2011",
+      "directory_name": "凯德广场金牛店",
+      "area": "成都金牛区",
+      "city": "成都",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3004",
+      "directory_name": "西单大悦城店",
+      "area": "北京西城区",
+      "city": "北京",
+      "official_new_route_verified": true
+    },
+    {
+      "store_id": "3005",
+      "directory_name": "长楹天街店",
+      "area": "北京朝阳区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3006",
+      "directory_name": "太阳宫凯德店",
+      "area": "北京朝阳区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3009",
+      "directory_name": "朝阳大悦城店",
+      "area": "北京朝阳区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3012",
+      "directory_name": "北京世纪金源店",
+      "area": "北京海淀区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3013",
+      "directory_name": "北京荟聚店",
+      "area": "北京大兴区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3014",
+      "directory_name": "中关村大融城店",
+      "area": "北京海淀区",
+      "city": "北京",
+      "official_new_route_verified": true
+    },
+    {
+      "store_id": "3015",
+      "directory_name": "西直门凯德店",
+      "area": "北京西城区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3016",
+      "directory_name": "亦庄天街店",
+      "area": "北京大兴区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3019",
+      "directory_name": "石景山喜隆多店",
+      "area": "北京石景山区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3023",
+      "directory_name": "丽泽天街店",
+      "area": "北京丰台区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3029",
+      "directory_name": "朝阳合生汇店",
+      "area": "北京朝阳区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3030",
+      "directory_name": "熙悦天街店",
+      "area": "北京房山区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3031",
+      "directory_name": "通州万达店",
+      "area": "北京通州区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3035",
+      "directory_name": "门头沟长安天街店",
+      "area": "北京门头沟区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3038",
+      "directory_name": "通州万象汇店",
+      "area": "北京通州区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3042",
+      "directory_name": "祥云小镇･南区店",
+      "area": "北京顺义区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3045",
+      "directory_name": "西北旺万象汇店",
+      "area": "北京海淀区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3050",
+      "directory_name": "国贸商城･北区店",
+      "area": "北京朝阳区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3053",
+      "directory_name": "华熙LIVE・五棵松店",
+      "area": "北京海淀区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3060",
+      "directory_name": "海淀大悦城店",
+      "area": "北京海淀区",
+      "city": "北京",
+      "official_new_route_verified": false
+    },
+    {
+      "store_id": "3074",
+      "directory_name": "魏公芳华里店",
+      "area": "北京海淀区",
+      "city": "北京",
+      "official_new_route_verified": false
+    }
+  ],
+  "candidate_counts": {
+    "北京": 22,
+    "成都": 6
+  },
+  "maximum_stores_per_worker": 3,
+  "default_business_hours": "user_assumed",
+  "stages": [
+    {
+      "id": "current_finite_baseline",
+      "store_ids": [
+        "3014",
+        "3004",
+        "2009"
+      ],
+      "interval_seconds": 900,
+      "change_active_campaign": false
+    },
+    {
+      "id": "beijing_chengdu_expansion",
+      "candidate_scope": "priority_cities",
+      "interval_seconds": 900,
+      "execution_enabled": false,
+      "maximum_stores_per_trial_batch": 3
+    },
+    {
+      "id": "five_minute_background",
+      "candidate_scope": "verified_selected_stores",
+      "interval_seconds": 300,
+      "execution_enabled": false
+    }
+  ],
+  "activation_requirements": [
+    "finite_baseline_cross_day_result",
+    "explicit_store_scope_and_budget",
+    "official_route_normal_query_per_new_store",
+    "separate_source_rate_from_archive_refresh",
+    "no_403_automatic_retry",
+    "public_receiver_scope_prepared"
+  ],
+  "declared_official_rate_limit_known": false
+}

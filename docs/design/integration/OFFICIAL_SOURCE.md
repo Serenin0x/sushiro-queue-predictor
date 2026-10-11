@@ -1,5 +1,10 @@
 # 官方来源的统计接线
 
+E0454 / rc77本机新增[匿名连续性导出及纯投影](../../OFFICIAL_CONTINUITY.md)，保留原记录ID／摘要；云端v1归档仍不携带关联，下面的packet_continuity_unknown不能由前端自行改成可比。新源中的links与分页anchors需后续完整存储／确认／恢复接线；当前日历和参考页继续使用实际部署的rc76，不改变15分钟采样或新鲜度阈值。
+
+E0453部署事实：18:56:42原统计地址的显示服务已切换到固定rc76 / 5de31ca，日历和/statistics-legacy均明确绑定官方来源，94源码／网关文件和3资源SHA及3家日接口实际核对。接收器／归档仍原固定rc74、数据目录不迁移；不能把显示版本升级说成采集器或凭证供应升级。
+
+
 2026-10-11 E0452 / rc76：原地址的日历已实际使用官方归档。修复侧栏“已有号参考与用餐记录”仍请求旧CRM的遗漏：正式网关在/statistics-legacy的main#sushiwait-reference注入data-statistics-source="sapi_miniapp_gateway"，与月历采用同一明确来源。参考页本月、旧月、同店历史和当天曲线只读/api/v1/official/；404／坏字段不回退CRM。模型与页面提示以api_profile和summary／point的单GET成功语义校验，默认独立旧页面仍兼容CRM。新候选云部署按后续交接实测，下面较早状态保留为历史。
 
 当前schema1包的observation_id不可逆，不携带原run_id或可验证连续性；不能仅按数字单调或时间接近推定同一采集进程。因此packet_continuity_unknown保持，展示集合速度和精细趋势预测不凭空补齐。后续核心模型需新增匿名连续性契约及受控新计划，与旧记录ID／摘要／去重兼容；不篡改旧包。本次只接来源和原号码出现提示，15分钟计划不变。

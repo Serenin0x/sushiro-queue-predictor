@@ -164,6 +164,13 @@ def select_packet(database, *, as_of, store_ids, api_profile, data_origin,
     The returned local cursor belongs to this exact database and scope. It is
     not a server receipt. Future/invalid selected rows fail the entire page.
     """
+    return _select_packet(database, as_of=as_of, store_ids=store_ids,
+                          api_profile=api_profile, data_origin=data_origin,
+                          after_id=after_id, limit=limit)
+
+
+def _select_packet(database, *, as_of, store_ids, api_profile, data_origin,
+                   after_id=0, limit=1000, with_continuity=False):
     # Validate all input before opening any path, including an empty database.
     build_packet([], as_of=as_of, store_ids=store_ids,
                  api_profile=api_profile, data_origin=data_origin)
@@ -200,6 +207,29 @@ def select_packet(database, *, as_of, store_ids, api_profile, data_origin,
                 page = [dict(zip(names,row)) for row in rows[:limit]]
                 packet = build_packet(page, as_of=as_of, store_ids=store_ids,
                                       api_profile=api_profile, data_origin=data_origin)
+                if with_continuity:
+                    # Both the selected page and its nearest scoped predecessors
+                    # belong to this same SQLite snapshot. Include failures and
+                    # different writers; do not bridge over either boundary.
+                    from .continuity import build_continuity_bundle
+                    predecessors = []
+                    last_by_store = {}
+                    for row in page:
+                        previous = last_by_store.get(row['store_id'])
+                        if previous is None:
+                            previous = source.db.execute(
+                                "SELECT id,CASE WHEN length(run_id)=36 THEN run_id END,store_id,api_profile,"
+                                "data_origin,CASE WHEN length(received_at)<=32 THEN received_at END,ok,"
+                                "CASE WHEN length(CAST(payload_json AS BLOB))<=65536 THEN payload_json END "
+                                "FROM samples WHERE id<? AND store_id=? AND api_profile=? AND data_origin=? "
+                                "ORDER BY id DESC LIMIT 1",
+                                [row['id'], row['store_id'], api_profile, data_origin]).fetchone()
+                            previous = dict(zip(names, previous)) if previous else None
+                        # Ascending scoped selection omits no intervening row
+                        # of this store. Only each store's first row needs SQL.
+                        predecessors.append(previous)
+                        last_by_store[row['store_id']] = row
+                    packet = build_continuity_bundle(packet, page, predecessors, as_of=as_of)
                 _check_parent(database, parent_fd, private=True)
                 current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
                 if (not _private_file(current) or _file_identity(before) != _file_identity(current)

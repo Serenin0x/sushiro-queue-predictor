@@ -941,6 +941,8 @@ def build_parser() -> argparse.ArgumentParser:
     packet.add_argument("--as-of", required=True, help="带秒与时区的资料截止时间；选中未来记录时整页拒绝")
     packet.add_argument("--after-id", type=int, default=0, help="本机同库同范围的已保存游标，不代表服务端确认")
     packet.add_argument("--limit", type=int, default=1000, help="本次按ID升序选择1–1000条")
+    packet.add_argument("--with-continuity", action="store_true",
+                        help="另存匿名写者及前序记录合同；旧接收器不接受此格式，不上传")
     for name, description in (("packet-check", "校验私有公共字段包的格式/校验值；不认证来源或联网"),
                               ("packet-archive", "事务归档公共字段包，重复不新增、冲突整批停止；不启动服务器")):
         receipt = commands.add_parser(name, help=description)
@@ -1946,7 +1948,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
         if args.command == "packet-export":
             try:
-                result = export_packet(args.db, args.output, store_ids=args.store_id,
+                if args.with_continuity:
+                    from .continuity import export_continuity_packet
+                    exporter = export_continuity_packet
+                else:
+                    exporter = export_packet
+                result = exporter(args.db, args.output, store_ids=args.store_id,
                     api_profile=args.api_profile, data_origin=args.data_origin,
                     as_of=args.as_of, after_id=args.after_id, limit=args.limit)
                 emit({"ok":result["durability_confirmed"], **result,
