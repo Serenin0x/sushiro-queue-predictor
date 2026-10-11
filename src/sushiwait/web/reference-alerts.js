@@ -7,6 +7,7 @@
 })(typeof globalThis === "object" ? globalThis : this, function () {
   "use strict";
   const fields = {ordinary: "mixedQueue", reservation: "reservationQueue"};
+  const OFFICIAL = "sapi_miniapp_gateway", SINGLE = "one_official_detail_response_not_two_query_pair";
   const stamp = value => typeof value === "string" && value.length <= 64 &&
     /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? Date.parse(value) : NaN;
   const day = value => new Date(value + 28800000).toISOString().slice(0, 10);
@@ -26,6 +27,7 @@
       const unavailable = reason => {previousEstimate = null; return finish("data_unavailable", reason);};
       if (options?.confirmedScope !== true || !options.ticket) {reset(); return finish("idle", "confirm_ticket_scope");}
       const {storeId, queueType, ticket, issuedAt, now} = options;
+      const source = options.source === undefined ? "crm_remote_v1_1" : options.source;
       const field = fields[queueType], issued = stamp(issuedAt), arrival = options.desiredArrivalAt == null
         ? null : stamp(options.desiredArrivalAt), offset = options.callOffsetMinutes ?? 0;
       if (!field || typeof storeId !== "string" || !/^[1-9]\d{0,9}$/.test(storeId) ||
@@ -34,7 +36,7 @@
           day(issued) !== day(now) || !Number.isInteger(offset) || Math.abs(offset) > 120 ||
           arrival !== null && (!Number.isFinite(arrival) || day(arrival) !== day(now) || arrival < issued) ||
           arrival === null && offset !== 0) {reset(); return unavailable("invalid_private_plan");}
-      const key = JSON.stringify([storeId, queueType, ticket, issuedAt, arrival, offset]);
+      const key = JSON.stringify([source, storeId, queueType, ticket, issuedAt, arrival, offset]);
       if (scope !== key) {reset(); scope = key;}
       const target = arrival === null ? null : arrival + offset * 60000;
       const requested = earliest => {
@@ -44,7 +46,10 @@
       };
       interval = requested(null);
       if (!detail && options.readPending === true) return finish("loading", "current_read_pending");
-      if (!detail || detail.daily_schema_version !== 1 || detail.source !== "crm_remote_v1_1" ||
+      if (!detail || !["crm_remote_v1_1", OFFICIAL].includes(source) ||
+          detail.daily_schema_version !== 1 || detail.source !== source ||
+          source === OFFICIAL && (detail.api_profile !== "miniapp_gateway" ||
+            detail.summary !== null && detail.summary?.success_semantics !== SINGLE) ||
           detail.requested_store_id !== storeId || detail.local_date !== day(now) ||
           detail.network_performed_by_read !== false || detail.eta_available !== false ||
           detail.first_label_is_confirmed_call !== false ||
@@ -60,6 +65,7 @@
       if (at < issued) return unavailable("awaiting_post_issue_sample");
       if (row.scheduled_pause !== false || !row.error_codes || typeof row.error_codes !== "object" ||
           Array.isArray(row.error_codes) || row.error_codes.groupqueues || !Array.isArray(labels) ||
+          source === OFFICIAL && (row.success_semantics !== SINGLE || row.pair_ok !== true || Object.keys(row.error_codes).length) ||
           labels.length > 3 || labels.some(v => !label(v))) return unavailable("queue_unavailable");
       const signature = JSON.stringify(labels);
       if (previousSample && (at < previousSample.at || at === previousSample.at && signature !== previousSample.signature))
@@ -84,6 +90,7 @@
       const sample = stamp(forecast.sample_at), reference = stamp(forecast.reference_time), earliest = stamp(forecast.scenario_earliest);
       const latest = forecast.scenario_latest === null ? null : stamp(forecast.scenario_latest);
       if (forecast.eta_available !== false || forecast.actual_call_verified !== false ||
+          source === OFFICIAL && forecast.source !== source ||
           forecast.calibrated_interval !== false || forecast.queue_field !== field || sample !== at ||
           !Number.isFinite(reference) || reference <= now || !Number.isFinite(earliest) || earliest < now ||
           latest !== null && (!Number.isFinite(latest) || latest < earliest) ||

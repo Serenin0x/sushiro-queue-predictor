@@ -73,8 +73,9 @@ class StatisticsGateway:
             # The internal monitor is deliberately outside the public scope.
             body = body.replace(b'<a href="/monitor">' + '最近观测'.encode() + b'</a>',
                 '<span>每30秒自动更新</span>'.encode())
-        if path == '/statistics' and status == 200 and self.calendar_source == 'sapi_miniapp_gateway':
-            marker = b'id="sushiwait-month-calendar"'
+        if path in {'/statistics', '/statistics-legacy'} and status == 200 and self.calendar_source == 'sapi_miniapp_gateway':
+            marker = (b'id="sushiwait-month-calendar"' if path == '/statistics'
+                      else b'id="sushiwait-reference"')
             if body.count(marker) != 1 or b'data-statistics-source=' in body:
                 status, body, mime = 503, b'Calendar source binding unavailable', 'text/plain; charset=utf-8'
             else:

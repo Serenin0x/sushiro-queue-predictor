@@ -1,5 +1,10 @@
 # 官方来源的统计接线
 
+2026-10-11 E0452 / rc76：原地址的日历已实际使用官方归档。修复侧栏“已有号参考与用餐记录”仍请求旧CRM的遗漏：正式网关在/statistics-legacy的main#sushiwait-reference注入data-statistics-source="sapi_miniapp_gateway"，与月历采用同一明确来源。参考页本月、旧月、同店历史和当天曲线只读/api/v1/official/；404／坏字段不回退CRM。模型与页面提示以api_profile和summary／point的单GET成功语义校验，默认独立旧页面仍兼容CRM。新候选云部署按后续交接实测，下面较早状态保留为历史。
+
+当前schema1包的observation_id不可逆，不携带原run_id或可验证连续性；不能仅按数字单调或时间接近推定同一采集进程。因此packet_continuity_unknown保持，展示集合速度和精细趋势预测不凭空补齐。后续核心模型需新增匿名连续性契约及受控新计划，与旧记录ID／摘要／去重兼容；不篡改旧包。本次只接来源和原号码出现提示，15分钟计划不变。
+
+
 rc72新增 `sushiwait.officialstats.project_packet`，读取已校验的公开字段包，生成月历／单店日曲线契约。原包须与投影共同保存。示例：
 
 ```python

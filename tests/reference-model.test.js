@@ -192,4 +192,44 @@ check("history work bounds and caller data stay immutable",()=>{
   assert.equal(withHistory(d,Array(8).fill(days[0])).history.accepted_days,0);
   d.graph_truncated=true;assert.equal(model.forecastWithHistory(d,options(d),days).reason,"truncated_current_projection");
 });
+const officialSource="sapi_miniapp_gateway",single="one_official_detail_response_not_two_query_pair";
+function official(d) {
+  d.source=officialSource;d.api_profile="miniapp_gateway";
+  d.summary={...d.summary,success_semantics:single};d.points.forEach(p=>p.success_semantics=single);return d;
+}
+check("official source must be selected and single-response semantics checked",()=>{
+  const d=official(data());assert.equal(model.forecast(d,options(d)).reason,"scope_mismatch");
+  assert(model.forecast(d,options(d,{source:officialSource})).available);
+  for(const mutate of [v=>v.api_profile="remote_v1_1",v=>v.summary.success_semantics="pair",v=>delete v.summary.success_semantics]) {
+    const bad=structuredClone(d);mutate(bad);assert.equal(model.forecast(bad,options(bad,{source:officialSource})).reason,"scope_mismatch");
+  }
+  assert.equal(model.forecast(data(),options(data(),{source:officialSource})).reason,"scope_mismatch");
+  assert.equal(model.forecast(data(),options(data(),{source:"other"})).reason,"scope_mismatch");
+});
+check("official unknown continuity stays unknown despite monotone positions",()=>{
+  const d=official(data());d.points.forEach(p=>p.comparison_state="packet_continuity_unknown");
+  assert.equal(model.forecast(d,options(d,{source:officialSource})).reason,"sampling_continuity_unavailable");
+  for(const mutate of [p=>p.success_semantics="pair",p=>p.error_codes={detail:"request_failed"},p=>p.pair_ok=false]) {
+    const bad=official(data());mutate(bad.points.at(-1));
+    assert.equal(model.forecast(bad,options(bad,{source:officialSource})).reason,"no_current_sample");
+  }
+});
+check("official history excludes old-source days and unverified packet boundaries",()=>{
+  const d=official(data(4)),days=[official(archived("2026-10-08")),official(archived("2026-10-07"))];
+  d.graph_truncated=false;d.summary.date_type="ordinary_workday";
+  const o=options(d,{source:officialSource,ticket:"136"});
+  const r=model.forecastWithHistory(d,o,days);assert(r.available);assert.equal(r.source,officialSource);
+  const mixed=model.forecastWithHistory(d,o,[archived("2026-10-08"),days[1]]);
+  assert.equal(mixed.history.excluded_days,1);assert.equal(mixed.available,false);
+  days.forEach(v=>v.points.forEach(p=>p.comparison_state="packet_continuity_unknown"));
+  const unknown=model.forecastWithHistory(d,o,days);assert.equal(unknown.available,false);
+  assert.equal(unknown.history.state,"median_upper_unknown");
+});
+check("official replay selects source and never leaks future outcomes into forecasts",()=>{
+  const d=official(data(61)),o={source:officialSource,storeId:"900001",queueType:"ordinary",offset:50,stride:20};
+  const first=model.replay(d,o);assert.equal(first.cases[1].state,"reference_crossing_observed");
+  const changed=structuredClone(d);changed.points.slice(21).forEach((p,i)=>p.queues.mixedQueue=[String(200+i*10)]);
+  assert.equal(model.replay(changed,o).cases[1].predicted_reference_time,first.cases[1].predicted_reference_time);
+  assert(!model.replay(d,{...o,source:"crm_remote_v1_1"}).cases.some(c=>c.available));
+});
 console.log(`${cases} reference-model cases passed`);

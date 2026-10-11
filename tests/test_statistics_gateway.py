@@ -107,7 +107,8 @@ class StatisticsGatewayTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gateway.StatisticsGateway(self.hub, calendar_source='other')
         html = b'<div id="sushiwait-month-calendar"></div>'
-        self.hub.dispatch = lambda path: (200, html, 'text/html')
+        reference_html = b'<main id="sushiwait-reference"></main>'
+        self.hub.dispatch = lambda path: (200, reference_html if path == '/statistics-legacy' else html, 'text/html')
         # Configuring the optional API alone must not switch the calendar.
         self.app = gateway.StatisticsGateway(self.hub, official_view=object())
         self.assertEqual(self.request('/statistics')[1]['body'], html)
@@ -115,6 +116,22 @@ class StatisticsGatewayTests(unittest.TestCase):
             calendar_source='sapi_miniapp_gateway')
         self.assertIn(b'data-statistics-source="sapi_miniapp_gateway"',
             self.request('/statistics')[1]['body'])
+        self.assertIn(b'id="sushiwait-reference" data-statistics-source="sapi_miniapp_gateway"',
+            self.request('/statistics-legacy')[1]['body'])
+
+    def test_official_reference_rejects_unbound_or_ambiguous_html(self):
+        for html in (b'{}', b'<main id="sushiwait-reference"></main>' * 2,
+                     b'<main id="sushiwait-reference" data-statistics-source="other"></main>',
+                     b'<div id="sushiwait-month-calendar"></div>'):
+            with self.subTest(html=html):
+                self.hub.dispatch = lambda path: (200, html, 'text/html')
+                self.app = gateway.StatisticsGateway(self.hub, official_view=object(),
+                    calendar_source='sapi_miniapp_gateway')
+                self.assertEqual(self.request('/statistics-legacy')[0]['status'], 503)
+
+    def test_reference_default_still_uses_explicit_legacy_source(self):
+        html = b'<main id="sushiwait-reference"></main>'
+        self.hub.dispatch = lambda path: (200, html, 'text/html')
         self.assertEqual(self.request('/statistics-legacy')[1]['body'], html)
 
     def test_official_calendar_rejects_missing_or_ambiguous_binding(self):

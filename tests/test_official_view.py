@@ -84,6 +84,30 @@ class OfficialViewTests(unittest.TestCase):
         self.assertFalse(restarted['network_performed_by_read'] or restarted['eta_available'])
         self.assertIsNone(restarted['points'][1]['interval_seconds'])
 
+    def test_actual_archive_contract_reaches_browser_reference_and_alerts(self):
+        node = shutil.which('node')
+        if node is None:
+            self.skipTest('Node unavailable')
+        self.append(make_packet([(10, '2026-10-10T11:44:00Z', '2026-10-10T11:44:00Z'),
+                                 (12, '2026-10-10T11:59:00Z', '2026-10-10T11:59:00Z')]))
+        value = self.read()
+        code = '''const assert=require('node:assert/strict');
+const fs=require('node:fs'),d=JSON.parse(fs.readFileSync(0,'utf8'));
+const model=require(process.argv[1]),alerts=require(process.argv[2]);
+const o={source:'sapi_miniapp_gateway',storeId:'900001',queueType:'ordinary',ticket:'20',
+ issuedAt:'2026-10-10T11:30:00Z',now:Date.parse(d.generated_at),confirmedScope:true};
+assert.equal(model.forecast(d,o).reason,'sampling_continuity_unavailable');
+const shown=alerts.createTracker().update(d,{...o,ticket:'12'});
+assert.equal(shown.reason,'number_displayed');assert.equal(shown.actual_call_verified,false);
+assert.equal(alerts.createTracker().update(d,{...o,ticket:'12',now:o.now+30001}).reason,'source_stale');
+assert.equal(model.forecast(d,{...o,source:'crm_remote_v1_1'}).reason,'scope_mismatch');
+console.log('real archive schema accepted; unknown continuity and stale state preserved');'''
+        result = subprocess.run([node, '-e', code,
+            str(ROOT/'src/sushiwait/web/reference-model.js'),
+            str(ROOT/'src/sushiwait/web/reference-alerts.js')], input=json.dumps(value),
+            capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_http_reads_leave_database_bytes_and_files_unchanged(self):
         before=hashlib.sha256(self.db.read_bytes()).hexdigest();files=set(self.root.iterdir())
         self.read(MONTH);self.read(DAY)

@@ -107,6 +107,35 @@ check("source scope, array bound and private input cannot escape",()=>{
     assert.equal(createTracker().update(value,opts()).state,"data_unavailable");
 });
 
+const officialSource="sapi_miniapp_gateway",single="one_official_detail_response_not_two_query_pair";
+function official(row=sample(["200"],base,{pair_ok:true,success_semantics:single,comparison_state:"packet_continuity_unknown"})) {
+  return {...detail(row),source:officialSource,api_profile:"miniapp_gateway",summary:{success_semantics:single}};
+}
+check("official exact membership works without claiming packet continuity",()=>{
+  const o=opts({source:officialSource}),t=createTracker();
+  assert.equal(t.update(official(),o).reason,"number_displayed");
+  const absent=official(sample(["201"],base+60000,{pair_ok:true,success_semantics:single,comparison_state:"packet_continuity_unknown"}));
+  assert.equal(t.update(absent,opts({source:officialSource,now:base+60000})).reason,"model_unavailable");
+  assert.equal(createTracker().update(official(),opts()).state,"data_unavailable");
+  assert.equal(createTracker().update(detail(),o).state,"data_unavailable");
+});
+check("official single-query errors and bad semantics retract membership",()=>{
+  for(const change of [{pair_ok:false},{success_semantics:"pair"},{error_codes:{detail:"request_failed"}}]) {
+    const t=createTracker(),o=opts({source:officialSource});t.update(official(),o);
+    const bad=official(sample(["200"],base+60000,{pair_ok:true,success_semantics:single,...change}));
+    assert.equal(t.update(bad,opts({source:officialSource,now:base+60000})).reason,"queue_unavailable");
+  }
+  const bad=official();bad.api_profile="remote_v1_1";
+  assert.equal(createTracker().update(bad,opts({source:officialSource})).reason,"current_data_unavailable");
+});
+check("official forecast source is bound and source switches clear membership",()=>{
+  const d=official(sample(["100"],base,{pair_ok:true,success_semantics:single})),o=opts({source:officialSource});
+  assert.equal(createTracker().update(d,o,estimate()).reason,"forecast_binding_invalid");
+  assert.equal(createTracker().update(d,o,estimate(base,base+1800000,{source:officialSource})).state,"tracking");
+  const t=createTracker();t.update(detail(sample(["200"])),opts());
+  assert.notEqual(t.update(d,o).reason,"previously_displayed_now_absent");
+});
+
 // Execute the real page script with its real model and precaution module.
 class Element {constructor(tag){this.tag=tag;this.children=[];this.value="";this.hidden=false;this.textContent="";this.dataset={};this.classList={add(){}};}append(e){this.children.push(e);}replaceChildren(){this.children=[];}setAttribute(){}getBoundingClientRect(){return {width:600};}getContext(){return new Proxy({},{get:()=>()=>{}});}}
 const nodes=new Map(),reads=[];

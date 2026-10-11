@@ -2,6 +2,16 @@
 from pathlib import Path
 import shutil,subprocess,unittest
 class StatisticsUITests(unittest.TestCase):
+    def test_official_source_routes_and_private_number_precautions(self):
+        node=shutil.which('node')
+        if node is None:self.skipTest('Node unavailable')
+        root=Path(__file__).resolve().parents[1]
+        web=root/'src/sushiwait/web'
+        result=subprocess.run([node,str(root/'tests/statistics-official.test.js'),
+            str(web/'statistics.js'),str(web/'reference-model.js'),str(web/'reference-alerts.js')],
+            capture_output=True,text=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
     def test_calendar_and_stale_detail_behavior(self):
         node=shutil.which('node')
         if node is None:self.skipTest('Node unavailable')

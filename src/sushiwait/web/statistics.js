@@ -1,5 +1,7 @@
 "use strict";
 const $=id=>document.getElementById(id), dateFormat=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}), timeFormat=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});
+const referenceSource=$("sushiwait-reference")?.dataset?.statisticsSource??"crm_remote_v1_1";
+const referenceApi=referenceSource==="sapi_miniapp_gateway"?"/api/v1/official":"/api/v1";
 function today(){const parts=dateFormat.formatToParts(new Date()),v={};parts.forEach(p=>v[p.type]=p.value);return `${v.year}-${v.month}-${v.day}`;}
 let index={days:{},store_names:{}},day=today(),detail=null,busy=false,detailLoading=false,detailRequestId=0,ticketScopeKey=null;
 const historyCache=new Map();
@@ -17,7 +19,7 @@ function renderPrecaution(options,result){
   element.dataset.state=state.state;
   return state;
 }
-async function get(path){const r=await fetch(path,{cache:"no-store",signal:AbortSignal.timeout(15000)});if(!r.ok){const e=Error("读取失败");e.httpStatus=r.status;throw e;}return r.json();}
+async function get(path){if(!["crm_remote_v1_1","sapi_miniapp_gateway"].includes(referenceSource))throw Error("数据来源未配置");const r=await fetch(path,{cache:"no-store",signal:AbortSignal.timeout(15000)});if(!r.ok){const e=Error("读取失败");e.httpStatus=r.status;throw e;}return r.json();}
 function textRow(values,parent){const tr=document.createElement("tr");values.forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.append(td);});parent.append(tr);return tr;}
 function time(v){return v?timeFormat.format(new Date(v)):"—";}
 function estimateTime(v){return new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(v));}
@@ -42,26 +44,26 @@ function loadHistory(store,date){
     const weekday=new Date(`${date}T00:00:00Z`).getUTCDay(),sameWeekday=d=>new Date(`${d}T00:00:00Z`).getUTCDay()===weekday;
     if(dates.length<7||dates.filter(sameWeekday).length<2){
       const previous=new Date(`${date.slice(0,7)}-01T00:00:00Z`);previous.setUTCDate(0);
-      try{const past=await get(`/api/v1/months/${previous.toISOString().slice(0,7)}`);dates=[...new Set([...dates,...priorDates(past,store,date)])].sort().reverse();if(past.calendar_pending_store_ids?.includes(store))entry.failed++;}
+      try{const past=await get(`${referenceApi}/months/${previous.toISOString().slice(0,7)}`);dates=[...new Set([...dates,...priorDates(past,store,date)])].sort().reverse();if(past.calendar_pending_store_ids?.includes(store))entry.failed++;}
       catch(_){entry.failed++;}
     }
     // Retain repeated weekdays for date effects, then fill with recent days; choose before reading outcomes.
     dates=[...dates.filter(sameWeekday).slice(0,4),...dates.filter(d=>!sameWeekday(d))].slice(0,7);
     for(const archivedDate of dates){
       if(historyCache.get(key)!==entry)return;
-      try{entry.days.push(await get(`/api/v1/stores/${encodeURIComponent(store)}/days/${archivedDate}`));}
+      try{entry.days.push(await get(`${referenceApi}/stores/${encodeURIComponent(store)}/days/${archivedDate}`));}
       catch(_){entry.failed++;}
     }
     entry.state=entry.failed?"partial":"ready";
     if(historyCache.get(key)===entry&&day===date&&$("store").value===store)renderPrediction();
   })();
 }
-const predictionReasons={unsupported_queue:"仅支持堂食或预约队列；请切换展示队列。",today_only:"实验预测只用于今天的号码；历史日期可查看统计曲线。",scope_mismatch:"门店或数据语义不匹配，暂不计算。",invalid_projection:"观测格式或数量超出支持范围。",confirm_ticket_scope:"请确认这是今天在所选门店与队列取得的号码。",numeric_ticket_required:"请输入最多七位的纯数字号码，保留原有前导零。",issue_time_required:"请填写今天实际取号的时间，不能使用未来时间。",future_or_invalid_clock:"观测时间或本机时钟异常，暂不计算。",awaiting_post_issue_sample:"等待取号之后的新观测。",ticket_cycle_uncertain:"参考曾倒退或重置，无法确认这个号码属于当前轮次。",reference_at_or_beyond_ticket:"参考已到达或越过这个号码，请核对官方号单；这里不能确认已叫号或过号。",no_current_sample:"最新观测失败、暂停或没有有效号码，暂不计算。",stale_sample:"观测已超过90秒，暂停预测并等待新数据。",sampling_density_unsupported:"近期采样密度超出实验支持范围。",insufficient_positive_trend:"需要至少五分钟的连续有效推进，暂时无法计算。",forecast_horizon_unsupported:"推进过慢或预测已超出有效时限，暂不计算。"};
+const predictionReasons={unsupported_queue:"仅支持堂食或预约队列；请切换展示队列。",today_only:"实验预测只用于今天的号码；历史日期可查看统计曲线。",scope_mismatch:"门店或数据语义不匹配，暂不计算。",invalid_projection:"观测格式或数量超出支持范围。",confirm_ticket_scope:"请确认这是今天在所选门店与队列取得的号码。",numeric_ticket_required:"请输入最多七位的纯数字号码，保留原有前导零。",issue_time_required:"请填写今天实际取号的时间，不能使用未来时间。",future_or_invalid_clock:"观测时间或本机时钟异常，暂不计算。",awaiting_post_issue_sample:"等待取号之后的新观测。",ticket_cycle_uncertain:"参考曾倒退或重置，无法确认这个号码属于当前轮次。",reference_at_or_beyond_ticket:"参考已到达或越过这个号码，请核对官方号单；这里不能确认已叫号或过号。",no_current_sample:"最新观测失败、暂停或没有有效号码，暂不计算。",stale_sample:"观测已超过90秒，暂停预测并等待新数据。",sampling_density_unsupported:"近期采样密度超出实验支持范围。",insufficient_positive_trend:"需要至少六个有效观测点、五分钟的连续推进；低频采样暂不足以计算精细等待。",sampling_continuity_unavailable:"这些观测之间的采集连续性尚未确认，暂不连接成等待时间趋势。",forecast_horizon_unsupported:"推进过慢或预测已超出有效时限，暂不计算。"};
 function renderPrediction(){
   const issued=$("ticket-issued").value,ms=/^\d{2}:\d{2}$/.test(issued)?Date.parse(`${day}T${issued}:00+08:00`):NaN;
   const arrival=$("ticket-arrival").value,arrivalAt=/^\d{2}:\d{2}$/.test(arrival)?`${day}T${arrival}:00+08:00`:arrival?"invalid":null;
   const offset=$("ticket-offset").value;
-  const options={storeId:$("store").value,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value],ticket:$("ticket-number").value,issuedAt:Number.isFinite(ms)?new Date(ms).toISOString():null,now:Date.now(),confirmedScope:$("ticket-scope").checked&&ticketScopeKey===scopeKey(),desiredArrivalAt:arrivalAt,callOffsetMinutes:/^-?\d{1,3}$/.test(offset)?Number(offset):NaN,readPending:detailLoading};
+  const options={source:referenceSource,storeId:$("store").value,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value],ticket:$("ticket-number").value,issuedAt:Number.isFinite(ms)?new Date(ms).toISOString():null,now:Date.now(),confirmedScope:$("ticket-scope").checked&&ticketScopeKey===scopeKey(),desiredArrivalAt:arrivalAt,callOffsetMinutes:/^-?\d{1,3}$/.test(offset)?Number(offset):NaN,readPending:detailLoading};
   $("prediction-note").textContent="";
   if(!$("ticket-number").value){renderPrecaution(options);$("prediction").textContent="输入号码、取号时间并确认门店与队列后计算。";return;}
   if(!detail){renderPrecaution(options);$("prediction").textContent="正在等待所选门店的新观测；旧结果已暂停。";return;}
@@ -78,7 +80,7 @@ function renderPrediction(){
   $("prediction").textContent=`${stage}参考位置预计在 ${estimateTime(result.reference_time)} 到达；快慢情景 ${estimateTime(result.scenario_earliest)}—${result.scenario_latest?estimateTime(result.scenario_latest):"较晚端尚不确定"}。`;
   $("prediction-note").textContent=`最新参考 ${result.reference}；位置差 ${result.position_difference}（不是前方桌数）。依据连续 ${result.continuous_minutes.toFixed(1)} 分钟观测，距最近响应 ${Math.round(result.sample_age_seconds)} 秒。${historyNote}情景范围不是已校准的预测误差。${result.acceleration_signal?"最近一段突然加速，已加入更早到达的情景，请及时核对官方号单。":""}${result.latest_interval_stalled?"最新一段参考未推进，历史速度可能滞后。":""}`;
 }
-async function showDay(){const requestId=++detailRequestId,selectedDay=day,store=$("store").value,items=summaries(day);$("date-title").textContent=`${day} · ${store?(index.store_names[store]||store):"全部门店"}`;$("rows").replaceChildren();items.forEach(s=>{const c=s.observed_slot_fraction_so_far,tr=textRow([index.store_names[s.store_id]||s.store_id,s.successful_pairs,`${s.failed_pairs} / ${s.scheduled_pause_slots}`,c===null?"—":`${(c*100).toFixed(1)}%`,time(s.last_observation_at)],$("rows"));tr.onclick=()=>{$("store").value=s.store_id;resetTicketScope();calendar();showDay().catch(showError);};});$("summary").textContent=items.length?`有观测的门店 ${items.length} 家，完整观测 ${items.reduce((n,s)=>n+s.successful_pairs,0)} 组。实际叫号总量和人流量仍未核实。`:calendarPending()?"后台正在校验本月归档；当前未加载的数据不记为零。":"当天没有已保存的观测；不能据此判断门店没有客流。";$("detail").hidden=!store;detail=null;detailLoading=Boolean(store);renderPrediction();$("points").replaceChildren();["numbers","count","speed"].forEach(id=>plot(id,[]));$("graph-note").textContent="正在读取当天观测…";if(!store)return;let value;try{value=await get(`/api/v1/stores/${encodeURIComponent(store)}/days/${selectedDay}`);}catch(error){if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;throw error;}if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;detail=value;detailLoading=false;graphs();renderPrediction();loadHistory(store,selectedDay);}
+async function showDay(){const requestId=++detailRequestId,selectedDay=day,store=$("store").value,items=summaries(day);$("date-title").textContent=`${day} · ${store?(index.store_names[store]||store):"全部门店"}`;$("rows").replaceChildren();items.forEach(s=>{const c=s.observed_slot_fraction_so_far,tr=textRow([index.store_names[s.store_id]||s.store_id,s.successful_pairs,`${s.failed_pairs} / ${s.scheduled_pause_slots}`,c===null?"—":`${(c*100).toFixed(1)}%`,time(s.last_observation_at)],$("rows"));tr.onclick=()=>{$("store").value=s.store_id;resetTicketScope();calendar();showDay().catch(showError);};});$("summary").textContent=items.length?`有观测的门店 ${items.length} 家，完整观测 ${items.reduce((n,s)=>n+s.successful_pairs,0)} 组。实际叫号总量和人流量仍未核实。`:calendarPending()?"后台正在校验本月归档；当前未加载的数据不记为零。":"当天没有已保存的观测；不能据此判断门店没有客流。";$("detail").hidden=!store;detail=null;detailLoading=Boolean(store);renderPrediction();$("points").replaceChildren();["numbers","count","speed"].forEach(id=>plot(id,[]));$("graph-note").textContent="正在读取当天观测…";if(!store)return;let value;try{value=await get(`${referenceApi}/stores/${encodeURIComponent(store)}/days/${selectedDay}`);}catch(error){if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;throw error;}if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;if(referenceSource==="sapi_miniapp_gateway"&&(value.source!==referenceSource||value.api_profile!=="miniapp_gateway"||value.requested_store_id!==store||value.local_date!==selectedDay))throw Error("门店来源不匹配");detail=value;detailLoading=false;graphs();renderPrediction();loadHistory(store,selectedDay);}
 function plot(id,points){const canvas=$(id),rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(300,Math.round(rect.width*dpr));canvas.height=230*dpr;const c=canvas.getContext("2d");c.scale(dpr,dpr);const w=canvas.width/dpr,h=230;c.clearRect(0,0,w,h);c.strokeStyle="#d6dce1";c.beginPath();c.moveTo(60,12);c.lineTo(60,h-32);c.lineTo(w-12,h-32);c.stroke();c.fillStyle="#58636c";c.font="12px system-ui";if(!points.length){c.fillText("没有可绘制的有效观测",75,40);return;}const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),dx=Math.max(1,maxX-minX),dy=Math.max(1,maxY-minY);for(let i=0;i<4;i++){const y=minY+dy*i/3;c.fillText(Number(y.toFixed(2)).toString(),4,h-34-(h-50)*i/3);}c.fillText(time(minX),60,h-9);c.fillText(time(maxX),Math.max(60,w-80),h-9);points.forEach(([x,y,series])=>{c.fillStyle=["#3274a1","#bb7441","#638b4f"][series||0];c.beginPath();c.arc(60+(w-80)*(x-minX)/dx,h-34-(h-50)*(y-minY)/dy,2.4,0,Math.PI*2);c.fill();});}
 function graphs(){if(!detail)return;const queue=$("queue").value,points=detail.points||[],numbers=[],counts=[],speed=[];points.forEach(p=>{(p.queues?.[queue]||[]).slice(0,1).forEach(label=>{if(/^\d+$/.test(label))numbers.push([Date.parse(p.queue_received_at),Number(label),0]);});if(p.count_raw!==null)counts.push([Date.parse(p.count_received_at),p.count_raw,0]);if(p.comparison_state==="comparable_display_sets"&&p.interval_seconds>0&&p.removed_labels)speed.push([Date.parse(p.queue_received_at),p.removed_labels[queue]*60/p.interval_seconds,0]);});plot("numbers",numbers);plot("count",counts);plot("speed",speed);$("points").replaceChildren();points.slice(-60).reverse().forEach(p=>textRow([time(p.queue_received_at),(p.queues?.[queue]||[]).join("、")||"未显示",p.count_raw===null?"未知":p.count_raw,p.scheduled_pause?"营业边界暂停":p.pair_ok?"已保存":"部分成功或失败"],$("points")));$("graph-note").textContent=`图表返回 ${points.length} 组。${detail.graph_truncated?"图表投影有截断，完整原始观测仍保存在数据库。":"当前图表投影未截断。"}`;}
 async function refresh(){
@@ -87,9 +89,11 @@ async function refresh(){
   const month=$("month").value,selected=$("store").value;
   try{
     let value;
-    if(month===today().slice(0,7))value=await get("/api/v1/days");
-    else{try{value=await get(`/api/v1/months/${month}`);}catch(e){if(e.httpStatus!==404)throw e;value=await get("/api/v1/days");}}
+    if(referenceSource==="sapi_miniapp_gateway")value=await get(`${referenceApi}/months/${month}`);
+    else if(month===today().slice(0,7))value=await get("/api/v1/days");
+    else{try{value=await get(`${referenceApi}/months/${month}`);}catch(e){if(e.httpStatus!==404)throw e;value=await get("/api/v1/days");}}
     if(month!==$("month").value)return;
+    if(referenceSource==="sapi_miniapp_gateway"&&(value.source!==referenceSource||value.api_profile!=="miniapp_gateway"||value.month!==month))throw Error("月份来源不匹配");
     index=value;$("store").replaceChildren();const all=document.createElement("option");all.value="";all.textContent="全部门店";$("store").append(all);
     Object.entries(index.store_names).forEach(([id,name])=>{const o=document.createElement("option");o.value=id;o.textContent=name;$("store").append(o);});
     $("store").value=selected;calendar();await showDay();

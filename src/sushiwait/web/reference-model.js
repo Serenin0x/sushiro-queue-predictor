@@ -4,6 +4,13 @@
   const POLICY = "first_position_experiment_v1", HISTORY_POLICY = "first_position_history_live_experiment_v2", MAX_POINTS = 2048;
   const WINDOWS = [10, 20, 30], MIN_SPAN = 5, MAX_GAP = 120000, MAX_AGE = 90000;
   const FIELDS = {ordinary: "mixedQueue", reservation: "reservationQueue"};
+  const OFFICIAL = "sapi_miniapp_gateway", SINGLE = "one_official_detail_response_not_two_query_pair";
+  const requestedSource = options => options?.source === undefined ? "crm_remote_v1_1" : options.source;
+  function sourceMatches(detail, source) {
+    return ["crm_remote_v1_1", OFFICIAL].includes(source) && detail?.source === source &&
+      (source !== OFFICIAL || detail.api_profile === "miniapp_gateway" &&
+        (detail.summary === null || detail.summary?.success_semantics === SINGLE));
+  }
   function stamp(value) {
     if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/.test(value)) return NaN;
     const ms = Date.parse(value);
@@ -15,11 +22,12 @@
     const sorted = values.slice().sort((a, b) => a - b), m = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2;
   }
-  function point(row, field, day) {
+  function point(row, field, day, source) {
     const at = stamp(row?.queue_received_at), start = stamp(row?.request_started_at);
     const labels = row?.queues?.[field], position = number(labels?.[0]);
     if (!Number.isFinite(at) || !Number.isFinite(start) || start > at || localDay(at) !== day ||
         row.pair_ok !== true || row.scheduled_pause !== false || position === null ||
+        source === OFFICIAL && row.success_semantics !== SINGLE ||
         !Array.isArray(labels) || labels.length > 3 || labels.some(v => number(v) === null) ||
         row.error_codes && Object.keys(row.error_codes).length) return null;
     return {at, position};
@@ -42,7 +50,8 @@
     const {storeId, queueType, ticket, issuedAt, now, confirmedScope} = options || {}, field = FIELDS[queueType];
     if (!field) return unavailable("unsupported_queue");
     if (!Number.isFinite(now) || localDay(now) !== detail?.local_date) return unavailable("today_only");
-    if (detail?.daily_schema_version !== 1 || detail.source !== "crm_remote_v1_1" ||
+    const source = requestedSource(options);
+    if (detail?.daily_schema_version !== 1 || !sourceMatches(detail, source) ||
         detail.requested_store_id !== storeId || detail.network_performed_by_read !== false ||
         detail.eta_available !== false || detail.first_label_is_confirmed_call !== false ||
         detail.call_reference_semantics !== "user_assumed_first_displayed_label") return unavailable("scope_mismatch");
@@ -55,7 +64,7 @@
     if (!Number.isFinite(generated) || generated > now) return unavailable("future_or_invalid_clock");
     let segment = [], boundary = null, reversalAt = null, lastSeen = null;
     for (const row of detail.points) {
-      const current = point(row, field, detail.local_date), previous = segment[segment.length - 1];
+      const current = point(row, field, detail.local_date, source), previous = segment[segment.length - 1];
       if (!current) {segment = []; boundary = "invalid_or_failed_sample"; continue;}
       if (current.at > now || current.at > generated) return unavailable("future_or_invalid_clock");
       if (lastSeen && current.position < lastSeen.position) reversalAt = current.at;
@@ -78,12 +87,12 @@
     if (segment.some(p => p.at >= issued && p.position >= target)) return unavailable("ticket_cycle_uncertain");
     segment = segment.filter(p => p.at >= last.at - 30 * 60000);
     if (segment.length > 64) return unavailable("sampling_density_unsupported");
-    return {segment, last, age, issued, gap: target - last.position, boundary, field};
+    return {segment, last, age, issued, gap: target - last.position, boundary, field, source};
   }
   function forecast(detail, options) {
     const context = currentContext(detail, options);
     if (context.reason) return context;
-    const {segment, last, age, gap, boundary, field} = context, now = options.now, candidates = [];
+    const {segment, last, age, gap, boundary, field, source} = context, now = options.now, candidates = [];
     for (const windowMinutes of WINDOWS) {
       const rows = segment.filter(p => p.at >= last.at - windowMinutes * 60000);
       if (rows.length < 6 || (last.at - rows[0].at) / 60000 < MIN_SPAN) continue;
@@ -93,7 +102,9 @@
           rate_positions_per_minute: rate, minutes_from_sample: gap / rate});
       }
     }
-    if (!candidates.some(c => c.method === "pairwise_median")) return unavailable("insufficient_positive_trend", {boundary});
+    if (!candidates.some(c => c.method === "pairwise_median")) return unavailable(
+      source === OFFICIAL && boundary === "sampling_boundary" ? "sampling_continuity_unavailable" :
+        "insufficient_positive_trend", {boundary});
     const previous = segment[segment.length - 2], lastRate = previous ?
       (last.position - previous.position) * 60000 / (last.at - previous.at) : 0;
     const typical = median(candidates.map(c => c.rate_positions_per_minute));
@@ -105,7 +116,7 @@
     const slowest = Math.max(...candidates.map(c => c.minutes_from_sample));
     if (slowest > 120 || central <= age / 60000) return unavailable("forecast_horizon_unsupported", {boundary});
     const earliest = Math.min(...candidates.map(c => c.minutes_from_sample));
-    return {policy: POLICY, available: true, eta_available: false, actual_call_verified: false,
+    return {policy: POLICY, source, available: true, eta_available: false, actual_call_verified: false,
       calibrated_interval: false, target_semantics: "first_display_position_reaches_target",
       ticket_cycle_verified: false, queue_field: field, sample_at: new Date(last.at).toISOString(),
       sample_age_seconds: age / 1000, reference: last.position, position_difference: gap,
@@ -142,7 +153,7 @@
       const generated = stamp(past?.generated_at);
       if (!Number.isInteger(ageDays) || ageDays < 1 || ageDays > 31 || localDay(dateAt - 28800000) !== past.local_date ||
           seen.has(past.local_date) || past.requested_store_id !== options.storeId || past.daily_schema_version !== 1 ||
-          past.source !== detail.source || past.network_performed_by_read !== false || past.eta_available !== false ||
+          !sourceMatches(past, context.source) || past.network_performed_by_read !== false || past.eta_available !== false ||
           past.first_label_is_confirmed_call !== false || past.call_reference_semantics !== detail.call_reference_semantics ||
           past.graph_truncated !== false || !Array.isArray(past.points) || past.points.length > MAX_POINTS ||
           !Number.isFinite(generated) || generated > options.now ||
@@ -152,14 +163,14 @@
       seen.add(past.local_date); diagnostics.accepted_days++;
       const cls = calendarClass(past), buckets = new Set();
       for (let i = 0; i < past.points.length; i++) {
-        const origin = point(past.points[i], context.field, past.local_date);
+        const origin = point(past.points[i], context.field, past.local_date, context.source);
         if (!origin || origin.position + context.gap > 9999999) continue;
         const bucket = Math.floor(minuteOfDay(origin.at) / 120);
         if (buckets.has(bucket)) continue;
         buckets.add(bucket); // Choose origins on a fixed time grid, before looking at their outcomes.
         let previous = origin, lower = 0, upper = null, state = "right_censored";
         for (let j = i + 1; j < past.points.length; j++) {
-          const next = point(past.points[j], context.field, past.local_date);
+          const next = point(past.points[j], context.field, past.local_date, context.source);
           if (!next || !connected(past.points[j], previous, next)) {state = "boundary_censored"; break;}
           if (next.at - origin.at > 120 * 60000) break;
           if (next.position >= origin.position + context.gap) {
@@ -214,7 +225,7 @@
     if (central <= context.age / 60000 || central > 120) return Object.assign({}, live,
       {mode: "recent_only", history: Object.assign({}, history.diagnostics, {state: "median_outside_horizon"})});
     const latest = bounds["0.9"].upper;
-    return {policy: HISTORY_POLICY, available: true, eta_available: false, actual_call_verified: false,
+    return {policy: HISTORY_POLICY, source: context.source, available: true, eta_available: false, actual_call_verified: false,
       calibrated_interval: false, ticket_cycle_verified: false, target_semantics: "first_display_position_reaches_target",
       mode: liveWeight ? "history_live_mix" : "history_initial", history: history.diagnostics,
       live_weight: liveWeight, post_issue_observed_minutes: span, queue_field: context.field,
@@ -232,16 +243,17 @@
   }
   function replay(detail, options) {
     const {storeId, queueType, offset = 50, stride = 20} = options || {}, field = FIELDS[queueType];
+    const source = requestedSource(options);
     if (!field || !Number.isInteger(offset) || offset < 1 || offset > 100000 ||
         !Number.isInteger(stride) || stride < 10 || stride > 2048 ||
         !Array.isArray(detail?.points) || detail.points.length > MAX_POINTS) return {policy: POLICY, error: "invalid_replay_request"};
     const cases = [];
     for (let i = 0; i < detail.points.length; i += stride) {
-      const origin = point(detail.points[i], field, detail.local_date);
+      const origin = point(detail.points[i], field, detail.local_date, source);
       if (!origin || origin.position + offset > 9999999) {cases.push({state: "invalid_origin"}); continue;}
       const cutoff = new Date(origin.at).toISOString(), prefix = Object.assign({}, detail,
         {generated_at: cutoff, points: detail.points.slice(0, i + 1)});
-      const prediction = forecast(prefix, {storeId, queueType, ticket: String(origin.position + offset),
+      const prediction = forecast(prefix, {source, storeId, queueType, ticket: String(origin.position + offset),
         issuedAt: cutoff, now: origin.at, confirmedScope: true});
       const record = {origin_at: cutoff, available: prediction.available, state: "unavailable", reason: prediction.reason};
       if (prediction.available) {
@@ -249,7 +261,7 @@
         record.state = "right_censored";
         let previous = origin;
         for (let j = i + 1; j < detail.points.length; j++) {
-          const next = point(detail.points[j], field, detail.local_date);
+          const next = point(detail.points[j], field, detail.local_date, source);
           if (!next || !connected(detail.points[j], previous, next)) {record.state = "boundary_censored"; break;}
           if (next.at - origin.at > 120 * 60000) break;
           if (next.position >= origin.position + offset) {
