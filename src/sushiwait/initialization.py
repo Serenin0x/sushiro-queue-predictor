@@ -21,7 +21,7 @@ from urllib.parse import urlencode
 
 from .bridge import _app_id
 from .credentials import CredentialError, read_credentials_file
-from .yyb import supply_to
+from .yyb import supply_for_target, supply_to
 
 
 ENDPOINT = "https://sapi.sushiro.com.cn/api/1.3/initialize"
@@ -114,6 +114,16 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _validate_input(prepare_request, accept_session, timeout, expected_app_id,
+                    *, required_target=False):
+    if (not callable(prepare_request) or not callable(accept_session)
+            or type(timeout) not in (int, float) or not 1 <= timeout <= 60
+            or required_target and expected_app_id is None
+            or expected_app_id is not None and (type(expected_app_id) is not str
+                or re.fullmatch(r"wx[0-9a-f]{16}", expected_app_id) is None)):
+        raise InitializationError("initialize_invalid_input")
+
+
 def prepare_consumer(prepare_request: Callable, accept_session: Callable, *,
                      reference_context_file, timeout: float = 30,
                      expected_app_id: str | None = None) -> Callable[[str], T]:
@@ -125,11 +135,7 @@ def prepare_consumer(prepare_request: Callable, accept_session: Callable, *,
     headers, not the code or initialization body. It must separately check queue
     acceptance. A used consumer cannot retry, even after a local failure.
     """
-    if (not callable(prepare_request) or not callable(accept_session)
-            or type(timeout) not in (int, float) or not 1 <= timeout <= 60
-            or expected_app_id is not None and (type(expected_app_id) is not str
-                or re.fullmatch(r"wx[0-9a-f]{16}", expected_app_id) is None)):
-        raise InitializationError("initialize_invalid_input")
+    _validate_input(prepare_request, accept_session, timeout, expected_app_id)
     reference_failure = False
     target = None
     try:
@@ -139,6 +145,23 @@ def prepare_consumer(prepare_request: Callable, accept_session: Callable, *,
         reference_failure = True
     if reference_failure or not target or expected_app_id is not None and target != expected_app_id:
         raise InitializationError("initialize_reference_invalid")
+    return _prepare_for_target(prepare_request, accept_session, target, timeout)
+
+
+def prepare_consumer_for_target(prepare_request: Callable, accept_session: Callable, *,
+                                expected_app_id: str, timeout: float = 30) -> Callable[[str], T]:
+    """Prepare a target-bound initialization without an old query credential.
+
+    The explicit source still supplies every normal body/header field. No
+    constants, signing material, dummy credentials or device defaults are
+    invented. Queue acceptance/publication remains the callback's responsibility.
+    """
+    _validate_input(prepare_request, accept_session, timeout, expected_app_id,
+                    required_target=True)
+    return _prepare_for_target(prepare_request, accept_session, expected_app_id, timeout)
+
+
+def _prepare_for_target(prepare_request, accept_session, target, timeout):
     used = False
     lock = threading.Lock()
 
@@ -230,6 +253,27 @@ def initialize_from_yyb(prepare_request: Callable, accept_session: Callable, *,
     consume = prepare_consumer(prepare_request, accept_session,
         reference_context_file=reference_context_file, timeout=initialize_timeout,
         expected_app_id=expected_app_id)
+    return _initialize(consume, lambda checked: supply_to(checked, settings_file=settings_file,
+        reference_context_file=reference_context_file, timeout=supplier_timeout,
+        expected_app_id=consume.target_app_id))
+
+
+def initialize_for_target_from_yyb(prepare_request: Callable, accept_session: Callable, *,
+                                  settings_file, expected_app_id: str,
+                                  supplier_timeout: float = 45, initialize_timeout: float = 30) -> T:
+    """Explicit cold-start supply and initialization, with no reference file.
+
+    A verified source and prepared acceptance callback are still mandatory.
+    This does not publish credentials or prove an independent cloud runtime.
+    """
+    consume = prepare_consumer_for_target(prepare_request, accept_session,
+        expected_app_id=expected_app_id, timeout=initialize_timeout)
+    return _initialize(consume, lambda checked: supply_for_target(checked,
+        settings_file=settings_file, expected_app_id=consume.target_app_id,
+        timeout=supplier_timeout))
+
+
+def _initialize(consume, supplier):
     downstream_error = None
 
     def checked(code):
@@ -240,9 +284,7 @@ def initialize_from_yyb(prepare_request: Callable, accept_session: Callable, *,
             downstream_error = error.error_code
             return None
 
-    outcome = supply_to(checked, settings_file=settings_file,
-        reference_context_file=reference_context_file, timeout=supplier_timeout,
-        expected_app_id=consume.target_app_id)
+    outcome = supplier(checked)
     if downstream_error is not None:
         raise InitializationError(downstream_error)
     return outcome

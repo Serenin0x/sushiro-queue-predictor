@@ -14,7 +14,9 @@ from unittest.mock import Mock, patch
 import urllib.error
 from urllib.parse import parse_qs
 
-from sushiwait.initialization import ENDPOINT, MAX_RESPONSE_BYTES, InitializationError, prepare_consumer, initialize_from_yyb
+from sushiwait.initialization import (ENDPOINT, MAX_RESPONSE_BYTES, InitializationError,
+    prepare_consumer, initialize_from_yyb, prepare_consumer_for_target, initialize_for_target_from_yyb)
+from sushiwait.yyb import YYBCodeError
 from sushiwait.yyb import ENDPOINT as SUPPLIER_ENDPOINT
 from tests.test_credentials import gateway_bundle, write_bundle
 
@@ -287,6 +289,90 @@ class InitializationTests(unittest.TestCase):
             self.error("initialize_invalid_input", lambda: initialize_from_yyb(None, self.accept,
                 settings_file=self.chain_settings(), reference_context_file=self.context))
             supplier.assert_not_called()
+
+
+@unittest.skipUnless(os.name == "posix" and hasattr(os, "O_NOFOLLOW"), "private POSIX settings")
+class TargetInitializationTests(unittest.TestCase):
+    error = InitializationTests.error
+    supplier_response = InitializationTests.supplier_response
+
+    def setUp(self):
+        InitializationTests.setUp(self)
+        self.context.unlink()
+        self.settings = self.parent / "supplier.json"
+        write_bundle(self.settings, {"schema_version": 2, "ref": "1",
+                                    "protocol_token": "a" * 64, "app_id": TARGET})
+
+    def prepared(self, source=material, **kwargs):
+        return prepare_consumer_for_target(source, self.accept,
+                                          **{"expected_app_id": TARGET, **kwargs})
+
+    def chain(self, source=material, **kwargs):
+        return initialize_for_target_from_yyb(source, self.accept, settings_file=self.settings,
+                                             **{"expected_app_id": TARGET, **kwargs})
+
+    def test_complete_bound_chain_works_without_a_reference_file(self):
+        before = self.settings.read_bytes()
+        self.opener.open.side_effect = [self.supplier_response(), self.response]
+        source = Mock(side_effect=material)
+        with patch("sushiwait.initialization.read_credentials_file", side_effect=AssertionError("no reference")), \
+             patch("sushiwait.yyb.read_credentials_file", side_effect=AssertionError("no reference")):
+            result = self.chain(source)
+        self.assertEqual(result, {"synthetic_only": True, "query_accepted": False})
+        source.assert_called_once_with(CODE, int(NOW.timestamp()))
+        self.assertEqual([c.args[0].full_url for c in self.opener.open.call_args_list],
+                         [SUPPLIER_ENDPOINT, ENDPOINT])
+        self.accept.assert_called_once()
+        self.assertEqual(self.accept.call_args.args[0], TOKEN)
+        self.assertEqual(list(self.parent.iterdir()), [self.settings])
+        self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_invalid_target_or_source_stops_before_code_supply(self):
+        with patch("sushiwait.initialization.supply_for_target") as supplier:
+            for target in (None, True, "wxwrong", TARGET + "\n"):
+                self.error("initialize_invalid_input", lambda: self.chain(expected_app_id=target))
+            self.error("initialize_invalid_input", lambda: self.chain(None))
+            self.error("initialize_invalid_input", lambda: self.chain(initialize_timeout=float("nan")))
+            supplier.assert_not_called()
+        self.factory.assert_not_called()
+
+    def test_supplier_and_caller_target_disagreement_stops_before_any_network(self):
+        with self.assertRaises(YYBCodeError) as raised:
+            self.chain(expected_app_id="wx1111111111111111")
+        self.assertEqual(raised.exception.error_code, "yyb_target_mismatch")
+        self.factory.assert_not_called()
+        self.accept.assert_not_called()
+
+    def test_header_target_mismatch_cannot_promote_initialization_material(self):
+        def wrong_source(code, second):
+            body, heads = material(code, second)
+            heads["Referer"] = "https://servicewechat.com/wx1111111111111111/181/page-frame.html"
+            return body, heads
+        self.error("initialize_material_invalid", lambda: self.prepared(wrong_source)(CODE))
+        self.factory.assert_not_called()
+        self.accept.assert_not_called()
+
+    def test_target_consumer_is_single_use_even_after_source_failure(self):
+        source = Mock(side_effect=RuntimeError(CODE + TOKEN))
+        consume = self.prepared(source)
+        self.error("initialize_source_failed", lambda: consume(CODE))
+        self.error("initialize_used", lambda: consume(CODE))
+        source.assert_called_once()
+        self.factory.assert_not_called()
+
+    def test_access_denial_preserves_failing_layer_without_retry(self):
+        body = io.BytesIO(TOKEN.encode())
+        self.opener.open.side_effect = [self.supplier_response(),
+            urllib.error.HTTPError(ENDPOINT, 403, TOKEN, {}, body)]
+        self.error("initialize_access_denied", self.chain)
+        self.assertEqual(self.opener.open.call_count, 2)
+        self.assertTrue(body.closed)
+        self.accept.assert_not_called()
+
+    def test_explicit_target_does_not_supply_missing_signing_material(self):
+        self.error("initialize_material_invalid", lambda: self.prepared(lambda *_: ({}, {}))(CODE))
+        self.factory.assert_not_called()
+        self.accept.assert_not_called()
 
 
 if __name__ == "__main__":

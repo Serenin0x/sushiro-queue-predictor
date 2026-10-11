@@ -20,6 +20,66 @@ from sushiwait.cli import main
 from sushiwait.cli import _recovery_poll_target
 
 
+def check_target_bootstrap_install():
+    """Installed target-only startup; fake responses and no reference file."""
+    from email.message import Message
+    from unittest.mock import Mock
+    from sushiwait.initialization import ENDPOINT, initialize_for_target_from_yyb
+    from sushiwait.yyb import ENDPOINT as SUPPLIER, YYBCodeError
+    target = 'wx0000000000000000'
+    code, token = 'synthetic-bootstrap-code', 'synthetic-bootstrap-token'
+
+    class Response:
+        def __init__(self, url, value):
+            self.url, self.status = url, 200
+            self.body = json.dumps(value).encode()
+            self.headers = Message(); self.headers['Content-Type'] = 'application/json'
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def geturl(self): return self.url
+        def read(self, limit): return self.body[:limit]
+
+    def source(fresh_code, second):
+        return ({'long_token': 'synthetic-startup', 'js_code': fresh_code, 'ts': second,
+                 'nonce': 'Abc123', 'sign': 'a' * 64, 'device_id': 'synthetic-device',
+                 'app_version': 'synthetic-version'},
+                {'X-App-Client': 'synthetic-client', 'X-App-Code': 'synthetic-date',
+                 'User-Agent': 'Synthetic Runtime',
+                 'Referer': 'https://servicewechat.com/' + target + '/181/page-frame.html',
+                 'Content-Type': 'application/json'})
+
+    with tempfile.TemporaryDirectory(prefix='installed target startup ') as temporary:
+        root = Path(temporary).resolve(); root.chmod(0o700)
+        settings = root/'supplier.json'
+        settings.write_text(json.dumps({'schema_version': 2, 'ref': '1',
+                                       'app_id': target, 'protocol_token': 'a' * 64}))
+        settings.chmod(0o600)
+        opener = Mock()
+        opener.open.side_effect = [Response(SUPPLIER, {'code': 0, 'data': {'result': {
+            'code': code, 'errMsg': 'login:ok'}}}), Response(ENDPOINT, {'data': {'auth_token': token}})]
+        accept = Mock(return_value={'synthetic_only': True, 'query_accepted': False})
+        with patch('socket.socket', side_effect=AssertionError('no upstream network')) as sockets, \
+                patch('sushiwait.yyb.urllib.request.build_opener', return_value=opener), \
+                patch('sushiwait.yyb.read_credentials_file', side_effect=AssertionError('no reference')), \
+                patch('sushiwait.initialization.read_credentials_file', side_effect=AssertionError('no reference')):
+            result = initialize_for_target_from_yyb(source, accept, settings_file=settings,
+                                                    expected_app_id=target)
+            assert result == {'synthetic_only': True, 'query_accepted': False}
+            assert [call.args[0].full_url for call in opener.open.call_args_list] == [SUPPLIER, ENDPOINT]
+            assert accept.call_args.args[0] == token and accept.call_count == 1
+            assert list(root.iterdir()) == [settings] and not sockets.call_count
+            try:
+                initialize_for_target_from_yyb(source, accept, settings_file=settings,
+                                              expected_app_id='wx1111111111111111')
+            except YYBCodeError as error:
+                assert error.error_code == 'yyb_target_mismatch'
+            else:
+                raise AssertionError('target mismatch accepted')
+            assert opener.open.call_count == 2 and accept.call_count == 1
+    print(json.dumps({'installed_target_bootstrap_ok': True, 'reference_credentials_read': False,
+                     'actual_network_calls': 0, 'cloud_runtime_proven': False}))
+
+
 def check_official_statistics_install(source_root):
     """Installed public projection and explicit CLI source; all input synthetic."""
     from sushiwait.observations import normalize_snapshot
@@ -766,6 +826,7 @@ def check() -> None:
         raise SystemExit("installed_version_mismatch")
     if Path(sushiwait.__file__).resolve().is_relative_to(args.source_root.resolve()):
         raise SystemExit("package_imported_from_checkout")
+    check_target_bootstrap_install()
     check_personal_install()
     check_deepseek_install()
     check_tracking_install()

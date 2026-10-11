@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 import urllib.error
 
-from sushiwait.yyb import ENDPOINT, MAX_RESPONSE_BYTES, YYBCodeError, supply_to
+from sushiwait.yyb import ENDPOINT, MAX_RESPONSE_BYTES, YYBCodeError, supply_for_target, supply_to
 from tests.test_credentials import gateway_bundle, write_bundle
 
 
@@ -207,3 +207,79 @@ class YYBTests(unittest.TestCase):
         self.error("yyb_consumer_failed")
         self.consumer.assert_called_once_with(CODE)
         self.assertEqual(self.opener.open.call_count, 2)
+
+
+@unittest.skipUnless(os.name == "posix" and hasattr(os, "O_NOFOLLOW"), "POSIX private supplier files")
+class TargetSupplierTests(unittest.TestCase):
+    error = YYBTests.error
+
+    def setUp(self):
+        YYBTests.setUp(self)
+        self.context.unlink()
+        self.settings_value = {"schema_version": 2, "ref": "1",
+                               "protocol_token": TOKEN, "app_id": TARGET}
+        write_bundle(self.settings, self.settings_value)
+
+    def call(self, consumer=None, **kwargs):
+        options = {"expected_app_id": TARGET, **kwargs}
+        return supply_for_target(self.consumer if consumer is None else consumer,
+                                 settings_file=self.settings, **options)
+
+    def test_no_reference_credential_read_or_file_created(self):
+        before = self.settings.read_bytes()
+        with patch("sushiwait.yyb.read_credentials_file", side_effect=AssertionError("no reference read")):
+            result = self.call()
+        self.assertEqual(result, {"initialized": False, "synthetic_only": True})
+        self.consumer.assert_called_once_with(CODE)
+        request = self.opener.open.call_args.args[0]
+        self.assertEqual(request.full_url, ENDPOINT)
+        self.assertEqual(json.loads(request.data), {"ref": "1", "app_id": TARGET})
+        self.assertEqual(list(self.parent.iterdir()), [self.settings])
+        self.assertEqual(self.settings.read_bytes(), before)
+        self.opener.open.assert_called_once()
+
+    def test_caller_target_is_required_and_valid_before_private_read(self):
+        with patch("sushiwait.yyb._read_private_file", side_effect=AssertionError("no settings read")):
+            for target in (None, True, "wxwrong", TARGET + "\n"):
+                self.error("yyb_invalid_input", lambda: self.call(expected_app_id=target))
+            self.error("yyb_consumer_missing", lambda: supply_for_target(None,
+                       settings_file=self.settings, expected_app_id=TARGET))
+            for timeout in (False, 0, 61, float("nan"), float("inf")):
+                self.error("yyb_invalid_input", lambda: self.call(timeout=timeout))
+        self.factory.assert_not_called()
+
+    def test_private_target_and_caller_pin_must_match_before_network(self):
+        self.error("yyb_target_mismatch", lambda: self.call(expected_app_id="wx1111111111111111"))
+        self.factory.assert_not_called()
+        self.consumer.assert_not_called()
+
+    def test_strict_schema_does_not_accept_old_config_or_destination_override(self):
+        for value in (
+            {**self.settings_value, "schema_version": 1},
+            {**self.settings_value, "schema_version": True},
+            {**self.settings_value, "url": "https://other.invalid"},
+            {key: val for key, val in self.settings_value.items() if key != "app_id"},
+            *[{**self.settings_value, "app_id": val} for val in (None, True, TARGET + "\n")],
+            {**self.settings_value, "ref": "0"},
+            {**self.settings_value, "protocol_token": "b" * 63},
+        ):
+            write_bundle(self.settings, value)
+            self.error("yyb_private_config_invalid")
+        write_bundle(self.settings, self.settings_value)
+        self.settings.chmod(0o644)
+        self.error("yyb_private_config_invalid")
+        self.factory.assert_not_called()
+
+    def test_remote_reauthorization_stops_once_without_callback_or_secret_error(self):
+        body = io.BytesIO((CODE + TOKEN).encode())
+        self.opener.open.side_effect = urllib.error.HTTPError(ENDPOINT, 409, CODE, {}, body)
+        self.error("yyb_reauthorization_required")
+        self.assertTrue(body.closed)
+        self.opener.open.assert_called_once()
+        self.consumer.assert_not_called()
+
+    def test_consumer_exception_is_sanitized_and_not_retried(self):
+        self.consumer.side_effect = RuntimeError(CODE + TOKEN)
+        self.error("yyb_consumer_failed")
+        self.opener.open.assert_called_once()
+        self.consumer.assert_called_once_with(CODE)
