@@ -959,6 +959,17 @@ def build_parser() -> argparse.ArgumentParser:
     receiver.add_argument("--port", type=int, default=0, help="127.0.0.1端口；0为随机空闲端口")
     receiver.add_argument("--seconds", type=int, default=30, help="1–60秒，独立截止关闭连接")
     receiver.add_argument("--max-requests", type=int, default=10, help="最多1–100个连接，包含拒绝的连接")
+    relay = commands.add_parser("packet-deliver-ssh", help="使用已独立批准的受限SSH发送一次公共包并保存回执；不创建访问、不重试")
+    relay.add_argument("--input", required=True, help="明确的私有公共字段包，最多4MiB")
+    relay.add_argument("--ssh-key-file", required=True, help="已独立批准的专用私有传输key；不使用查询凭证")
+    relay.add_argument("--known-hosts-file", required=True, help="经可信途径核对的私有固定主机公钥文件")
+    relay.add_argument("--target", required=True, help="明确的SSH用户@IPv4或域名，端口22")
+    relay.add_argument("--confirmation-file", required=True, help="新的私有回执文件，拒绝覆盖；不推进采集游标")
+    relay.add_argument("--timeout", type=int, default=30, help="1–60秒，输出最多256KiB；超时保留原包")
+    relay_check = commands.add_parser("packet-confirmation-ssh", help="离线核对公共包的历史SSH回执；不联网、不读key、不推进游标")
+    relay_check.add_argument("--input", required=True, help="原私有公共字段包")
+    relay_check.add_argument("--confirmation-file", required=True, help="私有历史SSH确认文件")
+    relay_check.add_argument("--as-of", help="明确核对截止时刻；默认当前UTC")
     deliver = commands.add_parser("packet-deliver-local", help="仅投递127.0.0.1并保存核对过的签名回执；不删除原包")
     deliver.add_argument("--input", required=True, help="明确的私有公共字段包")
     deliver.add_argument("--receiver-token-file", required=True, help="独立私有接收端口令；不能使用查询凭证")
@@ -1855,6 +1866,25 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             except TaskError as error:
                 emit({"ok": False, "error_code": error.error_code, "network_performed": False})
+                return 1
+        if args.command in ("packet-deliver-ssh", "packet-confirmation-ssh"):
+            from .sshrelay import SSHRelayError, deliver_public_packet, check_public_confirmation
+            try:
+                if args.command == "packet-confirmation-ssh":
+                    emit(check_public_confirmation(args.input, args.confirmation_file,
+                        as_of=args.as_of or _utc_clock().isoformat()))
+                    return 0
+                emit(deliver_public_packet(args.input, ssh_key_file=args.ssh_key_file,
+                    known_hosts_file=args.known_hosts_file, target=args.target,
+                    confirmation_file=args.confirmation_file, timeout=args.timeout))
+                return 0
+            except SSHRelayError as error:
+                emit({'ok':False, 'error_code':error.error_code,
+                    'network_attempted':error.network_attempted,
+                    'remote_archive_may_have_committed':error.remote_archive_may_have_committed,
+                    'local_confirmation_may_exist':error.local_confirmation_may_exist,
+                    'confirmation_saved':False, 'original_packet_preserved':True,
+                    'query_credentials_accessed':False, 'retry_performed':False})
                 return 1
         if args.command in ("packet-deliver-local", "receipt-check"):
             try:

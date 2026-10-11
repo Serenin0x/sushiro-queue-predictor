@@ -22,6 +22,27 @@ E0447已部署受限接收、公共同步与原地址官方归档显示；新增
 
 发送端应使用固定argv与BatchMode／IdentitiesOnly／StrictHostKeyChecking=yes，指定独立key及经现有可信云终端核对的known_hosts；不使用shell字符串拼接、accept-new或关闭主机验证。先部署固定版本及公开字段配置，再确认是否创建这个新增受限访问。新的SSH授权需要用户明确同意，不把常规云登录授权推定为新key授权。
 
+## 已实现的发送与恢复工具
+
+候选rc75新增`packet-deliver-ssh`，只进行一次明确的公共同步。它不创建SSH访问、不读取寿司郎凭证、不触发门店查询，不改动采集任务或游标。需要操作员先正常配置受限公钥和可信服务器主机公钥。父目录0700、文件0600；输入和key／主机公钥／新确认文件必须独立，拒绝符号链接、变化的文件和覆盖已有回执。
+
+```sh
+sushiwait packet-deliver-ssh --input /private/public-packet.json \
+  --ssh-key-file /private/relay-key --known-hosts-file /private/pinned-hosts \
+  --target operator@server.example --confirmation-file /private/receipt-new.json
+```
+
+发送固定归档命令，禁用shell拼接、交互登录、SSH代理和转发；必须通过固定ed25519主机公钥校验。双向管道与进程退出受1–60秒截止约束，回执最多256KiB；大包遇到服务器不读取stdin也能截止。只有完整写入、正常退出、逐条ID／摘要和整包持久回执相符，再将不可覆盖的本机确认文件持久保存成功，才报告送达。
+
+断线／回执丢失时，远端是否已提交为未知。保持原包不变，显式重传用新的确认路径；服务器按观测ID与内容摘要去重。不可把超时当作未送达，也不可仅因远端可能收到就推进游标。当前私有有限观察器按既定两日计划继续运行，不因新工具发布重启。
+
+```sh
+sushiwait packet-confirmation-ssh --input /private/public-packet.json \
+  --confirmation-file /private/receipt-new.json --as-of 2026-10-11T12:00:00Z
+```
+
+重启后核对工具只读取指定的原包与历史回执，验证结构、时间边界和逐项对应；不用key、不联网、不写游标。它证明历史回执与该包一致，不能证明服务器当前仍保有数据。确认文件存在但此前fsync未确认时，仍须按本机持久性情况处理，离线核对不能补造当时的成功。
+
 ## 长期观察和扩店
 
 按用户R57，早期低频筛选持续排队较多的门店，短暂高峰少量排队的店降低优先级。当前三店原五分钟／51槽自然期限试验不改；全国低频筛选在明确新计划、业务时段、全局分散准入和预算之后启动。单位未知保持未知，失败／缺失不算低需求。未来个人临近用餐60／30秒监控是另一阶段的需求。

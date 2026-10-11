@@ -37,6 +37,7 @@ def check_official_statistics_install(source_root):
          'ok':1,'payload_json':json.dumps(snapshot)}
     packet=build_packet([row],as_of=at,store_ids=['900001'],api_profile='miniapp_gateway',data_origin='synthetic')
     hours=json.loads((source_root/'config/default-business-hours.json').read_bytes())
+    check_public_relay_install(packet,hours,at)
     with patch('socket.socket',side_effect=AssertionError('official_stats_network')) as sockets:
         result=project_packet(packet,as_of=at,hours=hours)
         day=result['days'][('900001','2026-10-10')]
@@ -63,6 +64,50 @@ def check_official_statistics_install(source_root):
         assert sockets.call_count==0
     print(json.dumps({'installed_official_projection_ok':True,'installed_official_archive_view_ok':True,'installed_explicit_home_cli_ok':True,
                      'source_queries':0,'credentials_accessed':False,'live_acceptance':False}))
+
+
+def check_public_relay_install(packet,hours,at):
+    """Installed pipes/receiver/receipt recovery; no real SSH authentication."""
+    from sushiwait.packets import encoded
+    from sushiwait.sshrelay import deliver_public_packet
+    with tempfile.TemporaryDirectory(prefix='installed relay spaces ') as temporary:
+        root=Path(temporary).resolve();root.chmod(0o700)
+        (root/'packets').mkdir(mode=0o700)
+        def save(name,value):
+            file=root/name;file.write_bytes(value if isinstance(value,bytes) else encoded(value));file.chmod(0o600)
+            return file
+        source=save('public.json',packet)
+        key=save('key',b'SYNTHETIC_NOT_AUTHENTICATED')
+        hosts=save('known hosts',b'SYNTHETIC_NOT_AUTHENTICATED')
+        view=save('view.json',{'schema_version':1,'mode':'official_packet_archive_readonly',
+            'database_file':str(root/'archive.sqlite3'),'store_names':{'900001':'Synthetic store'},
+            'data_origin':'synthetic','hours':hours,'base_interval':900})
+        confirmation=root/'confirmation.json';argv=[]
+        code=('import sys,json;from datetime import datetime;'
+            'from sushiwait.ssharchive import receive_public_packet,COMMAND;'
+            'print(json.dumps(receive_public_packet(sys.stdin.buffer.read(),'+repr(str(view))+
+            ',original_command=COMMAND,now=datetime.fromisoformat('+repr(at.replace('Z','+00:00'))+'))))')
+        def child(args,**kwargs):
+            argv.append(args)
+            return subprocess.Popen([sys.executable,'-I','-u','-c',code],**kwargs)
+        with patch('socket.socket',side_effect=AssertionError('relay_source_network')) as sockets:
+            result=deliver_public_packet(source,ssh_key_file=key,known_hosts_file=hosts,
+                target='test_operator@192.0.2.10',confirmation_file=confirmation,
+                clock=lambda:datetime.fromisoformat(at.replace('Z','+00:00')),_spawn=child)
+            assert result['inserted_records']==1 and result['durability_confirmed']
+            assert 'StrictHostKeyChecking=yes' in argv[0] and argv[0][-1]=='sushiwait-official-packet-v1'
+            before=source.read_bytes(),confirmation.read_bytes()
+            key.unlink();hosts.unlink();output=io.StringIO()
+            with patch('subprocess.Popen',side_effect=AssertionError('relay_check_process')),contextlib.redirect_stdout(output):
+                assert main(['packet-confirmation-ssh','--input',str(source),
+                    '--confirmation-file',str(confirmation),'--as-of',at])==0
+            checked=json.loads(output.getvalue())
+            assert checked['exact_packet_receipt_match'] and checked['confirmed_records']==1
+            assert checked['historical_confirmation_only'] and not checked['current_server_retention_verified']
+            assert before==(source.read_bytes(),confirmation.read_bytes()) and sockets.call_count==0
+    print(json.dumps({'installed_public_ssh_relay_and_recovery_ok':True,
+        'synthetic_subprocess_receiver':True,'real_ssh_authentication_verified':False,
+        'source_queries':0,'credentials_accessed':False,'live_acceptance':False}))
 
 
 def check_deepseek_install():
@@ -736,7 +781,7 @@ def check() -> None:
     help_result = subprocess.run([sys.executable, "-I", "-m", "sushiwait", "--help"],
         capture_output=True, text=True, timeout=10, check=True)
     if any(command not in help_result.stdout for command in
-            ("ticket-outcome-draft", "realtime-backtest", "realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local")):
+            ("ticket-outcome-draft", "realtime-backtest", "realtime-fusion-research", "trend-archive-add", "trend-archive-select", "trend-profile", "trend-score", "ticket-track-run", "ticket-track-init", "ticket-track-observe", "ticket-track-predict", "ticket-track-end", "ticket-track-status", "history-fusion-research", "deepseek-fusion", "fusion-research", "outcome-feature-export", "baseline-backtest", "baseline-research", "outcome-review-draft", "outcome-review-receive", "outcome-reviewed-cohort", "remote-window-quality", "remote-signal-report", "remote-window-collect", "remote-window-status", "remote-serve", "remote-snapshot", "remote-collect", "remote-report", "remote-monitor", "remote-task-status", "capture-import", "context-bridge", "context-surge", "surge-guard", "context-promote", "context-window", "monitor-plan", "monitor-stores", "monitor-collect", "interval-evaluate", "outcome-cohort", "outcome-receive", "outcome-received-cohort", "task-status", "outcome-import", "outcome-report", "date-features", "signal-report", "store-view", "packet-export", "packet-check", "packet-archive", "packet-enqueue", "pending-status", "packet-receiver", "receipt-check", "packet-deliver-local", "packet-deliver-ssh", "packet-confirmation-ssh")):
         raise SystemExit("installed_cli_missing_commands")
     if 'collection-hub-serve' not in help_result.stdout:
         raise SystemExit('installed_monitor_hub_command_missing')
