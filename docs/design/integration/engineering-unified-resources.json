@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "source_candidate": "0.2.0rc84",
+  "current_display": "existing display library with pinned resource and static logo route updates",
+  "engineering_deployed": true,
+  "selected_style": "06 light red",
+  "style_comparison_data": "synthetic only",
+  "assets": [
+    {
+      "path": "src/sushiwait/web/statistics.html",
+      "sha256": "0f83388ef4cdb4302ad3e28cd3205e2183d30daa979da5eed8ac4491bfd6aafc"
+    },
+    {
+      "path": "src/sushiwait/web/statistics.css",
+      "sha256": "e7fd5a88f17e6a4a6f5fafaae7fde8256499a2429f29536640fcd47dbc00d346"
+    },
+    {
+      "path": "src/sushiwait/web/statistics.js",
+      "sha256": "f92bbffc6afca3ae1d49b578a654ed8ba819dfeec76bae81a1cef0bd5174dda1"
+    },
+    {
+      "path": "src/sushiwait/web/experience-ui.js",
+      "sha256": "28c684d925e93917f2585c34c35503bb8561885085be90bffb5129c05f8b7c23"
+    },
+    {
+      "path": "src/sushiwait/web/engineering-logo.svg",
+      "sha256": "e42c15cf40c5dea1c66fcc954df236d95cc9a7bd5eb74d016ecad3c890fe4b68"
+    },
+    {
+      "path": "src/sushiwait/web/calendar.html",
+      "sha256": "bae3a1f3a4a6fb4f517da05ce2565bc2f7fe18aa6407e4b96223b28dd889f06b"
+    },
+    {
+      "path": "src/sushiwait/web/calendar.mjs",
+      "sha256": "46bfc91f7eafa62d17a473dbab526609eeae3a8e539fc11fde532d1b675d9143"
+    },
+    {
+      "path": "src/sushiwait/web/calendar-data.mjs",
+      "sha256": "71a5ebe95e872ea8dba5072748d03e80e03a771f61b677deca744623ff4939e1"
+    },
+    {
+      "path": "src/sushiwait/web/statistics-client.mjs",
+      "sha256": "aa41cdf39f080cea0f6cfda03a8277688822f273292b72ea755ae4344c12a288"
+    },
+    {
+      "path": "src/sushiwait/web/saved-statistics.mjs",
+      "sha256": "76f5516f73a6593de52fc9a93fa34d27e219354070d01912946d200b25822af6"
+    }
+  ]
+}

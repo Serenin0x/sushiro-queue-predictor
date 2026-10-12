@@ -1,5 +1,6 @@
 import {calendarCells, latestQueue, chartSeries, shanghaiDate} from './statistics-client.mjs';
 import {cityById, calendar2026} from './calendar-directory.mjs';
+import {SAVED_SOURCE,savedCalendarCells} from './saved-statistics.mjs';
 
 export {shanghaiDate};
 // Display-only memory: keep the same scope in place while the controller reads.
@@ -42,6 +43,7 @@ export function calendarForScope(index, month, city = 'all', store = 'all') {
   const ids = scopeStores(index, city, store).map(item => item.id);
   if (!ids.length) return null;
   const source=index.source;
+  if(source===SAVED_SOURCE)return savedCalendarCells(index,month,ids);
   if (store !== 'all') return calendarCells(index, month, store, {source});
   const filtered = {...index, configured_store_ids:ids,
     store_names:Object.fromEntries(ids.map(id => [id,index.store_names[id]])),

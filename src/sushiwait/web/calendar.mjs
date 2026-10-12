@@ -1,11 +1,12 @@
 import {createStatisticsClient, createStatisticsController} from './statistics-client.mjs';
 import {createDisplayCache, directory, scopeStores, calendarForScope, dayKind, moveMonth, queuePresentation, recentRecords, plots, nearestPoint, shanghaiDate, timeText} from './calendar-data.mjs';
 import {icons} from './calendar-icons.mjs';
+import {createSavedStatisticsClient,SAVED_SOURCE,savedSourceOptions} from './saved-statistics.mjs';
 
 const root=document.getElementById('sushiwait-month-calendar');
 const el=id=>root.querySelector('#'+id);
 const today=shanghaiDate();
-const state={month:today.slice(0,7),date:today,city:'all',store:'all',view:'month',series:{dine:true,reservation:true},theme:'system'};
+const state={month:today.slice(0,7),date:today,city:'all',store:'all',recordSource:null,view:'month',series:{dine:true,reservation:true},theme:'system'};
 let snapshot={phase:'idle',index:null,detail:null,detailState:'unselected',error:null};
 let openPickerKind=null, menuVersion='', pageUpdatedAt=null;
 const displayCache=createDisplayCache(), chartCache=new WeakMap(), detailVersions=new WeakMap();
@@ -28,7 +29,8 @@ applyTheme();
 
 const statisticsSource=root.dataset.statisticsSource ?? 'crm_remote_v1_1';
 const pollingSeconds=Number(root.dataset.statisticsPollSeconds ?? 30);
-const controller=createStatisticsController({client:createStatisticsClient({source:statisticsSource}),pollMs:pollingSeconds*1000,onChange(next) {
+const savedHistory=root.dataset.statisticsHistory==='combined';
+const controller=createStatisticsController({client:savedHistory?createSavedStatisticsClient():createStatisticsClient({source:statisticsSource}),pollMs:pollingSeconds*1000,onChange(next) {
   const completedRead=(snapshot.phase==='loading' || snapshot.refreshing) && !next.refreshing && ['ready','partial'].includes(next.phase);
   snapshot=next;
   displayCache.remember(next);
@@ -51,7 +53,7 @@ async function updatePollingPolicy() {
 }
 function selectStatistics() {
   if (document.hidden) {render();return Promise.resolve();}
-  return controller.select({month:state.month,date:state.date,storeId:state.view==='day' && state.date<=shanghaiDate() && state.store!=='all'?state.store:null});
+  return controller.select({month:state.month,date:state.date,recordSource:state.recordSource,storeId:state.view==='day' && state.date<=shanghaiDate() && state.store!=='all'?state.store:null});
 }
 function closePickers(restoreFocus=false) {
   const old=openPickerKind;openPickerKind=null;
@@ -85,11 +87,11 @@ function renderPickers() {
   const version=JSON.stringify([stores,state.city,state.store]);if(version===menuVersion)return;menuVersion=version;closePickers();
   const cityOptions=el('sw-city-options');cityOptions.replaceChildren();
   ['all',...cities].forEach(city=>cityOptions.append(optionButton('city',city,city==='all'?'全部':city,state.city===city,()=>{
-    if(state.city!==city){state.city=city;state.store='all';}render();selectStatistics();
+    if(state.city!==city){state.city=city;state.store='all';state.recordSource=null;}render();selectStatistics();
     requestAnimationFrame(()=>{if(city!=='all'){el('sw-store').focus({preventScroll:true});openPicker('store');}else el('sw-city').focus({preventScroll:true});});
   })));
   const storeOptions=el('sw-store-options');storeOptions.replaceChildren();
-  [{id:'all',name:'全部'},...stores.filter(item=>item.city===state.city)].forEach(store=>storeOptions.append(optionButton('store',store.id,store.name,state.store===store.id,()=>{state.store=store.id;render();selectStatistics();closePickers();el('sw-store').focus();})));
+  [{id:'all',name:'全部'},...stores.filter(item=>item.city===state.city)].forEach(store=>storeOptions.append(optionButton('store',store.id,store.name,state.store===store.id,()=>{state.store=store.id;state.recordSource=null;render();selectStatistics();closePickers();el('sw-store').focus();})));
 }
 function monthCells() {return display.index?calendarForScope(display.index,state.month,state.city,state.store):null;}
 function renderMonth() {
@@ -136,7 +138,7 @@ function renderAllDay() {
   if(container.dataset.structure!==structure){
     const table=make('table','sw-all-table'),head=make('thead'),headings=make('tr');[state.city==='all'?'城市':'门店','观测',''].forEach(label=>headings.append(make('th','',label)));head.append(headings);table.append(head);
     const body=make('tbody');
-    for(const group of groups){const row=make('tr');row.append(make('td','',group.label),make('td','sw-numbers'));const action=make('td');const button=make('button','sw-ghost');button.type='button';button.setAttribute('aria-label','查看'+group.label);button.append(icon('chevron-right'));button.addEventListener('click',()=>{state.city=group.city || group.store.city;state.store=group.store?.id || 'all';selectStatistics();render();});action.append(button);row.append(action);body.append(row);}
+    for(const group of groups){const row=make('tr');row.append(make('td','',group.label),make('td','sw-numbers'));const action=make('td');const button=make('button','sw-ghost');button.type='button';button.setAttribute('aria-label','查看'+group.label);button.append(icon('chevron-right'));button.addEventListener('click',()=>{state.city=group.city || group.store.city;state.store=group.store?.id || 'all';state.recordSource=null;selectStatistics();render();});action.append(button);row.append(action);body.append(row);}
     table.append(body);container.replaceChildren(table);container.dataset.structure=structure;
   }
   groups.forEach((group,i)=>setText(container.querySelector('tbody').children[i].children[1],summaryRow(group.ids)));
@@ -145,6 +147,15 @@ function renderDay() {
   el('sw-day-title').textContent=state.date.replaceAll('-',' / ');el('sw-day-title').tabIndex=-1;
   const content=el('sw-day-content'),all=el('sw-all-content'),empty=el('sw-day-empty');
   const scope=state.city+'|'+state.store+'|'+state.date;
+  const options=display.index?.source===SAVED_SOURCE && state.store!=='all'?savedSourceOptions(display.index,state.store,state.date):[];
+  const picker=el('sw-source-picker'),sourceSelect=el('sw-record-source');
+  picker.hidden=options.length<2;
+  const sourceLabels={sapi_miniapp_gateway:'当前采集记录',crm_remote_v1_1:'已保存记录'};
+  const choices=JSON.stringify(options);
+  if(sourceSelect.dataset.choices!==choices){sourceSelect.replaceChildren(...options.map(source=>{const option=make('option','',sourceLabels[source]);option.value=source;return option;}));sourceSelect.dataset.choices=choices;}
+  if(display.detail)sourceSelect.value=display.detail.source;
+  const note=el('sw-source-note');note.hidden=options.length<2 || !display.detail;
+  setText(note,options.length<2?'':'这一天有两组记录；当前显示'+sourceLabels[display.detail?.source]+'，曲线分别查看。');
   if(dayLayoutScope!==scope){dayLayoutScope=scope;dayLayoutHeight=0;detailVersion='';chartVersion='';}
   function showEmpty(message){
     content.hidden=true;all.hidden=true;empty.hidden=false;empty.style.minHeight=dayLayoutHeight+'px';
@@ -183,7 +194,7 @@ function render() {
   requestAnimationFrame(()=>{pendingRender=false;renderNow();});
 }
 function renderNow() {
-  const scope=[state.view,state.month,state.date,state.city,state.store].join('|');
+  const scope=[state.view,state.month,state.date,state.city,state.store,state.recordSource].join('|');
   const preserveScroll=renderedScope===scope, left=window.scrollX, top=window.scrollY;
   display=displayCache.view(snapshot,state);
   renderPickers();el('sw-month-view').hidden=state.view!=='month';el('sw-day-view').hidden=state.view!=='day';
@@ -273,15 +284,16 @@ function drawPlot(id,kind,allSeries) {
 });
 el('sw-days').addEventListener('click',event=>{
   const button=event.target.closest('button[data-date]');if(!button)return;
-  state.date=button.dataset.date;state.view='day';closePickers();selectStatistics();render();
+  state.date=button.dataset.date;state.recordSource=null;state.view='day';closePickers();selectStatistics();render();
   requestAnimationFrame(()=>el('sw-day-title').focus({preventScroll:true}));
 });
 document.addEventListener('pointerdown',event=>{if(!el('sw-pickers').contains(event.target))closePickers();});
 el('sw-pickers').addEventListener('focusout',event=>{if(!el('sw-pickers').contains(event.relatedTarget))closePickers();});
 el('sw-theme').addEventListener('click',()=>{const dark=state.theme==='dark'||state.theme==='system'&&matchMedia('(prefers-color-scheme:dark)').matches;state.theme=dark?'light':'dark';applyTheme();try{localStorage.setItem('sushiwait-calendar-theme',state.theme);}catch(_){} });
-function changeMonth(offset){state.month=moveMonth(state.month,offset);state.date=state.month+'-01';state.view='month';selectStatistics();render();}
+function changeMonth(offset){state.month=moveMonth(state.month,offset);state.date=state.month+'-01';state.recordSource=null;state.view='month';selectStatistics();render();}
 el('sw-previous').addEventListener('click',()=>changeMonth(-1));el('sw-next').addEventListener('click',()=>changeMonth(1));
-el('sw-this-month').addEventListener('click',()=>{state.month=shanghaiDate().slice(0,7);state.date=shanghaiDate();state.view='month';selectStatistics();render();});
+el('sw-this-month').addEventListener('click',()=>{state.month=shanghaiDate().slice(0,7);state.date=shanghaiDate();state.recordSource=null;state.view='month';selectStatistics();render();});
+el('sw-record-source').addEventListener('change',()=>{state.recordSource=el('sw-record-source').value;selectStatistics();render();});
 ['sw-back','sw-nav-calendar'].forEach(id=>el(id).addEventListener('click',()=>{state.view='month';selectStatistics();render();}));
 el('sw-nav-day').addEventListener('click',()=>{state.view='day';selectStatistics();render();});
 el('sw-refresh').addEventListener('click',()=>controller.refresh());

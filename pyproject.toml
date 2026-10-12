@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sushiwait"
-version = "0.2.0rc83"
+version = "0.2.0rc84"
 description = "Mainland Sushiro read-only data and private outcome tools"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,4 +23,4 @@ sushiwait = "sushiwait.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-sushiwait = ["data/*.json", "web/*.html", "web/*.css", "web/*.js", "web/*.mjs"]
+sushiwait = ["data/*.json", "web/*.html", "web/*.css", "web/*.js", "web/*.mjs", "web/*.svg"]

@@ -1,9 +1,49 @@
 "use strict";
 const $=id=>document.getElementById(id), dateFormat=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}), timeFormat=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});
-const referenceSource=$("sushiwait-reference")?.dataset?.statisticsSource??"crm_remote_v1_1";
-const referenceApi=referenceSource==="sapi_miniapp_gateway"?"/api/v1/official":"/api/v1";
+const referenceRoot=$("sushiwait-reference");
+const configuredReferenceSource=referenceRoot?.dataset?.statisticsSource??"crm_remote_v1_1";
+const combinedHistory=referenceRoot?.dataset?.statisticsHistory==="combined";
+let referenceSource=configuredReferenceSource,referenceApi=referenceSource==="sapi_miniapp_gateway"?"/api/v1/official":"/api/v1",recordSource=null;
+let savedAdapterPromise=null,savedClient=null;
+function savedAdapter(){return savedAdapterPromise??=(import('/saved-statistics.mjs').then(adapter=>{savedClient=adapter.createSavedStatisticsClient();return adapter;}));}
+function setReferenceSource(source){if(!["crm_remote_v1_1","sapi_miniapp_gateway"].includes(source))throw Error("记录来源不匹配");referenceSource=source;referenceApi=source==="sapi_miniapp_gateway"?"/api/v1/official":"/api/v1";}
+
 function today(){const parts=dateFormat.formatToParts(new Date()),v={};parts.forEach(p=>v[p.type]=p.value);return `${v.year}-${v.month}-${v.day}`;}
 let index={days:{},store_names:{}},day=today(),detail=null,busy=false,detailLoading=false,detailRequestId=0,ticketScopeKey=null;
+// The same mounted views keep private drafts and selection state when navigating.
+const engineeringPanels=referenceRoot?.dataset?.engineeringPanels==="true";
+const engineeringSections={overview:["观测总览","按日期查看已保存的观测与采集覆盖。"],analysis:["门店分析","查看号码位置、数量、展示变化与原始观测。"],prediction:["预测实验","输入已有号码，查看历史初估与实时修正的参考状态。"],experience:["用餐记录","记录本人正常用餐的实际事件，保留本机私有草稿。"]};
+let engineeringSection="overview",engineeringPollingSeconds=null;
+function syncEngineeringSelection(){
+  if(!engineeringPanels)return;
+  $("engineering-date").value=day;
+  const metricRows=summaries(day),times=metricRows.map(row=>Date.parse(row.last_observation_at)).filter(Number.isFinite);
+  $("metric-observations").textContent=metricRows.length?`${metricRows.reduce((total,row)=>total+row.observations,0)} 组`:"无已保存观测";
+  $("metric-last").textContent=times.length?time(Math.max(...times)):"—";
+  $("metric-stores").textContent=`${metricRows.length} 家`;
+  $("metric-interval").textContent=engineeringPollingSeconds===null?"读取中":engineeringPollingSeconds%60===0?`${engineeringPollingSeconds/60} 分钟`:`${engineeringPollingSeconds} 秒`;
+  const store=$("store").value;
+  $("analysis-empty").hidden=Boolean(store);
+  $("prediction-empty").hidden=Boolean(store);
+  $("prediction-content").hidden=!store;
+  $("engineering-selection").textContent=`${day} · ${store?(index.store_names[store]||store):"全部门店"} · ${$("queue").selectedOptions?.[0]?.textContent||"展示队列"}`;
+}
+function selectEngineeringSection(section){
+  if(!engineeringPanels||!Object.hasOwn(engineeringSections,section))return;
+  engineeringSection=section;
+  $("engineering-breadcrumb").textContent=engineeringSections[section][0];
+  $(section==="overview"||section==="analysis"?"nav-group-observations":"nav-group-records").open=true;
+  for(const name of Object.keys(engineeringSections)){
+    const active=name===section;
+    $("view-"+name).hidden=!active;
+    $("nav-"+name).classList.toggle("nav-current",active);
+    if(active)$("nav-"+name).setAttribute("aria-current","page");
+    else $("nav-"+name).removeAttribute("aria-current");
+  }
+  [$("engineering-title").textContent,$("engineering-description").textContent]=engineeringSections[section];
+  syncEngineeringSelection();
+  if(section==="analysis")graphs();
+}
 const historyCache=new Map();
 const referenceAlerts=window.SushiWaitReferenceAlerts?.createTracker();
 const precautionMessages={number_displayed:"你的原号码出现在最新展示列表中，请立即核对官方号单并准备到场。",previously_displayed_now_absent:"你的号码之前出现过，当前已不在展示列表；请立即核对官方号单，这里不能确认已叫号或过号。",reference_at_or_beyond_ticket:"首位参考已到达或越过你的号码，请立即核对官方号单。",possible_before_arrival:"较早的参考情景早于你计划到店的时间，请核对号单并考虑提前到场。",reference_acceleration:"最近参考突然加速，请核对号单并留意提前到场。",reference_moved_earlier:"新观测把参考时间提前了至少五分钟，请重新安排到场时间。",source_stale:"数据已超过90秒，风险判断和预测暂时暂停。",ticket_cycle_uncertain:"参考发生倒退或轮次不确定，请核对官方号单，暂不判断是否过号。",invalid_private_plan:"请核对取号时间、可选到店时间及整数偏移；到店时间不能早于取号时间。",reference_tracking:"正在根据新观测更新参考，请继续以官方号单为准。",model_unavailable:"最新展示可读，但预测资料尚不足；请关注官方号单。"};
@@ -25,15 +65,15 @@ function time(v){return v?timeFormat.format(new Date(v)):"—";}
 function estimateTime(v){return new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(v));}
 function summaries(d){const all=index.days[d]||{},store=$("store").value;return store?(all[store]?[all[store]]:[]):Object.values(all);}
 function calendarPending(){const pending=index.calendar_pending_store_ids||[],store=$("store").value;return store?pending.includes(store):pending.length>0;}
-function coverage(items){const expected=items.reduce((n,s)=>n+s.expected_background_slots_so_far,0),seen=items.reduce((n,s)=>n+s.observed_background_slots,0);return expected?Math.min(1,seen/expected):null;}
-function calendar(){const month=$("month").value;if(!/^\d{4}-\d{2}$/.test(month))return;const [year,m]=month.split("-").map(Number),n=new Date(Date.UTC(year,m,0)).getUTCDate(),start=(new Date(Date.UTC(year,m-1,1)).getUTCDay()+6)%7;$("calendar").replaceChildren();for(let i=0;i<start;i++)$("calendar").append(document.createElement("span"));for(let i=1;i<=n;i++){const d=`${month}-${String(i).padStart(2,"0")}`,items=summaries(d),c=coverage(items),b=document.createElement("button"),label=document.createElement("small");b.type="button";b.textContent=String(i);label.textContent=items.length?`${items.reduce((s,x)=>s+x.observations,0)} 组观测`:calendarPending()?"统计加载中":"无观测";b.append(label);if(items.length)b.classList.add(c!==null&&c>=.8&&(!$("store").value?items.length===Object.keys(index.store_names).length:true)?"covered":"partial");if(d===day)b.classList.add("selected");b.setAttribute("aria-label",`${d}，${label.textContent}`);b.onclick=()=>{day=d;resetTicketScope();calendar();showDay().catch(showError);};$("calendar").append(b);}}
-function scopeKey(){return `${day}|${$("store").value}|${$("queue").value}`;}
+function coverage(items){if(items.some(s=>s.source_summaries&&Object.keys(s.source_summaries).length>1))return null;const expected=items.reduce((n,s)=>n+s.expected_background_slots_so_far,0),seen=items.reduce((n,s)=>n+s.observed_background_slots,0);return expected?Math.min(1,seen/expected):null;}
+function calendar(){const month=$("month").value;if(!/^\d{4}-\d{2}$/.test(month))return;const [year,m]=month.split("-").map(Number),n=new Date(Date.UTC(year,m,0)).getUTCDate(),start=(new Date(Date.UTC(year,m-1,1)).getUTCDay()+6)%7;$("calendar").replaceChildren();for(let i=0;i<start;i++)$("calendar").append(document.createElement("span"));for(let i=1;i<=n;i++){const d=`${month}-${String(i).padStart(2,"0")}`,items=summaries(d),c=coverage(items),b=document.createElement("button"),label=document.createElement("small");b.type="button";b.textContent=String(i);label.textContent=items.length?`${items.reduce((s,x)=>s+x.observations,0)} 组观测`:calendarPending()?"统计加载中":"无观测";b.append(label);if(items.length)b.classList.add(c!==null&&c>=.8&&(!$("store").value?items.length===Object.keys(index.store_names).length:true)?"covered":"partial");if(d===day)b.classList.add("selected");b.setAttribute("aria-label",`${d}，${label.textContent}`);b.onclick=()=>{day=d;recordSource=null;resetTicketScope();calendar();showDay().catch(showError);};$("calendar").append(b);}}
+function scopeKey(){return `${referenceSource}|${day}|${$("store").value}|${$("queue").value}`;}
 function resetTicketScope(){ticketScopeKey=null;$("ticket-scope").checked=false;renderPrediction();}
 function showError(){detail=null;detailLoading=false;++detailRequestId;$("status").textContent="统计服务暂时不可用；没有把读取失败当成零数据。";renderPrediction();}
-function priorDates(value,store,date){return Object.keys(value?.days||{}).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<date&&Date.parse(date)-Date.parse(d)<=31*86400000&&value.days[d]?.[store]?.observations>0).sort().reverse();}
+function priorDates(value,store,date){return Object.keys(value?.days||{}).filter(d=>{const row=value.days[d]?.[store],saved=row?.source_summaries?row.source_summaries[referenceSource]:row;return /^\d{4}-\d{2}-\d{2}$/.test(d)&&d<date&&Date.parse(date)-Date.parse(d)<=31*86400000&&saved?.observations>0;}).sort().reverse();}
 function loadHistory(store,date){
   if(date!==today())return;
-  const key=`${store}|${date}`,known=priorDates(index,store,date),signature=known.join(",");
+  const key=`${referenceSource}|${store}|${date}`,known=priorDates(index,store,date),signature=known.join(",");
   const old=historyCache.get(key);
   if(old&&old.signature===signature)return;
   const entry={signature,state:"loading",days:[],failed:0};historyCache.set(key,entry);
@@ -68,7 +108,7 @@ function renderPrediction(){
   if(!$("ticket-number").value){renderPrecaution(options);$("prediction").textContent="输入号码、取号时间并确认门店与队列后计算。";return;}
   if(!detail){renderPrecaution(options);$("prediction").textContent="正在等待所选门店的新观测；旧结果已暂停。";return;}
   if(!window.SushiWaitReference){renderPrecaution(options);$("prediction").textContent="实验计算模块未加载，暂不计算。";return;}
-  const entry=historyCache.get(`${$("store").value}|${day}`),compute=window.SushiWaitReference.forecastWithHistory||window.SushiWaitReference.forecast;
+  const entry=historyCache.get(`${referenceSource}|${$("store").value}|${day}`),compute=window.SushiWaitReference.forecastWithHistory||window.SushiWaitReference.forecast;
   const result=compute(detail,options,entry?.days||[]);
   const precaution=renderPrecaution(options,result);
   if(precaution&&["number_displayed","previously_displayed_now_absent","reference_at_or_beyond_ticket"].includes(precaution.reason)){
@@ -80,27 +120,78 @@ function renderPrediction(){
   $("prediction").textContent=`${stage}参考位置预计在 ${estimateTime(result.reference_time)} 到达；快慢情景 ${estimateTime(result.scenario_earliest)}—${result.scenario_latest?estimateTime(result.scenario_latest):"较晚端尚不确定"}。`;
   $("prediction-note").textContent=`最新参考 ${result.reference}；位置差 ${result.position_difference}（不是前方桌数）。依据连续 ${result.continuous_minutes.toFixed(1)} 分钟观测，距最近响应 ${Math.round(result.sample_age_seconds)} 秒。${historyNote}情景范围不是已校准的预测误差。${result.acceleration_signal?"最近一段突然加速，已加入更早到达的情景，请及时核对官方号单。":""}${result.latest_interval_stalled?"最新一段参考未推进，历史速度可能滞后。":""}`;
 }
-async function showDay(){const requestId=++detailRequestId,selectedDay=day,store=$("store").value,items=summaries(day);$("date-title").textContent=`${day} · ${store?(index.store_names[store]||store):"全部门店"}`;$("rows").replaceChildren();items.forEach(s=>{const c=s.observed_slot_fraction_so_far,tr=textRow([index.store_names[s.store_id]||s.store_id,s.successful_pairs,`${s.failed_pairs} / ${s.scheduled_pause_slots}`,c===null?"—":`${(c*100).toFixed(1)}%`,time(s.last_observation_at)],$("rows"));tr.onclick=()=>{$("store").value=s.store_id;resetTicketScope();calendar();showDay().catch(showError);};});$("summary").textContent=items.length?`有观测的门店 ${items.length} 家，完整观测 ${items.reduce((n,s)=>n+s.successful_pairs,0)} 组。实际叫号总量和人流量仍未核实。`:calendarPending()?"后台正在校验本月归档；当前未加载的数据不记为零。":"当天没有已保存的观测；不能据此判断门店没有客流。";$("detail").hidden=!store;detail=null;detailLoading=Boolean(store);renderPrediction();$("points").replaceChildren();["numbers","count","speed"].forEach(id=>plot(id,[]));$("graph-note").textContent="正在读取当天观测…";if(!store)return;let value;try{value=await get(`${referenceApi}/stores/${encodeURIComponent(store)}/days/${selectedDay}`);}catch(error){if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;throw error;}if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;if(referenceSource==="sapi_miniapp_gateway"&&(value.source!==referenceSource||value.api_profile!=="miniapp_gateway"||value.requested_store_id!==store||value.local_date!==selectedDay))throw Error("门店来源不匹配");detail=value;detailLoading=false;graphs();renderPrediction();loadHistory(store,selectedDay);}
-function plot(id,points){const canvas=$(id),rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(300,Math.round(rect.width*dpr));canvas.height=230*dpr;const c=canvas.getContext("2d");c.scale(dpr,dpr);const w=canvas.width/dpr,h=230;c.clearRect(0,0,w,h);c.strokeStyle="#d6dce1";c.beginPath();c.moveTo(60,12);c.lineTo(60,h-32);c.lineTo(w-12,h-32);c.stroke();c.fillStyle="#58636c";c.font="12px system-ui";if(!points.length){c.fillText("没有可绘制的有效观测",75,40);return;}const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),dx=Math.max(1,maxX-minX),dy=Math.max(1,maxY-minY);for(let i=0;i<4;i++){const y=minY+dy*i/3;c.fillText(Number(y.toFixed(2)).toString(),4,h-34-(h-50)*i/3);}c.fillText(time(minX),60,h-9);c.fillText(time(maxX),Math.max(60,w-80),h-9);points.forEach(([x,y,series])=>{c.fillStyle=["#3274a1","#bb7441","#638b4f"][series||0];c.beginPath();c.arc(60+(w-80)*(x-minX)/dx,h-34-(h-50)*(y-minY)/dy,2.4,0,Math.PI*2);c.fill();});}
+async function showDay({quiet=false}={}){
+  const requestId=++detailRequestId,selectedDay=day,store=$("store").value,items=summaries(day);
+  $("date-title").textContent=`${day} · ${store?(index.store_names[store]||store):"全部门店"}`;
+  $("rows").replaceChildren();
+  items.forEach(s=>{const c=s.observed_slot_fraction_so_far,tr=textRow([index.store_names[s.store_id]||s.store_id,s.successful_pairs,`${s.failed_pairs} / ${s.scheduled_pause_slots}`,c===null?"—":`${(c*100).toFixed(1)}%`,time(s.last_observation_at)],$("rows"));tr.onclick=()=>{$("store").value=s.store_id;recordSource=null;resetTicketScope();calendar();selectEngineeringSection("analysis");showDay().catch(showError);};});
+  $("summary").textContent=items.length?`有观测的门店 ${items.length} 家，完整观测 ${items.reduce((n,s)=>n+s.successful_pairs,0)} 组。实际叫号总量和人流量仍未核实。`:calendarPending()?"后台正在校验本月归档；当前未加载的数据不记为零。":"当天没有已保存的观测；不能据此判断门店没有客流。";
+  $("detail").hidden=!store;syncEngineeringSelection();
+  let adapter=null,selectedSource=referenceSource;
+  if(combinedHistory&&store){
+    adapter=await savedAdapter();
+    if(requestId!==detailRequestId)return;
+    selectedSource=adapter.selectSavedSource(index,store,selectedDay,recordSource);
+    const choices=adapter.savedSourceOptions(index,store,selectedDay),picker=$("record-source");
+    picker.replaceChildren();
+    for(const source of choices){const option=document.createElement("option");option.value=source;option.textContent=source==="sapi_miniapp_gateway"?"当前采集记录":"已保存记录";picker.append(option);}
+    picker.value=selectedSource;$("record-source-label").hidden=choices.length<2;
+    $("record-source-note").textContent=choices.length>1?"这一天保存了两组记录，曲线分别查看；实验模型只使用同一来源的历史。":"";
+  }else if($("record-source-label")){$("record-source-label").hidden=true;$("record-source-note").textContent="";}
+  const retain=quiet&&detail?.requested_store_id===store&&detail.local_date===selectedDay&&detail.source===selectedSource;
+  if(!retain){detail=null;detailLoading=Boolean(store);renderPrediction();$("points").replaceChildren();["numbers","count","speed"].forEach(id=>plot(id,[]));$("graph-note").textContent="正在读取当天观测…";}
+  if(!store)return;
+  if(referenceSource!==selectedSource){setReferenceSource(selectedSource);historyCache.clear();resetTicketScope();}
+  let value;
+  try{value=combinedHistory?await savedClient.readDay(store,selectedDay,index.configured_store_ids,{index,source:recordSource}):await get(`${referenceApi}/stores/${encodeURIComponent(store)}/days/${selectedDay}`);}
+  catch(error){if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;throw error;}
+  if(requestId!==detailRequestId||day!==selectedDay||$("store").value!==store)return;
+  if(value.source!==selectedSource||value.requested_store_id!==store||value.local_date!==selectedDay)throw Error("门店来源不匹配");
+  detail=value;detailLoading=false;graphs();renderPrediction();loadHistory(store,selectedDay);
+}
+function plot(id,points){const canvas=$(id),rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(300,Math.round(rect.width*dpr));canvas.height=230*dpr;const c=canvas.getContext("2d");c.scale(dpr,dpr);const w=canvas.width/dpr,h=230;c.clearRect(0,0,w,h);c.strokeStyle="#d6dce1";c.beginPath();c.moveTo(60,12);c.lineTo(60,h-32);c.lineTo(w-12,h-32);c.stroke();c.fillStyle="#58636c";c.font="12px system-ui";if(!points.length){c.fillText("没有可绘制的有效观测",75,40);return;}const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),dx=Math.max(1,maxX-minX),dy=Math.max(1,maxY-minY);for(let i=0;i<4;i++){const y=minY+dy*i/3;c.fillText(Number(y.toFixed(2)).toString(),4,h-34-(h-50)*i/3);}c.fillText(time(minX),60,h-9);c.fillText(time(maxX),Math.max(60,w-80),h-9);points.forEach(([x,y,series])=>{c.fillStyle=["#b4212b","#bb7441","#638b4f"][series||0];c.beginPath();c.arc(60+(w-80)*(x-minX)/dx,h-34-(h-50)*(y-minY)/dy,2.4,0,Math.PI*2);c.fill();});}
 function graphs(){if(!detail)return;const queue=$("queue").value,points=detail.points||[],numbers=[],counts=[],speed=[];points.forEach(p=>{(p.queues?.[queue]||[]).slice(0,1).forEach(label=>{if(/^\d+$/.test(label))numbers.push([Date.parse(p.queue_received_at),Number(label),0]);});if(p.count_raw!==null)counts.push([Date.parse(p.count_received_at),p.count_raw,0]);if(p.comparison_state==="comparable_display_sets"&&p.interval_seconds>0&&p.removed_labels)speed.push([Date.parse(p.queue_received_at),p.removed_labels[queue]*60/p.interval_seconds,0]);});plot("numbers",numbers);plot("count",counts);plot("speed",speed);$("points").replaceChildren();points.slice(-60).reverse().forEach(p=>textRow([time(p.queue_received_at),(p.queues?.[queue]||[]).join("、")||"未显示",p.count_raw===null?"未知":p.count_raw,p.scheduled_pause?"营业边界暂停":p.pair_ok?"已保存":"部分成功或失败"],$("points")));$("graph-note").textContent=`图表返回 ${points.length} 组。${detail.graph_truncated?"图表投影有截断，完整原始观测仍保存在数据库。":"当前图表投影未截断。"}`;}
 async function refresh(){
   if(busy)return;
-  busy=true;$("refresh").disabled=true;
+  busy=true;$("refresh").disabled=true;if(engineeringPanels)$("header-refresh").disabled=true;
   const month=$("month").value,selected=$("store").value;
   try{
     let value;
-    if(referenceSource==="sapi_miniapp_gateway")value=await get(`${referenceApi}/months/${month}`);
+    if(combinedHistory){await savedAdapter();value=await savedClient.readMonth(month);}
+    else if(referenceSource==="sapi_miniapp_gateway")value=await get(`${referenceApi}/months/${month}`);
     else if(month===today().slice(0,7))value=await get("/api/v1/days");
     else{try{value=await get(`${referenceApi}/months/${month}`);}catch(e){if(e.httpStatus!==404)throw e;value=await get("/api/v1/days");}}
     if(month!==$("month").value)return;
-    if(referenceSource==="sapi_miniapp_gateway"&&(value.source!==referenceSource||value.api_profile!=="miniapp_gateway"||value.month!==month))throw Error("月份来源不匹配");
+    if(!combinedHistory&&referenceSource==="sapi_miniapp_gateway"&&(value.source!==referenceSource||value.api_profile!=="miniapp_gateway"||value.month!==month))throw Error("月份来源不匹配");
     index=value;$("store").replaceChildren();const all=document.createElement("option");all.value="";all.textContent="全部门店";$("store").append(all);
     Object.entries(index.store_names).forEach(([id,name])=>{const o=document.createElement("option");o.value=id;o.textContent=name;$("store").append(o);});
-    $("store").value=selected;calendar();await showDay();
+    $("store").value=selected;calendar();await showDay({quiet:true});
     if(month!==$("month").value)return;
     const pending=index.calendar_pending_store_ids||[];
     $("status").textContent=pending.length?`正在加载本月归档：已检查 ${index.calendar_verified_store_count} 家，剩余 ${pending.length} 家；已完成的统计先显示，未加载的数据不补零。`:index.unavailable_store_ids.length?`部分统计服务不可用：${index.unavailable_store_ids.length} 家，未补零。`:`已读取 ${Object.keys(index.store_names).length} 家门店的已保存副本。`;
   }catch(_){if(month===$("month").value)showError();}
-  finally{busy=false;$("refresh").disabled=false;if(month!==$("month").value)refresh();}
+  finally{busy=false;$("refresh").disabled=false;if(engineeringPanels)$("header-refresh").disabled=false;if(month!==$("month").value)refresh();}
 }
-$("month").value=day.slice(0,7);$("month").onchange=()=>{day=$("month").value+"-01";resetTicketScope();detail=null;++detailRequestId;calendar();refresh();};$("store").onchange=()=>{resetTicketScope();calendar();showDay().catch(showError);};$("queue").onchange=()=>{resetTicketScope();graphs();};$("ticket-number").oninput=renderPrediction;$("ticket-issued").oninput=renderPrediction;$("ticket-arrival").oninput=renderPrediction;$("ticket-offset").oninput=renderPrediction;$("ticket-scope").onchange=()=>{ticketScopeKey=$("ticket-scope").checked?scopeKey():null;renderPrediction();};$("refresh").onclick=()=>{historyCache.clear();refresh();};window.addEventListener("resize",graphs);refresh();setInterval(refresh,30000);setInterval(renderPrediction,15000);
+$("month").value=day.slice(0,7);$("month").onchange=()=>{day=$("month").value+"-01";recordSource=null;resetTicketScope();detail=null;++detailRequestId;calendar();refresh();};$("store").onchange=()=>{recordSource=null;resetTicketScope();calendar();showDay().catch(showError);};$("queue").onchange=()=>{resetTicketScope();syncEngineeringSelection();graphs();};$("ticket-number").oninput=renderPrediction;$("ticket-issued").oninput=renderPrediction;$("ticket-arrival").oninput=renderPrediction;$("ticket-offset").oninput=renderPrediction;$("ticket-scope").onchange=()=>{ticketScopeKey=$("ticket-scope").checked?scopeKey():null;renderPrediction();};$("refresh").onclick=()=>{historyCache.clear();refresh();};window.addEventListener("resize",graphs);refresh();
+if(engineeringPanels){
+  $("header-refresh").onclick=()=>$("refresh").onclick();
+  for(const section of Object.keys(engineeringSections))$("nav-"+section).onclick=()=>selectEngineeringSection(section);
+  $("engineering-date").onchange=()=>{
+    const selected=$("engineering-date").value;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(selected)||!Number.isFinite(Date.parse(selected+"T00:00:00Z"))||new Date(selected+"T00:00:00Z").toISOString().slice(0,10)!==selected){syncEngineeringSelection();return;}
+    const changedMonth=selected.slice(0,7)!==$("month").value;
+    day=selected;recordSource=null;resetTicketScope();
+    if(changedMonth){$("month").value=selected.slice(0,7);detail=null;++detailRequestId;refresh();}
+    else{calendar();showDay().catch(showError);}
+  };
+  selectEngineeringSection("overview");
+}
+const initialPolling=Number(referenceRoot?.dataset?.statisticsPollSeconds??30);
+let pollingMs=Number.isInteger(initialPolling)&&initialPolling>=30&&initialPolling<=3600?initialPolling*1000:30000;
+engineeringPollingSeconds=pollingMs/1000;syncEngineeringSelection();
+let pollingTimer=setInterval(refresh,pollingMs);
+if(combinedHistory){
+  $("record-source").onchange=()=>{recordSource=$("record-source").value;historyCache.clear();resetTicketScope();showDay().catch(showError);};
+  get('/api/v1/statistics/settings').then(value=>{if(value.schema_version===1&&Number.isInteger(value.poll_seconds)&&value.poll_seconds>=30&&value.poll_seconds<=3600&&value.poll_seconds*1000!==pollingMs){clearInterval(pollingTimer);pollingMs=value.poll_seconds*1000;engineeringPollingSeconds=value.poll_seconds;syncEngineeringSelection();pollingTimer=setInterval(refresh,pollingMs);}}).catch(()=>{});
+}
+setInterval(renderPrediction,15000);

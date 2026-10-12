@@ -136,7 +136,7 @@ export function createStatisticsController({client, onChange = () => {}, pollMs 
   let state = freeze({selection: null, phase: "idle", refreshing: false, index: null, detail: null, detailState: "unselected", error: null});
   const emit = patch => { state = freeze({...state, ...patch}); onChange(state); };
   async function run(token, signal) {
-    const {month, date, storeId} = state.selection;
+    const {month, date, storeId, recordSource} = state.selection;
     try {
       const index = await client.readMonth(month, {signal});
       if (token !== revision) return;
@@ -146,8 +146,8 @@ export function createStatisticsController({client, onChange = () => {}, pollMs 
       let detail = null;
       if (storeId !== null) {
         try {
-          detail = await client.readDay(storeId, date, index.configured_store_ids, {signal});
-          if (detail.source !== index.source) fail("day_scope_mismatch");
+          detail = await client.readDay(storeId, date, index.configured_store_ids, {signal, index, source:recordSource});
+          if (client.acceptsDetail ? !client.acceptsDetail(index,detail,recordSource) : detail.source !== index.source) fail("day_scope_mismatch");
         }
         catch (e) {
           if (token === revision) emit({phase: "partial", refreshing: false, detail: null, detailState: "error", error: {code: e.code || "read_failed", httpStatus: e.httpStatus ?? null}});
@@ -176,11 +176,12 @@ export function createStatisticsController({client, onChange = () => {}, pollMs 
   return Object.freeze({
     snapshot: () => state,
     select(selection) {
-      if (!object(selection) || Object.keys(selection).some(k => !["month", "date", "storeId", "queue"].includes(k))) fail("invalid_selection");
-      const next = {month: monthValue(selection.month), date: dateValue(selection.date), storeId: selection.storeId ?? null, queue: selection.queue ?? "mixedQueue"};
+      if (!object(selection) || Object.keys(selection).some(k => !["month", "date", "storeId", "queue", "recordSource"].includes(k))) fail("invalid_selection");
+      const next = {month: monthValue(selection.month), date: dateValue(selection.date), storeId: selection.storeId ?? null, queue: selection.queue ?? "mixedQueue", recordSource:selection.recordSource ?? null};
+      if (next.recordSource !== null && !sources.has(next.recordSource)) fail("invalid_selection");
       if (!next.date.startsWith(`${next.month}-`) || next.storeId !== null && !store(next.storeId) || !queues.has(next.queue)) fail("invalid_selection");
       const old = state.selection;
-      if (old && old.month === next.month && old.date === next.date && old.storeId === next.storeId) { emit({selection: next}); return task ?? Promise.resolve(); }
+      if (old && old.month === next.month && old.date === next.date && old.storeId === next.storeId && old.recordSource === next.recordSource) { emit({selection: next}); return task ?? Promise.resolve(); }
       ++revision; active?.abort(); task = null; active = null;
       emit({selection: next, phase: "idle", refreshing: false, index: null, detail: null, detailState: "unselected", error: null});
       return refresh();

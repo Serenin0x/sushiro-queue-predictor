@@ -119,8 +119,10 @@ class StatisticsGatewayTests(unittest.TestCase):
             calendar_source='sapi_miniapp_gateway')
         self.assertIn(b'data-statistics-source="sapi_miniapp_gateway"',
             self.request('/statistics')[1]['body'])
-        self.assertIn(b'id="sushiwait-reference" data-statistics-source="sapi_miniapp_gateway"',
-            self.request('/statistics-legacy')[1]['body'])
+        reference_body = self.request('/statistics-legacy')[1]['body']
+        self.assertIn(b'id="sushiwait-reference"', reference_body)
+        self.assertIn(b'data-statistics-source="sapi_miniapp_gateway"', reference_body)
+        self.assertIn(b'data-statistics-history="combined"', reference_body)
 
     def test_official_reference_rejects_unbound_or_ambiguous_html(self):
         for html in (b'{}', b'<main id="sushiwait-reference"></main>' * 2,
@@ -135,7 +137,11 @@ class StatisticsGatewayTests(unittest.TestCase):
     def test_reference_default_still_uses_explicit_legacy_source(self):
         html = b'<main id="sushiwait-reference"></main>'
         self.hub.dispatch = lambda path: (200, html, 'text/html')
-        self.assertEqual(self.request('/statistics-legacy')[1]['body'], html)
+        body = self.request('/statistics-legacy')[1]['body']
+        self.assertIn(b'id="sushiwait-reference"', body)
+        self.assertIn(b'data-statistics-poll-seconds="30"', body)
+        self.assertNotIn(b'data-statistics-source=', body)
+        self.assertNotIn(b'data-statistics-history=', body)
 
     def test_official_calendar_rejects_missing_or_ambiguous_binding(self):
         for html in (b'{}', b'<div id="sushiwait-month-calendar"></div>' * 2,
@@ -147,19 +153,18 @@ class StatisticsGatewayTests(unittest.TestCase):
                 self.assertEqual(self.request('/statistics')[0]['status'], 503)
                 self.assertEqual(self.hub.calls, [])
 
-    def test_earlier_calendar_is_explicit_crm_without_official_fallback(self):
-        html = '<div id="sushiwait-month-calendar"><a id="sw-history" href="/statistics-history">早期记录</a><p id="sw-history-note" hidden></p></div>'.encode()
+    def test_earlier_bookmark_uses_the_same_combined_calendar(self):
+        html = b'<div id="sushiwait-month-calendar"></div>'
         self.hub.dispatch = lambda path: (200, html, 'text/html')
         self.app = gateway.StatisticsGateway(self.hub, official_view=object(),
             calendar_source='sapi_miniapp_gateway', refresh_seconds=600)
         messages = self.request('/statistics-history')
         self.assertEqual(messages[0]['status'], 200)
         body = messages[1]['body']
-        self.assertIn(b'data-statistics-source="crm_remote_v1_1"', body)
-        self.assertNotIn(b'data-statistics-source="sapi_miniapp_gateway"', body)
+        self.assertIn(b'data-statistics-source="sapi_miniapp_gateway"', body)
+        self.assertIn(b'data-statistics-history="combined"', body)
         self.assertIn(b'data-statistics-poll-seconds="600"', body)
-        self.assertIn('返回当前采集'.encode(), body)
-        self.assertNotIn(b'id="sw-history-note" hidden', body)
+        self.assertEqual(body,self.request('/statistics')[1]['body'])
 
     def test_policy_changes_visible_without_restart_and_no_private_fields(self):
         import json, os, tempfile

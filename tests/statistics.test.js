@@ -11,7 +11,7 @@ const buttons=nodes.get("calendar").children.filter(n=>n.tag==="button");assert.
 nodes.get("store").value="900001";vm.runInContext('calendar();',ctx);assert(nodes.get("calendar").children.filter(n=>n.tag==="button")[8].classList.names.has("covered"));
 let resolveA,resolveB;ctx.fetch=path=>new Promise(resolve=>{reads.push(path);if(!resolveA)resolveA=resolve;else resolveB=resolve;});const a=vm.runInContext('showDay()',ctx),b=vm.runInContext('showDay()',ctx);
 assert.equal(nodes.get("points").children.length,0);assert.equal(vm.runInContext('detail',ctx),null);
-const fresh={points:[],returned_graph_points:0,graph_truncated:false};resolveB({ok:true,json:async()=>fresh});await b;resolveA({ok:true,json:async()=>({points:[{queue_received_at:"2026-10-09T03:00:00Z",queues:{storeQueue:["12"]},count_raw:7,pair_ok:true}],graph_truncated:false})});await a;
+const fresh={source:"crm_remote_v1_1",requested_store_id:"900001",local_date:"2026-10-09",points:[],returned_graph_points:0,graph_truncated:false};resolveB({ok:true,json:async()=>fresh});await b;resolveA({ok:true,json:async()=>({...fresh,points:[{queue_received_at:"2026-10-09T03:00:00Z",queues:{storeQueue:["12"]},count_raw:7,pair_ok:true}]})});await a;
 assert.equal(vm.runInContext('detail.points.length',ctx),0);assert.equal(nodes.get("points").children.length,0);assert(reads.every(p=>p.startsWith("/api/v1/")));assert(!reads.some(p=>p.includes("sushiro.com")));
 const base=Date.parse("2026-10-09T03:00:00Z"),iso=ms=>new Date(ms).toISOString();
 const modelDetail={daily_schema_version:1,source:"crm_remote_v1_1",requested_store_id:"900001",local_date:"2026-10-09",generated_at:iso(base+30*60000),network_performed_by_read:false,eta_available:false,first_label_is_confirmed_call:false,call_reference_semantics:"user_assumed_first_displayed_label",points:Array.from({length:31},(_,i)=>({request_started_at:iso(base+i*60000-200),queue_received_at:iso(base+i*60000),count_received_at:iso(base+i*60000),count_raw:0,pair_ok:true,scheduled_pause:false,error_codes:{},comparison_state:i?"comparable_display_sets":"insufficient",queues:{mixedQueue:[String(100+i*2)],reservationQueue:[String(7000+i*2)]}}))};
@@ -50,4 +50,6 @@ assert(nodes.get("calendar").children.filter(n=>n.tag==="button")[0].children[0]
 ctx.fetch=async()=>({ok:true,json:async()=>({...index,days:{},month:"2026-09",calendar_index_state:"ready",calendar_pending_store_ids:[],calendar_verified_store_count:2,unavailable_store_ids:["900002"]})});
 await vm.runInContext('refresh()',ctx);
 assert(nodes.get("status").textContent.includes("部分统计服务不可用：1 家"));
+assert.equal(vm.runInContext('coverage([{expected_background_slots_so_far:2,observed_background_slots:2,source_summaries:{crm_remote_v1_1:{},sapi_miniapp_gateway:{}}}])',ctx),null);
+assert.equal(vm.runInContext('priorDates({days:{"2026-10-08":{"900001":{observations:3,source_summaries:{sapi_miniapp_gateway:{observations:3}}}}}},"900001","2026-10-09").length',ctx),0);
 console.log("calendar, bounded loading progress, monthly reads, month races, stale forecasts and private local-only inputs passed");})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,86 @@
+{
+  "retrieved_at": "2026-10-13",
+  "icons": [
+    {
+      "name": "layout-dashboard",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/layout-dashboard.svg",
+      "sha256": "8210661405d0e6b7b5ea671a136c59e3e8fcc5e708a9fa332601bbf4a3d2b91a"
+    },
+    {
+      "name": "chart-line",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/chart-line.svg",
+      "sha256": "91ae4d96cfc8926df2c715438bd539da2703dc158828336c227ce23e62ca7cb4"
+    },
+    {
+      "name": "clock",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/clock.svg",
+      "sha256": "971b0b2d3b5b17ae240cd3aac1a09710ab680d8c41900f1a37a0e430994d7fda"
+    },
+    {
+      "name": "hourglass",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/hourglass.svg",
+      "sha256": "b333ab6a3b67eb408b13f00150bb75f04b510e87cef94336faff293f9868522b"
+    },
+    {
+      "name": "calendar",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/calendar.svg",
+      "sha256": "4861f170e9b1fa72eaa7cdefc3c7ca64ca6a10b9c2e3a13e1aceb4725f266d8d"
+    },
+    {
+      "name": "chevron-down",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/chevron-down.svg",
+      "sha256": "5a2e5c2a155ce06264a3f7299073ed636142dfd0b324b747387d9cfbf9fb5e3e"
+    },
+    {
+      "name": "refresh",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/refresh.svg",
+      "sha256": "9dd8ab8cac268489501cbb0a106d93cc3f367add493d20c47ec1e1d9804c760a"
+    },
+    {
+      "name": "brand-github",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/brand-github.svg",
+      "sha256": "1ba4d43069f269d4aedc71bd5887632ae08b17435d64f47f331b18c316ffeb37"
+    },
+    {
+      "name": "book",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/book.svg",
+      "sha256": "1f55b129a72746a98e1aaffc55ae7b43d004db036968afb022b3f9fbd7da87c9"
+    },
+    {
+      "name": "search",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/search.svg",
+      "sha256": "3dd53b9606283dfa0adcb0b10a7d9a4432369d4bebcfacf67f80fbe358381c34"
+    },
+    {
+      "name": "adjustments-horizontal",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/adjustments-horizontal.svg",
+      "sha256": "51c876babc598cf69ad1146f0fb621919a975758df0cc7abf45052006358a353"
+    },
+    {
+      "name": "building-store",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/building-store.svg",
+      "sha256": "ecd2b1d0e458f6c5ef2db21571c8bc1d3650af4e1f505b7c43e218c9fa299be2"
+    },
+    {
+      "name": "circle-check",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/circle-check.svg",
+      "sha256": "c4cb2e026be5f4c217c3ff9b0ccefb9a26b7a135bc82eef28a8bead0cc02a958"
+    },
+    {
+      "name": "database",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/database.svg",
+      "sha256": "7cdcca11c1555d48e19c2fcd2fce4420cbec734f3fa3d28274f8167a796ee0d6"
+    },
+    {
+      "name": "menu-2",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/menu-2.svg",
+      "sha256": "bcef199c5e53082a56c7bf33d4c48181b71373eb5d923cce8884aca09d106842"
+    },
+    {
+      "name": "arrow-up-right",
+      "source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/icons/outline/arrow-up-right.svg",
+      "sha256": "b7d952b0b6fbd089b110d85639ffffc001bb41fe53040e5e7f3e3f65ddc22595"
+    }
+  ],
+  "license_source": "https://raw.githubusercontent.com/tabler/tabler-icons/main/LICENSE"
+}

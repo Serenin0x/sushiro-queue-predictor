@@ -36,7 +36,7 @@ class StatisticsGateway:
             return True
         if path.startswith('/api/v1/official/'):
             return bool(self.official_view is not None and self.official_view.allowed(path))
-        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/statistics-legacy', '/calendar.css', '/calendar.mjs', '/calendar-data.mjs', '/calendar-directory.mjs', '/calendar-icons.mjs', '/statistics-client.mjs', '/api/v1/days'}:
+        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/statistics-legacy', '/calendar.css', '/calendar.mjs', '/calendar-data.mjs', '/calendar-directory.mjs', '/calendar-icons.mjs', '/statistics-client.mjs', '/saved-statistics.mjs', '/engineering-logo.svg', '/api/v1/days'}:
             return True
         if re.fullmatch(r'/api/v1/months/20[0-9]{2}-(?:0[1-9]|1[0-2])',path):
             return True
@@ -102,27 +102,20 @@ class StatisticsGateway:
             # The internal monitor is deliberately outside the public scope.
             body = body.replace(b'<a href="/monitor">' + '最近观测'.encode() + b'</a>',
                 '<span>每30秒自动更新</span>'.encode())
-        if path in {'/statistics', '/statistics-legacy'} and status == 200 and self.calendar_source == 'sapi_miniapp_gateway':
-            marker = (b'id="sushiwait-month-calendar"' if path == '/statistics'
+        if path in {'/statistics', '/statistics-legacy', '/statistics-history'} and status == 200 and self.calendar_source == 'sapi_miniapp_gateway':
+            marker = (b'id="sushiwait-month-calendar"' if path != '/statistics-legacy'
                       else b'id="sushiwait-reference"')
             if body.count(marker) != 1 or b'data-statistics-source=' in body:
                 status, body, mime = 503, b'Calendar source binding unavailable', 'text/plain; charset=utf-8'
             else:
-                body = body.replace(marker, marker + b' data-statistics-source="sapi_miniapp_gateway"', 1)
-        if path in {'/statistics', '/statistics-history'} and status == 200:
-            marker = b'id="sushiwait-month-calendar"'
+                body = body.replace(marker, marker + b' data-statistics-source="sapi_miniapp_gateway" data-statistics-history="combined"', 1)
+        if path in {'/statistics', '/statistics-history', '/statistics-legacy'} and status == 200:
+            marker = b'id="sushiwait-reference"' if path == '/statistics-legacy' else b'id="sushiwait-month-calendar"'
             try:
                 seconds = self.polling_seconds()
                 if body.count(marker) != 1 or b'data-statistics-poll-seconds=' in body:
                     raise ValueError('calendar_refresh_binding_unavailable')
                 body = body.replace(marker, marker + f' data-statistics-poll-seconds="{seconds}"'.encode(), 1)
-                if path == '/statistics-history':
-                    if b'data-statistics-source=' in body:
-                        raise ValueError('history_source_binding_ambiguous')
-                    body = body.replace(marker, marker + b' data-statistics-source="crm_remote_v1_1"', 1)
-                    body = body.replace(b'id="sw-history" href="/statistics-history">'+ '早期记录'.encode(),
-                        b'id="sw-history" href="/statistics">' + '返回当前采集'.encode(), 1)
-                    body = body.replace(b'id="sw-history-note" hidden', b'id="sw-history-note"', 1)
             except Exception:
                 status, body, mime = 503, b'Calendar settings unavailable', 'text/plain; charset=utf-8'
         headers = [(b'content-type', mime.encode()), (b'content-length', str(len(body)).encode()),

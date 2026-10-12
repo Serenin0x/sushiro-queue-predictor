@@ -22,18 +22,29 @@ class CalendarFrontendTests(unittest.TestCase):
         self.assertIn('src="/calendar.mjs"',entry)
         self.assertIn('href="/statistics-legacy"',entry)
         paths=['/statistics','/statistics-legacy','/calendar.css','/calendar.mjs','/calendar-data.mjs',
-               '/calendar-directory.mjs','/calendar-icons.mjs','/statistics-client.mjs']
+               '/calendar-directory.mjs','/calendar-icons.mjs','/statistics-client.mjs','/saved-statistics.mjs','/engineering-logo.svg']
         for path in paths:
             self.assertTrue(self.app.allowed(path),path)
             code,body,mime=self.hub.dispatch(path,now=test_monitor_hub.NOW)
             self.assertEqual(code,200,path)
             self.assertGreater(len(body),0)
             if path.endswith('.mjs'):self.assertEqual(mime,'text/javascript; charset=utf-8')
+            if path.endswith('.svg'):
+                self.assertEqual(mime,'image/svg+xml; charset=utf-8')
+                self.assertEqual(body,(ROOT/'assets/sushiwait-logo-light.svg').read_bytes())
         for path in ['/calendar/secret','/calendar.mjs.map','/api/v1/manage','/config.json','/web/calendar.mjs']:
             self.assertFalse(self.app.allowed(path),path)
         self.assertNotIn('<script>',entry)
         self.assertNotIn('<style>',entry)
         self.assertNotIn('即将叫号列表 · 12:30',entry)
+        self.assertNotIn('早期记录',entry)
+        self.assertIn('工程页',entry)
+
+    def test_saved_records_share_calendar_but_keep_source_and_failure_boundaries(self):
+        node=shutil.which('node')
+        self.assertIsNotNone(node)
+        result=subprocess.run([node,str(ROOT/'tests/saved-statistics.test.mjs')],capture_output=True,text=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
     def test_public_gateway_serves_the_entry_and_sanitizes_the_legacy_link(self):
         import asyncio

@@ -5,7 +5,7 @@
     <nav class="sw-rail" aria-label="主导航">
       <button type="button" class="sw-ghost cursor-interaction" id="sw-nav-calendar" aria-label="月历" aria-pressed="true" data-tooltip="月历"><i data-lucide="calendar-days" aria-hidden="true"></i></button>
       <button type="button" class="sw-ghost cursor-interaction" id="sw-nav-day" aria-label="当日观测" aria-pressed="false" data-tooltip="当日观测"><i data-lucide="chart-no-axes-combined" aria-hidden="true"></i></button>
-      <a class="sw-ghost" href="/statistics-legacy" aria-label="已有号参考与用餐记录" title="已有号参考与用餐记录"><i data-lucide="clock" aria-hidden="true"></i></a>
+      <a class="sw-ghost" href="/statistics-legacy" aria-label="工程页：已有号参考与用餐记录" title="工程页：维护与开发"><i data-lucide="clock" aria-hidden="true"></i></a>
       <button type="button" class="sw-ghost sw-theme cursor-interaction" id="sw-theme" aria-label="切换浅色与深色" data-tooltip="切换浅色与深色"><i data-lucide="sun-moon" aria-hidden="true"></i></button>
     </nav>
     <main class="sw-main">
@@ -30,10 +30,8 @@
             </div>
           </div>
         </div>
-        <a class="sw-ghost sw-history-link" id="sw-history" href="/statistics-history">早期记录</a>
         <span class="sw-demo" id="sw-demo"></span><button type="button" class="sw-ghost" id="sw-refresh" aria-label="刷新统计"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
       </header>
-      <p class="sw-detail-note" id="sw-history-note" hidden>这里保留此前采集的历史记录。旧采集已停止；当前采集的数据请返回主统计页查看。</p>
       <p class="sw-status" id="sw-status" role="status" aria-live="polite">正在读取…</p>
       <section id="sw-month-view" aria-label="月历">
         <div class="sw-month-head">
@@ -47,6 +45,8 @@
       </section>
       <section id="sw-day-view" aria-label="当日观测" hidden>
         <div class="sw-day-head"><h1 id="sw-day-title"></h1><button type="button" class="sw-ghost cursor-interaction" id="sw-back"><i data-lucide="arrow-left" aria-hidden="true"></i>月历</button></div>
+        <label class="sw-detail-note" id="sw-source-picker" hidden>记录集 <select id="sw-record-source" aria-label="选择当日记录集"></select></label>
+        <p class="sw-detail-note" id="sw-source-note" hidden></p>
         <div id="sw-day-empty" class="sw-empty-detail" hidden></div>
         <div id="sw-all-content" hidden></div>
         <div id="sw-day-content">

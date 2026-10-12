@@ -45,3 +45,9 @@ README 通过 picture 的浅深主题及 600px 视口条件选图；桌面两列
 `readme-labels/` 的透明 SVG 只显示能力列表和更新列表原有的强调词。浅色沿用 Logo 深红 #99081c，深色沿用体验标题浅红 #ffb4a4；无底色、边框、刷痕、图标、脚本或外部资源。文字使用阅读设备本地系统字体，不嵌入或分发字体文件；完整词句同时保留在 README 的 img alt 和 SVG title/text 中。描述、链接及章节仍为原生 Markdown/HTML，两个三级标题保持中性纯文字。
 
 资产由 [render_readme_labels.py](../scripts/render_readme_labels.py) 按当前 README 的原有强调词生成；浅深配对使用 picture 条件切换。生成器离线运行并核对原文和结构；后续事实文案由主线继续独立维护。
+
+## 工程页图标与SVG标志 · 2026-10-13
+
+工程页使用Tabler Icons的database、layout-dashboard、chart-line、hourglass、book、clock、calendar、refresh、brand-github和chevron-down静态SVG路径，内嵌到原创HTML布局。上游为[tabler/tabler-icons](https://github.com/tabler/tabler-icons)，采用MIT；本次保留[完整许可](../docs/design/previews/engineering-20261013/TABLER-ICONS-LICENSE.txt)与[各资源来源及摘要](../docs/design/previews/engineering-20261013/icon-sources.json)。未安装收费模板或复制Pro素材。
+
+工程页`src/sushiwait/web/engineering-logo.svg`逐字复用本页上方既有正式浅色Logo；只在容器内按比例适配，字形、笔触和许可归属不变。

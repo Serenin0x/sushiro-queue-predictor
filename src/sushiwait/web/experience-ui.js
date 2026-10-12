@@ -36,7 +36,7 @@
       $("experience-status").textContent="取号范围已记录；后续只记录本人实际发生的事件。";render();
     }catch(e){error(e);}
   };
-  errors.store_required="请先在上方选择本次取号门店。";
+  errors.store_required="请先选择本次取号门店。";
   $("experience-add").onclick=()=>append(false);$("experience-now").onclick=()=>append(true);
   $("experience-download").onclick=()=>{
     try{
