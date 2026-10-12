@@ -230,12 +230,63 @@ class Controller:
             settings_file=self.root/'renewal-settings.json',**options)
 
 
-def collect_arguments(root,store_ids,rounds,task,resume,start,end):
+def polling_policy(root):
+    """The owner-approved 10-minute phase changes cadence, never total budget."""
+    path = Path(root)/'polling-policy.json'
+    if not os.path.lexists(path):
+        return {'interval_seconds':900,'ordinary_query_limit':396}
+    value = _decode(_read_private_file(path))
+    if (type(value) is not dict or set(value) != {'schema_version','interval_seconds','ordinary_query_limit'}
+            or type(value['schema_version']) is not int or value['schema_version'] != 1
+            or type(value['interval_seconds']) is not int or value['interval_seconds'] != 600
+            or type(value['ordinary_query_limit']) is not int or value['ordinary_query_limit'] != 396):
+        raise TrialError('cloud_polling_policy_invalid')
+    return {key:value[key] for key in ('interval_seconds','ordinary_query_limit')}
+
+
+def query_usage(root, stores):
+    """Count all six fixed task histories, including unknown and pending calls."""
+    used = 0
+    histories = {}
+    for day in (12,13,14):
+        for interval in (900,600):
+            suffix = '' if interval == 900 else '-600'
+            path = Path(root)/f'collection-2026-10-{day}{suffix}.json'
+            if not os.path.lexists(path):
+                continue
+            status = task_status(path)
+            if (status['store_ids'] != stores or status['api_profile'] != 'miniapp_gateway'
+                    or status['interval_seconds'] != interval
+                    or status['target_rounds'] > (44 if interval == 900 else 66)):
+                raise TrialError('cloud_task_budget_invalid')
+            used += status['completed_slots'] + int(status['pending_attempt'])
+            histories[path] = status
+    if used > 396:
+        raise TrialError('cloud_task_budget_invalid')
+    return used,histories
+
+
+def window_budget(root, stores, start, interval, limit):
+    """A new phase preserves spent calls and the original daily task files."""
+    used,histories = query_usage(root,stores)
+    suffix = '' if interval == 900 else '-600'
+    task = Path(root)/f'collection-{start.astimezone(CHINA).date()}{suffix}.json'
+    previous = histories.get(task)
+    if previous is not None:
+        unspent = previous['target_slots']-previous['completed_slots']-int(previous['pending_attempt'])
+        if unspent > limit-used:
+            raise TrialError('cloud_task_budget_invalid')
+        return task,previous['target_rounds'],True,previous
+    rounds = min(44 if interval == 900 else 66, max(0,limit-used)//len(stores))
+    return task,rounds,False,None
+
+
+def collect_arguments(root,store_ids,rounds,task,resume,start,end, *, interval=900):
     args = [sys.executable,'-I','-u',str(root/'official_business_collect.py'),
             stamp(start),stamp(end),'collect','--api-profile','miniapp_gateway']
     for store in store_ids:
         args += ['--store-id',store]
-    args += ['--interval','900','--samples',str(rounds),'--wait-for-credentials','600',
+    args += ['--interval',str(interval),'--samples',str(rounds),'--wait-for-credentials','600',
         '--credentials-file',str(root/'query-context.json'),'--db',str(root/'observations.sqlite'),
         '--task-file',str(task)]
     if resume:
@@ -257,6 +308,8 @@ def main():
             raise TrialError('cloud_plan_invalid')
         plan = _decode(_read_private_file(root/'trial-plan.json'))
         windows = validate_plan(plan)
+        policy = polling_policy(root)
+        interval = policy['interval_seconds']
         lock = os.open(root/'controller.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         state = root/'controller-state';state.mkdir(mode=0o700,exist_ok=True)
@@ -276,10 +329,13 @@ def main():
                 ledger.finish(index)
                 print(json.dumps({'event':'cloud_window_missed','index':index,'backfill':False}),flush=True)
                 continue
-            task = root/f'collection-{start.astimezone(CHINA).date()}.json'
-            resume = os.path.lexists(task)
+            task,rounds,resume,previous = window_budget(root,plan['store_ids'],start,
+                interval,policy['ordinary_query_limit'])
+            if rounds == 0:
+                print(json.dumps({'event':'cloud_ordinary_budget_exhausted',
+                    'limit':policy['ordinary_query_limit'],'automatic_retry':False}),flush=True)
+                break  # No additional supplier, initialization or ordinary GET.
             if resume:
-                previous = task_status(task)
                 if previous['failed_slots']:
                     raise TrialError('cloud_reader_failed')
                 if previous['state'] == 'completed':
@@ -288,10 +344,11 @@ def main():
                     raise TrialError('cloud_reader_failed')
             controller.ensure_refresh(start,end)
             # -I deliberately uses the installed rc82 wheel, not this checkout.
-            child = subprocess.Popen(collect_arguments(root,plan['store_ids'],rounds,task,resume,start,end),
+            child = subprocess.Popen(collect_arguments(root,plan['store_ids'],rounds,task,resume,start,end,
+                interval=interval),
                 stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             print(json.dumps({'event':'cloud_reader_started','pid':child.pid,'window':index,
-                'resume':resume,'interval_seconds':900,'ordinary_query_limit':rounds*len(plan['store_ids'])}),flush=True)
+                'resume':resume,'interval_seconds':interval,'ordinary_query_limit':rounds*len(plan['store_ids'])}),flush=True)
             while utc_now() < end and not stopped.is_set():
                 if child.poll() is not None:
                     if child.returncode != 0:
@@ -318,7 +375,7 @@ def main():
             'cloud_checkpoint_unconfirmed','cloud_refresh_limit','cloud_context_changed',
             'cloud_revision_invalid','cloud_context_invalid','cloud_context_missing',
             'cloud_auth_timing_unknown','cloud_refresh_failed','cloud_reader_failed',
-            'cloud_business_window_closed'}
+            'cloud_business_window_closed','cloud_polling_policy_invalid','cloud_task_budget_invalid'}
         code = str(error) if isinstance(error,TrialError) and str(error) in allowed else 'cloud_trial_failed'
         if ledger is not None:
             try:
