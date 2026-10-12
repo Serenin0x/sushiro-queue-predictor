@@ -49,7 +49,7 @@ assert(nodes.get("summary").textContent.includes("未加载的数据不记为零
 assert(nodes.get("calendar").children.filter(n=>n.tag==="button")[0].children[0].textContent==="统计加载中");
 ctx.fetch=async()=>({ok:true,json:async()=>({...index,days:{},month:"2026-09",calendar_index_state:"ready",calendar_pending_store_ids:[],calendar_verified_store_count:2,unavailable_store_ids:["900002"]})});
 await vm.runInContext('refresh()',ctx);
-assert(nodes.get("status").textContent.includes("部分统计服务不可用：1 家"));
+assert(nodes.get("status").textContent.includes("本月归档读取不完整：1 家"));
 assert.equal(vm.runInContext('coverage([{expected_background_slots_so_far:2,observed_background_slots:2,source_summaries:{crm_remote_v1_1:{},sapi_miniapp_gateway:{}}}])',ctx),null);
 assert.equal(vm.runInContext('priorDates({days:{"2026-10-08":{"900001":{observations:3,source_summaries:{sapi_miniapp_gateway:{observations:3}}}}}},"900001","2026-10-09").length',ctx),0);
 console.log("calendar, bounded loading progress, monthly reads, month races, stale forecasts and private local-only inputs passed");})().catch(e=>{console.error(e);process.exitCode=1;});

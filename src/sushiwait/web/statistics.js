@@ -151,6 +151,16 @@ async function showDay({quiet=false}={}){
 }
 function plot(id,points){const canvas=$(id),rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(300,Math.round(rect.width*dpr));canvas.height=230*dpr;const c=canvas.getContext("2d");c.scale(dpr,dpr);const w=canvas.width/dpr,h=230;c.clearRect(0,0,w,h);c.strokeStyle="#d6dce1";c.beginPath();c.moveTo(60,12);c.lineTo(60,h-32);c.lineTo(w-12,h-32);c.stroke();c.fillStyle="#58636c";c.font="12px system-ui";if(!points.length){c.fillText("没有可绘制的有效观测",75,40);return;}const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),dx=Math.max(1,maxX-minX),dy=Math.max(1,maxY-minY);for(let i=0;i<4;i++){const y=minY+dy*i/3;c.fillText(Number(y.toFixed(2)).toString(),4,h-34-(h-50)*i/3);}c.fillText(time(minX),60,h-9);c.fillText(time(maxX),Math.max(60,w-80),h-9);points.forEach(([x,y,series])=>{c.fillStyle=["#b4212b","#bb7441","#638b4f"][series||0];c.beginPath();c.arc(60+(w-80)*(x-minX)/dx,h-34-(h-50)*(y-minY)/dy,2.4,0,Math.PI*2);c.fill();});}
 function graphs(){if(!detail)return;const queue=$("queue").value,points=detail.points||[],numbers=[],counts=[],speed=[];points.forEach(p=>{(p.queues?.[queue]||[]).slice(0,1).forEach(label=>{if(/^\d+$/.test(label))numbers.push([Date.parse(p.queue_received_at),Number(label),0]);});if(p.count_raw!==null)counts.push([Date.parse(p.count_received_at),p.count_raw,0]);if(p.comparison_state==="comparable_display_sets"&&p.interval_seconds>0&&p.removed_labels)speed.push([Date.parse(p.queue_received_at),p.removed_labels[queue]*60/p.interval_seconds,0]);});plot("numbers",numbers);plot("count",counts);plot("speed",speed);$("points").replaceChildren();points.slice(-60).reverse().forEach(p=>textRow([time(p.queue_received_at),(p.queues?.[queue]||[]).join("、")||"未显示",p.count_raw===null?"未知":p.count_raw,p.scheduled_pause?"营业边界暂停":p.pair_ok?"已保存":"部分成功或失败"],$("points")));$("graph-note").textContent=`图表返回 ${points.length} 组。${detail.graph_truncated?"图表投影有截断，完整原始观测仍保存在数据库。":"当前图表投影未截断。"}`;}
+function archiveReadStatus(value){
+  const pending=value.calendar_pending_store_ids||[];
+  if(pending.length)return `正在加载本月归档：已检查 ${value.calendar_verified_store_count} 家，剩余 ${pending.length} 家；已完成的统计先显示，未加载的数据不补零。`;
+  if(value.source_months){
+    const sources=[["sapi_miniapp_gateway","官方来源"],["crm_remote_v1_1","早期来源"]];
+    const parts=sources.map(([source,label])=>{const month=value.source_months[source],missing=month.unavailable_store_ids.length;return `${label} ${month.configured_store_ids.length} 家${missing?`（${missing} 家读取不完整）`:""}`;});
+    return `本月归档：${parts.join("；")}。缺失资料不补零；归档读取状态不代表实时采集状态。`;
+  }
+  return value.unavailable_store_ids.length?`本月归档读取不完整：${value.unavailable_store_ids.length} 家，缺失资料未补零。`:`已读取 ${Object.keys(value.store_names).length} 家门店的已保存副本。`;
+}
 async function refresh(){
   if(busy)return;
   busy=true;$("refresh").disabled=true;if(engineeringPanels)$("header-refresh").disabled=true;
@@ -167,8 +177,7 @@ async function refresh(){
     Object.entries(index.store_names).forEach(([id,name])=>{const o=document.createElement("option");o.value=id;o.textContent=name;$("store").append(o);});
     $("store").value=selected;calendar();await showDay({quiet:true});
     if(month!==$("month").value)return;
-    const pending=index.calendar_pending_store_ids||[];
-    $("status").textContent=pending.length?`正在加载本月归档：已检查 ${index.calendar_verified_store_count} 家，剩余 ${pending.length} 家；已完成的统计先显示，未加载的数据不补零。`:index.unavailable_store_ids.length?`部分统计服务不可用：${index.unavailable_store_ids.length} 家，未补零。`:`已读取 ${Object.keys(index.store_names).length} 家门店的已保存副本。`;
+    $("status").textContent=archiveReadStatus(index);
   }catch(_){if(month===$("month").value)showError();}
   finally{busy=false;$("refresh").disabled=false;if(engineeringPanels)$("header-refresh").disabled=false;if(month!==$("month").value)refresh();}
 }
