@@ -17,6 +17,8 @@ class Hub:
 
     def dispatch(self, path):
         self.calls.append(path)
+        if path == '/statistics':
+            return 200, b'<div id="sushiwait-month-calendar"></div>', 'text/html'
         return 200, b'{}', 'application/json'
 
 
@@ -96,7 +98,7 @@ class StatisticsGatewayTests(unittest.TestCase):
         self.assertEqual(messages[1]['body'], b'{}')
 
     def test_public_html_does_not_link_to_private_monitor(self):
-        self.hub.dispatch = lambda path: (200, '<a href="/monitor">最近观测</a>'.encode(), 'text/html')
+        self.hub.dispatch = lambda path: (200, '<div id="sushiwait-month-calendar"><a href="/monitor">最近观测</a></div>'.encode(), 'text/html')
         body = self.request('/statistics')[1]['body']
         self.assertNotIn(b'/monitor', body)
         self.assertIn('每30秒自动更新'.encode(), body)
@@ -111,7 +113,8 @@ class StatisticsGatewayTests(unittest.TestCase):
         self.hub.dispatch = lambda path: (200, reference_html if path == '/statistics-legacy' else html, 'text/html')
         # Configuring the optional API alone must not switch the calendar.
         self.app = gateway.StatisticsGateway(self.hub, official_view=object())
-        self.assertEqual(self.request('/statistics')[1]['body'], html)
+        self.assertNotIn(b'data-statistics-source=', self.request('/statistics')[1]['body'])
+        self.assertIn(b'data-statistics-poll-seconds="30"', self.request('/statistics')[1]['body'])
         self.app = gateway.StatisticsGateway(self.hub, official_view=object(),
             calendar_source='sapi_miniapp_gateway')
         self.assertIn(b'data-statistics-source="sapi_miniapp_gateway"',
@@ -143,6 +146,42 @@ class StatisticsGatewayTests(unittest.TestCase):
                     calendar_source='sapi_miniapp_gateway')
                 self.assertEqual(self.request('/statistics')[0]['status'], 503)
                 self.assertEqual(self.hub.calls, [])
+
+    def test_earlier_calendar_is_explicit_crm_without_official_fallback(self):
+        html = '<div id="sushiwait-month-calendar"><a id="sw-history" href="/statistics-history">早期记录</a><p id="sw-history-note" hidden></p></div>'.encode()
+        self.hub.dispatch = lambda path: (200, html, 'text/html')
+        self.app = gateway.StatisticsGateway(self.hub, official_view=object(),
+            calendar_source='sapi_miniapp_gateway', refresh_seconds=600)
+        messages = self.request('/statistics-history')
+        self.assertEqual(messages[0]['status'], 200)
+        body = messages[1]['body']
+        self.assertIn(b'data-statistics-source="crm_remote_v1_1"', body)
+        self.assertNotIn(b'data-statistics-source="sapi_miniapp_gateway"', body)
+        self.assertIn(b'data-statistics-poll-seconds="600"', body)
+        self.assertIn('返回当前采集'.encode(), body)
+        self.assertNotIn(b'id="sw-history-note" hidden', body)
+
+    def test_policy_changes_visible_without_restart_and_no_private_fields(self):
+        import json, os, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            os.chmod(folder, 0o700)
+            path = Path(folder).resolve()/'policy.json'
+            def write(interval):
+                path.write_text(json.dumps({'schema_version':1,'interval_seconds':interval,'ordinary_query_limit':396}))
+                os.chmod(path, 0o600)
+            write(600)
+            self.app = gateway.StatisticsGateway(self.hub, refresh_policy_file=path)
+            self.assertEqual(json.loads(self.request('/api/v1/statistics/settings')[1]['body']),
+                {'schema_version':1,'poll_seconds':600})
+            write(300)
+            self.app.cache.clear()
+            self.assertEqual(json.loads(self.request('/api/v1/statistics/settings')[1]['body'])['poll_seconds'], 300)
+            path.write_text('{"interval_seconds":true,"authorization":"not permitted"}')
+            self.app.cache.clear()
+            self.assertEqual(self.request('/api/v1/statistics/settings')[0]['status'],503)
+            self.assertEqual(self.request('/statistics')[0]['status'],503)
+        self.assertEqual(self.hub.calls, ['/statistics'])
 
 
 if __name__ == '__main__':

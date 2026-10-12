@@ -132,4 +132,25 @@ await check('unknown selected directory ID never requests a day', async () => {
   await c.select({month:'2026-10',date:'2026-10-06',storeId:'3014'});
   assert.equal(days,0);assert.equal(c.snapshot().error.code,'unknown_store');
 });
+await check('background polling keeps the saved view, then replaces only completed data', async () => {
+  const waiting=deferred(),events=[];let reads=0,job;
+  const c=createStatisticsController({client:{readMonth:async()=>index,readDay:()=>++reads===1?Promise.resolve(detail):waiting.promise},
+    pollMs:600000,onChange:s=>events.push(s),setIntervalImpl:(fn,ms)=>{assert.equal(ms,600000);job=fn;return 1;},clearIntervalImpl:()=>{}});
+  await c.select({month:'2026-10',date:'2026-10-06',storeId:'900001'});c.start();
+  const before=c.snapshot();events.length=0;job();await Promise.resolve();
+  assert.equal(c.snapshot().phase,'ready');assert.equal(c.snapshot().refreshing,true);
+  assert.equal(c.snapshot().detail,before.detail);assert(events.every(s=>s.phase!=='loading'));
+  waiting.resolve({...detail,points:[]});await c.refresh();
+  assert.equal(c.snapshot().refreshing,false);assert.equal(c.snapshot().detail.points.length,0);c.stop();
+});
+await check('quiet refresh failure withdraws the previous result and cadence changes are bounded', async () => {
+  let failRead=false,job,id=0;const periods=[],cleared=[];
+  const c=createStatisticsController({client:{readMonth:async()=>{if(failRead)throw Error('failure');return index;},readDay:async()=>detail},
+    pollMs:600000,setIntervalImpl:(fn,ms)=>{job=fn;periods.push(ms);return ++id;},clearIntervalImpl:i=>cleared.push(i)});
+  await c.select({month:'2026-10',date:'2026-10-06',storeId:'900001'});c.start();
+  c.setPollMs(300000);c.setPollMs(300000);assert.deepEqual(periods,[600000,300000]);assert.deepEqual(cleared,[1]);
+  for(const value of [0,true,29999,3600001,NaN])assert.throws(()=>c.setPollMs(value));
+  failRead=true;await c.refresh();assert.equal(c.snapshot().phase,'error');assert.equal(c.snapshot().detail,null);
+  assert.equal(c.snapshot().index,null);assert.equal(c.snapshot().refreshing,false);c.stop();
+});
 console.log(`${passed} integration cases passed; synthetic only; external requests 0`);

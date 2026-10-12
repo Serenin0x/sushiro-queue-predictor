@@ -27,16 +27,28 @@ function applyTheme() {root.style.colorScheme=state.theme==='system'?'light dark
 applyTheme();
 
 const statisticsSource=root.dataset.statisticsSource ?? 'crm_remote_v1_1';
-const controller=createStatisticsController({client:createStatisticsClient({source:statisticsSource}),onChange(next) {
-  const completedRead=snapshot.phase==='loading' && ['ready','partial'].includes(next.phase);
+const pollingSeconds=Number(root.dataset.statisticsPollSeconds ?? 30);
+const controller=createStatisticsController({client:createStatisticsClient({source:statisticsSource}),pollMs:pollingSeconds*1000,onChange(next) {
+  const completedRead=(snapshot.phase==='loading' || snapshot.refreshing) && !next.refreshing && ['ready','partial'].includes(next.phase);
   snapshot=next;
   displayCache.remember(next);
-  if(completedRead)pageUpdatedAt=Date.now();
+  if(completedRead){pageUpdatedAt=Date.now();updatePollingPolicy();}
   if (next.index && state.store!=='all' && !next.index.configured_store_ids.includes(state.store)) {
     state.store='all';state.city='all';queueMicrotask(selectStatistics);
   }
   render();
 }});
+// This reads only the website's saved sampling policy, never the restaurant.
+async function updatePollingPolicy() {
+  try {
+    const response=await fetch('/api/v1/statistics/settings',{cache:'no-store',signal:AbortSignal.timeout(5000)});
+    if(!response.ok)return;
+    const settings=await response.json();
+    if(settings.schema_version!==1 || !Number.isInteger(settings.poll_seconds) || settings.poll_seconds<30 || settings.poll_seconds>3600)return;
+    controller.setPollMs(settings.poll_seconds*1000);
+    el('sw-refresh').title=`每${settings.poll_seconds/60}分钟自动同步已保存观测；也可手动刷新`;
+  } catch (_) { /* Keep the last declared cadence; data errors remain visible. */ }
+}
 function selectStatistics() {
   if (document.hidden) {render();return Promise.resolve();}
   return controller.select({month:state.month,date:state.date,storeId:state.view==='day' && state.date<=shanghaiDate() && state.store!=='all'?state.store:null});

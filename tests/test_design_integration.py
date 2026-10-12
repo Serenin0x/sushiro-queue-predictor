@@ -18,7 +18,7 @@ class DesignIntegrationTests(unittest.TestCase):
         script = Path(__file__).with_name('statistics-client.test.mjs')
         result = subprocess.run([node, str(script)], capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('15 integration cases passed', result.stdout)
+        self.assertIn('17 integration cases passed', result.stdout)
 
     def test_fixture_matches_public_daily_view_not_invented_fields(self):
         case = daily_fixture.DailyTests()

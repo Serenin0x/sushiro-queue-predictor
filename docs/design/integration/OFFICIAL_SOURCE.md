@@ -84,3 +84,8 @@ selection_scope为`bounded_public_packet_not_full_day`。覆盖率只计算包�
 ## E0455：明确的关联归档模式（rc78源码，未云切换）
 
 原七字段配置可明确选择mode=official_packet_archive_with_continuity，数据库必须为新独立三表归档，旧库不自动升级。原官方月／日路由和浏览器来源保持；新增每点observation_id、record_sha256、经校验的前序声明与continuity_received_at，以及summary.continuity_states／comparable_display_pairs。无关联原v1点仍保留packet_continuity_unknown，损坏前序或时间返回503。云端当前仍rc76显示／rc74单表接收，设计助手无需更换URL或新增上传入口。详细合同、逐项接收及备份待办见[OFFICIAL_CONTINUITY](../../OFFICIAL_CONTINUITY.md)。
+
+
+## E0469：当前记录、早期存档与静默刷新
+
+主统计页继续官方来源；新/statistics-history明确读取旧CRM存档，页头“早期记录／返回当前采集”互相进入，不做失败回退或混算。旧10月9日7920组、10月10日28604组仍真实可读，来源保护不恢复。网页从采集器同一周期政策读取更新频率，目前600秒；后台同范围读取保留内容和布局，错误仍撤下旧结果。设计接手需保持该行为，详细合同和实际部署见[统计更新说明](../../STATISTICS_REFRESH_HISTORY.md)，五份资源摘要见[清单](statistics-refresh-resources.json)。旧30秒读取的说明按其记录时点保留。

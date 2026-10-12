@@ -133,7 +133,7 @@ export function createStatisticsClient({fetchImpl = globalThis.fetch, timeoutMs 
 export function createStatisticsController({client, onChange = () => {}, pollMs = 30000, setIntervalImpl = setInterval, clearIntervalImpl = clearInterval} = {}) {
   if (!client?.readMonth || !client?.readDay || typeof onChange !== "function" || !integer(pollMs) || pollMs < 30000 || pollMs > 3600000) fail("invalid_controller_options");
   let revision = 0, active = null, task = null, interval = null;
-  let state = freeze({selection: null, phase: "idle", index: null, detail: null, detailState: "unselected", error: null});
+  let state = freeze({selection: null, phase: "idle", refreshing: false, index: null, detail: null, detailState: "unselected", error: null});
   const emit = patch => { state = freeze({...state, ...patch}); onChange(state); };
   async function run(token, signal) {
     const {month, date, storeId} = state.selection;
@@ -150,22 +150,26 @@ export function createStatisticsController({client, onChange = () => {}, pollMs 
           if (detail.source !== index.source) fail("day_scope_mismatch");
         }
         catch (e) {
-          if (token === revision) emit({phase: "partial", detail: null, detailState: "error", error: {code: e.code || "read_failed", httpStatus: e.httpStatus ?? null}});
+          if (token === revision) emit({phase: "partial", refreshing: false, detail: null, detailState: "error", error: {code: e.code || "read_failed", httpStatus: e.httpStatus ?? null}});
           return;
         }
       }
       if (token !== revision) return;
-      emit({phase: index.unavailable_store_ids.length ? "partial" : "ready", detail, detailState: storeId === null ? "unselected" : "ready", error: null});
+      emit({phase: index.unavailable_store_ids.length ? "partial" : "ready", refreshing: false, detail, detailState: storeId === null ? "unselected" : "ready", error: null});
     } catch (e) {
-      if (token === revision) emit({phase: "error", index: null, detail: null, detailState: "error", error: {code: e.code || "read_failed", httpStatus: e.httpStatus ?? null}});
+      if (token === revision) emit({phase: "error", refreshing: false, index: null, detail: null, detailState: "error", error: {code: e.code || "read_failed", httpStatus: e.httpStatus ?? null}});
     }
   }
-  function refresh() {
+  function refresh({background = true} = {}) {
     if (!state.selection) fail("selection_required");
     if (task) return task;
     const token = ++revision;
     active = new AbortController();
-    emit({phase: "loading", detail: null, detailState: state.selection.storeId === null ? "unselected" : "loading", error: null});
+    // A saved view stays in place during refresh. Its source timestamp still
+    // controls freshness; a completed failure clears it through the same path.
+    const quiet = background && state.index && ["ready", "partial"].includes(state.phase);
+    if (quiet) emit({refreshing: true, error: null});
+    else emit({phase: "loading", refreshing: false, detail: null, detailState: state.selection.storeId === null ? "unselected" : "loading", error: null});
     task = run(token, active.signal).finally(() => { if (token === revision) { task = null; active = null; } });
     return task;
   }
@@ -178,12 +182,18 @@ export function createStatisticsController({client, onChange = () => {}, pollMs 
       const old = state.selection;
       if (old && old.month === next.month && old.date === next.date && old.storeId === next.storeId) { emit({selection: next}); return task ?? Promise.resolve(); }
       ++revision; active?.abort(); task = null; active = null;
-      emit({selection: next, phase: "idle", index: null, detail: null, detailState: "unselected", error: null});
+      emit({selection: next, phase: "idle", refreshing: false, index: null, detail: null, detailState: "unselected", error: null});
       return refresh();
     },
     refresh,
+    setPollMs(next) {
+      if (!integer(next) || next < 30000 || next > 3600000) fail("invalid_controller_options");
+      if (next === pollMs) return;
+      pollMs = next;
+      if (interval !== null) { clearIntervalImpl(interval); interval = setIntervalImpl(() => { if (state.selection) refresh(); }, pollMs); }
+    },
     start() { if (interval === null) interval = setIntervalImpl(() => { if (state.selection) refresh(); }, pollMs); },
-    stop() { if (interval !== null) clearIntervalImpl(interval); interval = null; ++revision; active?.abort(); active = null; task = null; emit({phase: "idle", detail: null, detailState: "unselected", error: null}); }
+    stop() { if (interval !== null) clearIntervalImpl(interval); interval = null; ++revision; active?.abort(); active = null; task = null; emit({phase: "idle", refreshing: false, detail: null, detailState: "unselected", error: null}); }
   });
 }
 

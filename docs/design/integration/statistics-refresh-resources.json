@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "source_version": "0.2.0rc83",
+  "change_id": "E0469",
+  "resources": {
+    "deploy/statistics_gateway.py": "c3b489226f9ec0debaaf4e4680d42de1e34630744c9b89dc601ca7e720a1babc",
+    "src/sushiwait/web/calendar.html": "cd2fdb502a94e70e31ad496fe1562e66820a10f757062cacc207c086bcecb7d3",
+    "src/sushiwait/web/calendar.css": "c7c8ff85a32ecba99732bb011f986b4ff4aefbb5efb794d2ae666e7d83887d1f",
+    "src/sushiwait/web/calendar.mjs": "61a86d8e83ae935c886ac5b70dad56667732a0759af464bc4ea21bce500698f2",
+    "src/sushiwait/web/statistics-client.mjs": "bffa634c0e9b28de9be20c02b51ec738e755d65d84ed95ce91fc535341d9f36a"
+  }
+}

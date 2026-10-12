@@ -184,7 +184,9 @@ html, body { margin: 0; min-height: 100%; }
 #sushiwait-month-calendar .sw-rail {position:sticky;top:0;height:100vh;}
 #sushiwait-month-calendar .sw-ghost {cursor:pointer;text-decoration:none;color:inherit;}
 #sushiwait-month-calendar .sw-ghost svg {width:20px;height:20px;}
-#sushiwait-month-calendar .sw-status {color:var(--sw-muted);margin:16px 0;}
+#sushiwait-month-calendar .sw-status {color:var(--sw-muted);margin:16px 0;min-height:1.5em;}
+#sushiwait-month-calendar #sw-status[hidden] {display:block !important;visibility:hidden;}
+#sushiwait-month-calendar .sw-history-link {white-space:nowrap;font-size:13px;text-decoration:none;}
 #sushiwait-month-calendar .sw-response {color:var(--sw-muted);font-size:13px;margin:0 0 18px;}
 #sushiwait-month-calendar .sw-demo {margin-left:auto;}
 #sushiwait-month-calendar .sw-day[data-state="pending"], #sushiwait-month-calendar .sw-day[data-state="unavailable"] {background:var(--sw-empty);}
