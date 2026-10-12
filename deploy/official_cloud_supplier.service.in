@@ -15,6 +15,7 @@ User=root
 Group=root
 WorkingDirectory=@ROOT@
 ExecStartPre=@ROOT@/venv/bin/python3 -I @ROOT@/official_cloud_lifetime.py
+ExecStartPre=@ROOT@/venv/bin/python3 -I @ROOT@/official_cloud_image.py @ROOT@ verify
 ExecStart=/usr/bin/docker compose --env-file @ROOT@/supplier.env --project-name sushiwait-official-e0462 -f @ROOT@/yyb_cloud_trial.compose.yaml up --detach --no-build --pull never
 ExecStop=/usr/bin/docker compose --env-file @ROOT@/supplier.env --project-name sushiwait-official-e0462 -f @ROOT@/yyb_cloud_trial.compose.yaml stop --timeout 30
 ExecStopPost=/usr/bin/docker compose --env-file @ROOT@/supplier.env --project-name sushiwait-official-e0462 -f @ROOT@/yyb_cloud_trial.compose.yaml stop --timeout 30
