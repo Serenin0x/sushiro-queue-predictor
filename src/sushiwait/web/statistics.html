@@ -1,14 +1,26 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUSHIWAIT · 工程页</title><link rel="stylesheet" href="/statistics.css"><script src="/reference-model.js" defer></script><script src="/reference-alerts.js" defer></script><script src="/experience-model.js" defer></script><script src="/experience-ui.js" defer></script><script src="/statistics.js" defer></script></head><body>
-<aside class="sidebar" aria-label="工程页导航与筛选">
-<a class="brand" href="/statistics" aria-label="SUSHIWAIT · 返回主日历"><img class="brand-logo" src="/engineering-logo.svg" alt="SUSHIWAIT" width="1200" height="440"><span>ENGINEERING WORKSPACE</span></a>
-<p class="sidebar-label nav-label">工作空间</p>
-<nav class="sidebar-nav" aria-label="工程页功能"><details id="nav-group-observations" open><summary><!--
-tags: [database, db, data, storage, sql, server, records, table, backend, disk]
-category: Database
-version: "1.0"
-unicode: "ea88"
--->
-<svg
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>SUSHIWAIT 工程工作台</title><link rel="stylesheet" href="/statistics.css"><script src="/reference-model.js" defer></script><script src="/reference-alerts.js" defer></script><script src="/experience-model.js" defer></script><script src="/experience-ui.js" defer></script><script src="/statistics.js" defer></script></head><body>
+<a class="skip-link" href="#workspace-main">跳到工作区</a>
+<button id="nav-scrim" class="nav-scrim" type="button" aria-label="关闭导航" hidden></button>
+<aside id="workspace-sidebar" class="sidebar" aria-label="工程导航">
+<a class="brand" href="/statistics" aria-label="SUSHIWAIT 返回主日历"><img class="brand-logo" src="/engineering-logo.svg" alt="SUSHIWAIT" width="1200" height="440"><span class="brand-compact" aria-hidden="true">SW</span><span class="brand-caption">ENGINEERING WORKSPACE</span></a>
+<button id="nav-close" type="button" class="mobile-only"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 6l16 0" />
+  <path d="M4 12l16 0" />
+  <path d="M4 18l16 0" />
+</svg><span>关闭导航</span></button>
+<nav class="sidebar-nav" aria-label="工程页功能">
+<details id="nav-group-observations" open><summary><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -22,13 +34,7 @@ unicode: "ea88"
   <path d="M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0" />
   <path d="M4 6v6a8 3 0 0 0 16 0v-6" />
   <path d="M4 12v6a8 3 0 0 0 16 0v-6" />
-</svg><span>数据观测</span><!--
-tags: [chevron, arrow, down, expand, dropdown, open, more, accordion, show, caret-down, arrow-down, direction, navigation, angle]
-category: Arrows
-version: "1.0"
-unicode: "ea5f"
--->
-<svg
+</svg><span>数据观测</span><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -40,13 +46,8 @@ unicode: "ea5f"
   stroke-linejoin="round"
 >
   <path d="M6 9l6 6l6 -6" />
-</svg></summary><div class="nav-children"><button id="nav-overview" type="button" aria-controls="view-overview" class="nav-current" aria-current="page"><!--
-tags: [dashboard, layout, grid, admin, panel, overview, widgets, ui]
-category: Design
-version: "1.55"
-unicode: "f02c"
--->
-<svg
+</svg></summary><div class="nav-children">
+<button id="nav-overview" type="button" aria-controls="view-overview" title="采集总览" aria-label="采集总览"><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -61,13 +62,7 @@ unicode: "f02c"
   <path d="M5 16h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" />
   <path d="M15 12h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1" />
   <path d="M15 4h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" />
-</svg><span>观测总览</span></button><button id="nav-analysis" type="button" aria-controls="view-analysis"><!--
-tags: [chart, graph, statistics, analytics, data, report, diagram, line-chart, trend, growth, visualization, line]
-category: Charts
-version: "1.0"
-unicode: "ea5c"
--->
-<svg
+</svg><span>采集总览</span></button><button id="nav-analysis" type="button" aria-controls="view-analysis" title="门店分析" aria-label="门店分析"><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -80,13 +75,21 @@ unicode: "ea5c"
 >
   <path d="M4 19l16 0" />
   <path d="M4 15l4 -6l4 2l4 -5l4 4" />
-</svg><span>门店分析</span></button></div></details><details id="nav-group-records"><summary><!--
-tags: [hourglass, sand-timer, timer, time, wait, loading, countdown, deadline]
-category: System
-version: "1.47"
-unicode: "ef93"
--->
-<svg
+</svg><span>门店分析</span></button><button id="nav-quality" type="button" aria-controls="view-quality" title="数据质量" aria-label="数据质量"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+  <path d="M9 12l2 2l4 -4" />
+</svg><span>数据质量</span></button></div></details>
+<details id="nav-group-records"><summary><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -101,13 +104,7 @@ unicode: "ef93"
   <path d="M6.5 17h11" />
   <path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1" />
   <path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1" />
-</svg><span>预测与记录</span><!--
-tags: [chevron, arrow, down, expand, dropdown, open, more, accordion, show, caret-down, arrow-down, direction, navigation, angle]
-category: Arrows
-version: "1.0"
-unicode: "ea5f"
--->
-<svg
+</svg><span>模型与记录</span><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -119,13 +116,8 @@ unicode: "ea5f"
   stroke-linejoin="round"
 >
   <path d="M6 9l6 6l6 -6" />
-</svg></summary><div class="nav-children"><button id="nav-prediction" type="button" aria-controls="view-prediction"><!--
-tags: [hourglass, sand-timer, timer, time, wait, loading, countdown, deadline]
-category: System
-version: "1.47"
-unicode: "ef93"
--->
-<svg
+</svg></summary><div class="nav-children">
+<button id="nav-prediction" type="button" aria-controls="view-prediction" title="预测实验" aria-label="预测实验"><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -140,13 +132,7 @@ unicode: "ef93"
   <path d="M6.5 17h11" />
   <path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1" />
   <path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1" />
-</svg><span>预测实验</span></button><button id="nav-experience" type="button" aria-controls="view-experience"><!--
-tags: [read, reading, library, education, study, literature, novel, ebook, book]
-category: Document
-version: "1.0"
-unicode: "ea39"
--->
-<svg
+</svg><span>预测实验</span></button><button id="nav-experience" type="button" aria-controls="view-experience" title="用餐记录" aria-label="用餐记录"><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -162,119 +148,8 @@ unicode: "ea39"
   <path d="M3 6l0 13" />
   <path d="M12 6l0 13" />
   <path d="M21 6l0 13" />
-</svg><span>用餐记录</span></button></div></details><details><summary><!--
-tags: [read, reading, library, education, study, literature, novel, ebook, book]
-category: Document
-version: "1.0"
-unicode: "ea39"
--->
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
-  <path d="M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
-  <path d="M3 6l0 13" />
-  <path d="M12 6l0 13" />
-  <path d="M21 6l0 13" />
-</svg><span>项目资料</span><!--
-tags: [chevron, arrow, down, expand, dropdown, open, more, accordion, show, caret-down, arrow-down, direction, navigation, angle]
-category: Arrows
-version: "1.0"
-unicode: "ea5f"
--->
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <path d="M6 9l6 6l6 -6" />
-</svg></summary><div class="nav-children"><a href="https://github.com/Serenin0x/sushiro-queue-predictor/blob/main/docs/design/README.md" target="_blank" rel="noopener noreferrer"><!--
-tags: [read, reading, library, education, study, literature, novel, ebook, book]
-category: Document
-version: "1.0"
-unicode: "ea39"
--->
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
-  <path d="M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
-  <path d="M3 6l0 13" />
-  <path d="M12 6l0 13" />
-  <path d="M21 6l0 13" />
-</svg>设计与使用规范</a><a href="https://github.com/Serenin0x/sushiro-queue-predictor/blob/main/docs/PROJECT_HANDOVER.md" target="_blank" rel="noopener noreferrer"><!--
-tags: [time, watch, hour, schedule, timer, clock-face, history, pending, wall-clock, minutes, clock]
-category: System
-version: "1.0"
-unicode: "ea70"
--->
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />
-  <path d="M12 7v5l3 3" />
-</svg>项目与版本记录</a></div></details></nav>
-<a class="back-calendar" href="/statistics">返回主日历 →</a>
-<p class="sidebar-note">读取已保存观测<br>自动同步周期由采集策略决定</p>
-</aside>
-<header class="workspace-toolbar"><div class="workspace-breadcrumb"><!--
-tags: [dashboard, layout, grid, admin, panel, overview, widgets, ui]
-category: Design
-version: "1.55"
-unicode: "f02c"
--->
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <path d="M5 4h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1" />
-  <path d="M5 16h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" />
-  <path d="M15 12h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1" />
-  <path d="M15 4h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" />
-</svg><span>工程工作台</span><span class="breadcrumb-divider">/</span><span id="engineering-breadcrumb">观测总览</span></div><div class="workspace-actions"><a href="/statistics" class="toolbar-calendar" title="返回主日历"><!--
-tags: [calendar, date, schedule, event, day, month, planner, agenda, appointment, calender]
-category: System
-version: "1.0"
-unicode: "ea53"
--->
-<svg
+</svg><span>用餐记录</span></button></div></details></nav>
+<div class="sidebar-bottom"><a class="sidebar-link" href="/statistics" aria-label="主日历统计" title="主日历统计"><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -291,13 +166,50 @@ unicode: "ea53"
   <path d="M4 11h16" />
   <path d="M11 15h1" />
   <path d="M12 15v3" />
-</svg><span>主日历</span></a><button id="header-refresh" type="button" title="刷新已保存的统计" aria-label="刷新已保存的统计"><!--
-tags: [reload, sync, update, reset, arrows, loader, spinner, restart, refresh]
-category: Arrows
-version: "1.0"
-unicode: "eb13"
--->
-<svg
+</svg><span>主日历统计</span></a><a class="sidebar-link" href="https://github.com/Serenin0x/sushiro-queue-predictor/blob/main/docs/design/README.md" target="_blank" rel="noopener noreferrer" aria-label="使用与设计规范" title="使用与设计规范"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
+  <path d="M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
+  <path d="M3 6l0 13" />
+  <path d="M12 6l0 13" />
+  <path d="M21 6l0 13" />
+</svg><span>使用与设计规范</span></a><a class="sidebar-link" href="https://github.com/Serenin0x/sushiro-queue-predictor" target="_blank" rel="noopener noreferrer" aria-label="GitHub 项目" title="GitHub 项目"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5" />
+</svg><span>GitHub 项目</span></a></div></aside>
+<header class="workspace-toolbar"><div class="workspace-breadcrumb"><button id="nav-toggle" type="button" class="icon-button" aria-controls="workspace-sidebar" aria-expanded="true" title="收起或展开导航"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 6l16 0" />
+  <path d="M4 12l16 0" />
+  <path d="M4 18l16 0" />
+</svg><span>切换导航</span></button><a href="/statistics-legacy">工程工作台</a><span aria-hidden="true">/</span><strong id="engineering-breadcrumb">采集总览</strong></div><div class="workspace-actions"><span class="read-stamp" id="workspace-read-at">尚未读取</span><button id="header-refresh" type="button" title="只读取已保存的公共数据，不向寿司郎新增查询"><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -310,13 +222,7 @@ unicode: "eb13"
 >
   <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
   <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
-</svg></button><a href="https://github.com/Serenin0x/sushiro-queue-predictor" target="_blank" rel="noopener noreferrer" aria-label="GitHub 项目" title="GitHub 项目"><!--
-tags: [github, git, repository, code, hosting, version-control, octocat, microsoft, developer, logo, brand]
-category: Brand
-version: "1.18"
-unicode: "ec1c"
--->
-<svg
+</svg><span>读取最新</span></button><a href="/statistics" class="toolbar-calendar" title="返回主日历"><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -327,14 +233,29 @@ unicode: "ec1c"
   stroke-linecap="round"
   stroke-linejoin="round"
 >
-  <path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5" />
-</svg></a><details class="workspace-menu"><summary><span class="workspace-avatar" aria-hidden="true">SW</span><span class="workspace-identity">工程工作台<small>SUSHIWAIT</small></span><!--
-tags: [chevron, arrow, down, expand, dropdown, open, more, accordion, show, caret-down, arrow-down, direction, navigation, angle]
-category: Arrows
-version: "1.0"
-unicode: "ea5f"
--->
-<svg
+  <path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12" />
+  <path d="M16 3v4" />
+  <path d="M8 3v4" />
+  <path d="M4 11h16" />
+  <path d="M11 15h1" />
+  <path d="M12 15v3" />
+</svg><span>主日历</span></a><details class="workspace-menu"><summary aria-label="项目资料"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
+  <path d="M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
+  <path d="M3 6l0 13" />
+  <path d="M12 6l0 13" />
+  <path d="M21 6l0 13" />
+</svg><span>资料</span><svg aria-hidden="true"
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
@@ -346,44 +267,86 @@ unicode: "ea5f"
   stroke-linejoin="round"
 >
   <path d="M6 9l6 6l6 -6" />
-</svg></summary><div class="workspace-dropdown"><a href="/statistics">主日历</a><a href="https://github.com/Serenin0x/sushiro-queue-predictor/blob/main/docs/design/ENGINEERING_STYLE_REFERENCES.md" target="_blank" rel="noopener noreferrer">界面说明</a><a href="https://github.com/Serenin0x/sushiro-queue-predictor/blob/main/docs/PROJECT_HANDOVER.md" target="_blank" rel="noopener noreferrer">版本与更新</a></div></details></div></header>
-<main id="sushiwait-reference" data-engineering-panels="true">
-<header class="page-header"><div><p class="eyebrow">ENGINEERING</p><h1 id="engineering-title">观测总览</h1><p id="engineering-description">按日期查看已保存的观测与采集覆盖。</p></div><span class="page-badge">只读统计</span></header>
-<div class="sidebar-filters filterbar"><label>月份 <input id="month" type="month"></label><label>日期 <input id="engineering-date" type="date"></label><label>门店 <select id="store"><option value="">全部门店</option></select></label><label>展示队列 <select id="queue"><option value="mixedQueue">堂食展示（参考）</option><option value="reservationQueue">预约展示</option><option value="counterQueue">吧台展示</option><option value="boothQueue">卡座展示</option><option value="storeQueue">门店汇总（可能包含预约）</option></select></label><label id="record-source-label" hidden>记录集 <select id="record-source"></select></label><button id="refresh" type="button">刷新统计</button></div>
-<div class="engineering-metrics" aria-label="所选日期的观测概况"><article class="metric"><p>已保存观测</p><strong id="metric-observations">—</strong><small>所选日期与门店</small></article><article class="metric"><p>最近观测时间</p><strong id="metric-last">—</strong><small>原始响应接收时间</small></article><article class="metric"><p>有记录的门店</p><strong id="metric-stores">—</strong><small>有已保存观测的门店数</small></article><article class="metric"><p>当前采集间隔</p><strong id="metric-interval">读取中</strong><small>按服务器的当前策略</small></article></div>
-<p id="status" role="status">正在加载…</p><p id="engineering-selection" class="selection-context"></p><p class="note" id="record-source-note"></p>
+</svg></summary><div class="workspace-dropdown"><a href="https://github.com/Serenin0x/sushiro-queue-predictor/blob/main/docs/PROJECT_HANDOVER.md" target="_blank" rel="noopener noreferrer">项目与版本记录</a><a href="https://github.com/Serenin0x/sushiro-queue-predictor/blob/main/docs/CLOUD_SESSION_RECOVERY.md" target="_blank" rel="noopener noreferrer">采集与授权说明</a></div></details></div></header>
+<main id="workspace-main"><div id="sushiwait-reference" data-engineering-panels="true" data-engineering-layout="tasks-v2">
+<header class="page-header"><div><h1 id="engineering-title">采集总览</h1><p id="engineering-description" hidden>查看保存了哪些观测，选择门店继续分析。</p></div></header>
+<section class="filterbar" aria-label="工作区筛选"><label id="filter-date">日期<input id="engineering-date" type="date"></label><div id="date-shortcuts" class="date-shortcuts" aria-label="快捷日期"><button id="previous-day" type="button" aria-label="前一天">前一天</button><button id="today-day" type="button">今天</button><button id="next-day" type="button" aria-label="后一天">后一天</button></div><label id="filter-city">城市<select id="city" disabled><option value="all">全部城市</option></select></label><label id="filter-store">门店<select id="store"><option value="">全部门店</option></select></label><label id="filter-queue">展示队列<select id="queue"><option value="mixedQueue">堂食展示</option><option value="reservationQueue">预约展示</option></select></label><label id="record-source-label" hidden>记录集<select id="record-source"></select></label><input id="month" type="month" hidden><button id="refresh" type="button" hidden>刷新统计</button></section>
+<div class="workspace-meta"><p id="engineering-selection" class="selection-context"></p><details id="archive-status" class="archive-status"><summary>归档读取说明</summary><p id="status" role="status">正在加载归档…</p><p id="record-source-note" class="note"></p></details></div>
 <div id="view-overview" class="engineering-view">
-<section id="overview" class="card" aria-labelledby="overview-title"><div class="card-heading"><h2 id="overview-title">观测日历</h2><span>选择日期查看已保存的数据</span></div><p class="note">日历颜色用于单一记录集的采集覆盖：白色为无观测，浅黄色为覆盖不足，浅绿色为已覆盖至少 80% 的背景采样格。多记录集日期不合算覆盖率；人流量配色将在积累数据后校准。</p>
-<div class="week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div id="calendar" class="calendar" aria-label="月历"></div>
-<div class="day-heading"><h2 id="date-title">选择日期</h2><p id="summary"></p></div><div class="table"><table><thead><tr><th>门店</th><th>完整观测</th><th>失败／边界暂停</th><th>背景格覆盖</th><th>最近观测</th></tr></thead><tbody id="rows"></tbody></table></div></section>
-</div>
-<div id="view-analysis" class="engineering-view" hidden><div id="analysis-empty" class="card empty-state"><h2>选择一家门店</h2><p>使用门店筛选，查看当天的号码位置、数量曲线及原始观测。</p></div>
-<section id="detail" class="card" hidden><div class="card-heading"><h2>门店观测</h2><span>保留原号码与响应时间</span></div>
-<div class="chart-card"><h3>当前叫号参考—时间（第一位）</h3><p class="note">按用户约定，用列表第一位作为当前叫号参考；每次采集的前三个号码和时间仍保留在明细。参考位置尚未认证为实际叫号事件；非纯数字号码不换算。</p><canvas id="numbers" role="img" aria-label="第一位叫号参考随时间的位置"></canvas></div>
-<div class="chart-card"><h3>原始数量随时间变化</h3><p class="note">数量单位尚未核实；失败或缺口不补零。</p><canvas id="count" role="img" aria-label="原始数量随时间变化"></canvas></div>
-<div class="chart-card"><h3>展示集合变化速度</h3><p class="note">连续观测间消失的不同号码数／分钟；不等于真实叫号速度或过号率，长缺口和重启边界不比较。</p><canvas id="speed" role="img" aria-label="展示集合变化速度"></canvas><p id="graph-note"></p></div>
-<details><summary>观测明细（最近 60 条）</summary><div class="table"><table><thead><tr><th>队列响应时间</th><th>展示号码</th><th>原始数量</th><th>状态</th></tr></thead><tbody id="points"></tbody></table></div></details></section>
-
-</div>
-<div id="view-prediction" class="engineering-view" hidden><div id="prediction-empty" class="card empty-state"><h2>先选择今天的取号门店</h2><p>在筛选栏选择门店与队列，再输入本人已有号码。历史日期仍可查看统计曲线。</p></div><div id="prediction-content" hidden><section class="experiment" aria-labelledby="experiment-title"><h3 id="experiment-title">输入已有号码 · 实时参考实验</h3>
-<p class="note">选择今天和取号门店，再输入堂食或预约号码。历史样本足够时先给初估，随后随新观测修正；历史不足时保留实时趋势参考，资料不足不补零。号码与取号时间只在当前页面内计算，不上传、不保存；换门店或队列后需重新确认。这里估计首位参考到达该位置的时间，实际叫到你的时间与误差仍需用餐经历校准。</p>
-<div class="experiment-inputs"><label>本人号码 <input id="ticket-number" type="text" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="例如 4045"></label><label>今天取号时间 <input id="ticket-issued" type="time" step="60" autocomplete="off"></label></div>
-<div class="experiment-inputs"><label>计划到店时间（可选） <input id="ticket-arrival" type="time" step="60" autocomplete="off"></label><label>希望叫号偏移（分钟） <input id="ticket-offset" type="number" value="0" min="-120" max="120" step="1" autocomplete="off"></label></div><p class="note">+10 表示希望到店后十分钟叫号，−10 表示希望提前十分钟叫号；偏移不是预测误差。页面提示仅在本页打开时更新，尚无后台推送，也不会改变服务器采集频率。</p>
-<label class="scope"><input id="ticket-scope" type="checkbox" autocomplete="off"> 我确认这是今天在所选门店、所选队列取得的号码</label>
-<p id="ticket-precaution" role="status" aria-live="polite" hidden></p><p id="prediction" role="status">输入号码、取号时间并确认门店与队列后计算。</p><p id="prediction-note" class="note"></p></section></div></div>
-<div id="view-experience" class="engineering-view" hidden>
-<section id="experience" class="card experiment" aria-labelledby="experience-title"><h2 id="experience-title">记录本次正常用餐</h2>
-<p class="note">留下本人实际取号、签到和叫号时间，帮助以后核对真实等待误差。这里只生成本机私有草稿，不上传、不自动审核；关闭页面会丢失未下载的修订。未知事件先不记录，记不清的时间填上下限；输入到分钟时保留该分钟的范围，不补成精确秒。</p>
-<p id="experience-scope"></p>
-<div class="experiment-inputs"><label>本人队列 <select id="experience-queue"><option value="unknown">未知</option><option value="ordinary">堂食</option><option value="reservation">预约</option></select></label><label>人数 <input id="experience-party" type="number" min="1" step="1" placeholder="未知可留空"></label><label>桌型 <select id="experience-table"><option value="unknown">未知</option><option value="booth">卡座</option><option value="counter">吧台</option><option value="either">两者均可</option></select></label></div>
-<div class="experiment-inputs"><label>时间下限 <input id="experience-lower" type="datetime-local" step="1" autocomplete="off"></label><label>时间上限 <input id="experience-upper" type="datetime-local" step="1" autocomplete="off"></label></div>
-<label class="scope"><input id="experience-confirm" type="checkbox" autocomplete="off"> 这是本人实际观察的事件，时间均按北京时间填写</label>
-<button id="experience-start" type="button">用这个时间范围记录取号</button>
-<label>接下来记录 <select id="experience-kind"><option value="checked_in">签到</option><option value="called">首次实际叫号</option><option value="seated">入座</option><option value="no_show">本人确认过号</option><option value="cancelled">取消</option><option value="observation_ended">停止观察</option></select></label>
-<button id="experience-add" type="button" disabled>用填写的范围记录事件</button><button id="experience-now" type="button" disabled>该事件刚刚发生</button>
-<ol id="experience-events"></ol><button id="experience-download" type="button" disabled>下载私有草稿（全部修订）</button><label class="scope"><input id="experience-saved" type="checkbox" autocomplete="off"> 我已确认当前草稿文件保存成功</label><button id="experience-clear" type="button">下载后清空</button>
-<label>读入本机草稿 <input id="experience-import" type="file" accept="application/json,.json"></label><p id="experience-status" role="status"></p>
-<p class="note">草稿不包含本人号码、微信身份或凭证。后续私有接收与人工审核仍需另一步；下载成功不表示资料已收到，也不意味着模型已认证该经历。</p></section>
-
-</div>
-<footer><a href="https://tabler.io/admin-template" target="_blank" rel="noopener noreferrer">界面参考 Tabler 免费开源版</a><br>只读取已提交副本，不增加寿司郎查询。营业时间采用声明的默认规则，可按门店覆盖；持续质量由真实运行核验，未观测号码不自动算作过号。</footer></main></body></html>
+<div class="engineering-metrics" aria-label="所选日期的观测概况"><article class="metric"><p>成功采样</p><strong id="metric-observations">—</strong></article><article class="metric"><p>最后收到</p><strong id="metric-last">—</strong></article><article class="metric"><p>有记录的门店</p><strong id="metric-stores">—</strong></article><article class="metric"><p>网页同步间隔</p><strong id="metric-interval">读取中</strong></article></div>
+<section id="overview" class="card" aria-labelledby="overview-title"><div class="card-heading"><div><h2 id="overview-title">门店更新</h2><p id="date-title" class="subtle">所选日期</p></div><span class="badge" id="overview-count">—</span></div><div class="list-toolbar"><label class="search-field"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+  <path d="M21 21l-6 -6" />
+</svg><input id="overview-search" type="search" placeholder="搜索门店名称或编号" aria-label="搜索门店"></label><label>范围<select id="overview-scope"><option value="observed">当天有记录</option><option value="directory">全部已知门店</option></select></label><label>排序<select id="overview-sort"><option value="latest">最新响应优先</option><option value="samples">采样最多优先</option><option value="name">门店名称</option></select></label></div><p id="summary" class="compact-note"></p><div class="table"><table class="overview-table"><thead><tr><th>门店</th><th>成功采样</th><th>失败 / 暂停</th><th>资料状态</th><th>最后收到</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div><p id="overview-empty" class="empty-message" hidden>当前筛选没有门店。可更改日期、搜索条件或查看全部已知门店。</p><div id="calendar" class="calendar" hidden aria-label="兼容月历"></div></section>
+<aside class="context-note">这里呈现的是已保存观测。最后响应时间不能单独证明采集服务在线；当日采样数量也不能直接换算人流量。完整月历请使用主日历。</aside></div>
+<div id="view-analysis" class="engineering-view" hidden><section id="analysis-empty" class="card empty-state"><div class="empty-icon"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 21l18 0" />
+  <path d="M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4" />
+  <path d="M5 21l0 -10.15" />
+  <path d="M19 21l0 -10.15" />
+  <path d="M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4" />
+</svg></div><h2>选一家门店开始分析</h2><p>在上方选门店，或从采集总览进入。统计曲线只读取公共归档。</p><button type="button" id="analysis-choose">打开门店选择</button></section>
+<section id="detail" hidden><div class="snapshot-card card"><div><p class="eyebrow">最后采样快照</p><h2 id="snapshot-store">门店观测</h2><p class="subtle" id="snapshot-time">—</p></div><div class="snapshot-numbers" id="snapshot-numbers" aria-label="最后采样的原前三个展示号"></div><span id="snapshot-state" class="badge">—</span><p id="snapshot-note" class="compact-note"></p></div>
+<section class="card primary-chart" aria-labelledby="number-chart-title"><div class="card-heading"><div><h2 id="number-chart-title">展示号码与时间</h2></div><span class="badge" id="chart-point-count">—</span></div>
+<div class="chart-toolbar"><div class="segmented" aria-label="常用时间范围"><button id="range-all" type="button" aria-pressed="true">全天</button><button id="range-lunch" type="button" aria-pressed="false">午间</button><button id="range-dinner" type="button" aria-pressed="false">晚间</button></div><div class="time-range"><label>开始<input id="range-from" type="time" value="00:00" aria-label="图表开始时间"></label><span aria-hidden="true">—</span><label>结束<input id="range-to" type="time" value="23:59" aria-label="图表结束时间"></label><button id="range-apply" type="button">应用</button></div><button id="new-samples" type="button" class="soft-button" hidden>有新采样 恢复全天</button></div>
+<div class="chart-legend"><label><input id="series-1" type="checkbox" checked><i class="legend-dot first"></i>第 1 位</label><label><input id="series-2" type="checkbox"><i class="legend-dot second"></i>第 2 位</label><label><input id="series-3" type="checkbox"><i class="legend-dot third"></i>第 3 位</label><span id="chart-range-label">全天</span></div>
+<div class="chart-surface"><canvas id="numbers" role="img" tabindex="0" aria-label="展示号码原始采样点；左右方向键选择观测，Enter查看详情"></canvas><div id="chart-tooltip" class="chart-tooltip" hidden></div></div><p id="chart-text-summary" class="sr-only"></p><p id="range-error" class="inline-error" role="status"></p>
+<div class="selected-record"><div><p class="eyebrow">选中观测</p><p id="selected-record-text">点击图点或表格行定位记录；也可用图表的左右方向键。</p></div><button id="selected-record-open" type="button" disabled>查看详情</button></div><div id="quality-strip" class="quality-strip" aria-label="采样状态时间条"></div><div class="state-legend" aria-label="状态图例"><span><i></i>已保存</span><span><i class="empty-dot"></i>无展示号</span><span><i class="missing-dot"></i>字段未显示</span><span><i class="failed-dot"></i>失败</span><span><i class="paused-dot"></i>暂停</span></div><p id="graph-note" class="compact-note"></p>
+<details class="method-note"><summary>如何理解这幅图</summary><p>图点是每次响应的原展示号，不是每个号码的精确叫号时刻。仅连接同一来源、明确可比较的连续片段；失败、边界、倒退和不可比较段不连接。预约与堂食分开查看，未出现的号码不自动算过号。</p></details></section>
+<section class="card" aria-labelledby="records-title"><div class="card-heading"><div><h2 id="records-title">采样记录</h2></div><button id="records-export" type="button">下载当前筛选 CSV</button></div><div class="list-toolbar"><label class="search-field"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+  <path d="M21 21l-6 -6" />
+</svg><input id="records-search" type="search" placeholder="查找展示号码" aria-label="查找采样中的展示号码"></label><label>顺序<select id="records-sort"><option value="desc">时间倒序</option><option value="asc">时间正序</option></select></label><label>每页<select id="records-size"><option value="20">20 条</option><option value="50">50 条</option><option value="100">100 条</option></select></label></div><div class="table"><table><thead><tr><th>响应时间</th><th>原展示号码</th><th>原始数量</th><th>保存状态</th><th>操作</th></tr></thead><tbody id="points"></tbody></table></div><p id="records-empty" class="empty-message" hidden>没有符合筛选的记录。</p><div class="pagination"><p id="records-page-note">—</p><div><button id="records-previous" type="button">上一页</button><button id="records-next" type="button">下一页</button></div></div></section>
+<details id="advanced-charts" class="card advanced-charts"><summary>辅助图表 参考推进速度与原始数量</summary><div class="advanced-grid"><div class="chart-card"><h3>参考推进速度</h3><p class="note">可比较相邻点的第一位号码差 / 分钟。不是带位桌数或过号率。</p><canvas id="speed" role="img" aria-label="连续可比观测的参考推进速度"></canvas></div><div class="chart-card"><h3>接口原始数量</h3><p class="note">保留原数量，单位未核实；失败与缺口不补零。</p><canvas id="count" role="img" aria-label="原始数量随时间变化"></canvas></div></div></details></section></div>
+<div id="view-quality" class="engineering-view" hidden><div class="quality-metrics"><article class="metric"><p>记录中的失败</p><strong id="quality-failed">—</strong></article><article class="metric"><p>营业边界暂停</p><strong id="quality-paused">—</strong></article><article class="metric"><p>最大相邻间隔</p><strong id="quality-interval">—</strong></article></div><section class="card"><div class="card-heading"><div><h2>资料检查</h2><p id="quality-scope" class="subtle">选择门店可查看每次响应的状态。</p></div><button id="quality-to-analysis" type="button">进入门店分析</button></div><details class="method-note"><summary>归档读取状态</summary><p id="quality-read-note" class="compact-note"></p></details><div class="list-toolbar"><label>记录类型<select id="quality-filter"><option value="all">全部观测</option><option value="failed">失败或部分成功</option><option value="paused">边界暂停</option><option value="boundary">不可比较片段</option><option value="empty">成功但无展示号码</option></select></label><span id="quality-record-count" class="subtle"></span></div><div class="table"><table><thead><tr><th>响应 / 计划时间</th><th>状态</th><th>比较状态</th><th>相邻间隔</th><th>操作</th></tr></thead><tbody id="quality-rows"></tbody></table></div><p id="quality-empty" class="empty-message">请选择门店。</p></section></div>
+<div id="view-prediction" class="engineering-view" hidden><section id="prediction-empty" class="card empty-state"><div class="empty-icon"><svg aria-hidden="true"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M6.5 7h11" />
+  <path d="M6.5 17h11" />
+  <path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1" />
+  <path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1" />
+</svg></div><h2>先选择今天的取号门店</h2><p>选择门店与队列，再输入本人已有号码。历史日期只提供统计分析。</p><button type="button" id="prediction-choose">打开门店选择</button></section><div id="prediction-content" class="prediction-layout" hidden><section class="card experiment" aria-labelledby="experiment-title"><div class="card-heading"><div><h2 id="experiment-title">已有号码</h2></div></div><div class="experiment-inputs"><label>本人号码<input id="ticket-number" type="text" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="例如 4045"></label><label>今天取号时间<input id="ticket-issued" type="time" step="60" autocomplete="off"></label></div><details class="optional-input"><summary>到店计划（可选）</summary><div class="experiment-inputs"><label>计划到店时间<input id="ticket-arrival" type="time" step="60" autocomplete="off"></label><label>希望叫号偏移（分钟）<input id="ticket-offset" type="number" value="0" min="-120" max="120" step="1" autocomplete="off"></label></div><p class="note">+10 希望到店十分钟后叫号；−10 希望提前十分钟叫号。偏移不是预测误差。</p></details><label class="scope"><input id="ticket-scope" type="checkbox" autocomplete="off">我确认这是今天在所选门店、所选队列取得的号码</label></section><section class="card prediction-result"><div class="card-heading"><div><h2>预测结果</h2></div></div><p id="ticket-precaution" role="status" aria-live="polite" hidden></p><p id="prediction" role="status">输入号码、取号时间并确认范围后计算。</p><p id="prediction-note" class="note"></p><details class="method-note"><summary>方法与当前限制</summary><p>历史足够时先给初估，随后用连续观测修正；历史不足时保留实时趋势参考，资料不足不补零。估计的是第一位参考到达该位置的时间，实际等待误差仍需用餐经历校准。最新观测超过90秒暂停风险判断；没有后台通知，不自动取号或重排，尚未启用付费大模型计算。</p></details></section></div></div>
+<div id="view-experience" class="engineering-view" hidden><section id="experience" aria-labelledby="experience-title"><div class="experience-layout"><div><section class="card"><div class="card-heading"><div><h2 id="experience-title">本次用餐</h2></div></div><p id="experience-scope" class="compact-note"></p><div class="experiment-inputs three"><label>本人队列<select id="experience-queue"><option value="unknown">未知</option><option value="ordinary">堂食</option><option value="reservation">预约</option></select></label><label>人数<input id="experience-party" type="number" min="1" step="1" placeholder="未知可留空"></label><label>桌型<select id="experience-table"><option value="unknown">未知</option><option value="booth">卡座</option><option value="counter">吧台</option><option value="either">两者均可</option></select></label></div></section><section class="card"><div class="card-heading"><div><h2>填写时间范围</h2></div></div><div class="experiment-inputs"><label>时间下限<input id="experience-lower" type="datetime-local" step="1" autocomplete="off"></label><label>时间上限<input id="experience-upper" type="datetime-local" step="1" autocomplete="off"></label></div><details class="method-note"><summary>记不清时间？</summary><p>填写可能的时间上下限；未知事件留空。只输入分钟时保存整分钟范围。</p></details><label class="scope"><input id="experience-confirm" type="checkbox" autocomplete="off">这是本人实际观察的事件，时间按北京时间填写</label><button id="experience-start" type="button" class="primary-button">记录取号，开始草稿</button><div class="event-composer"><label>接下来记录<select id="experience-kind"><option value="checked_in">签到</option><option value="called">首次实际叫号</option><option value="seated">入座</option><option value="no_show">本人确认过号</option><option value="cancelled">取消</option><option value="observation_ended">停止观察</option></select></label><div class="button-row"><button id="experience-add" type="button" disabled>用填写范围记录</button><button id="experience-now" type="button" disabled>该事件刚刚发生</button></div></div><p id="experience-status" role="status" class="inline-status"></p></section></div><div><section class="card timeline-card"><div class="card-heading"><h2>事件时间线</h2></div><ol id="experience-events"></ol></section><section class="card"><div class="card-heading"><h2>保存与继续草稿</h2></div><button id="experience-download" type="button" disabled class="full-width">下载全部修订</button><label class="scope"><input id="experience-saved" type="checkbox" autocomplete="off">我已确认当前草稿文件保存成功</label><button id="experience-clear" type="button">下载后清空</button><label class="file-import">继续本机草稿<input id="experience-import" type="file" accept="application/json,.json"></label><details class="method-note"><summary>隐私与保存说明</summary><p>草稿不包含本人号码、微信身份或凭证；只有你下载后才会保存为文件。关闭页面会丢失未保存修订，不上传或自动审核。下载不表示模型已认证该经历。</p></details></section></div></div></section></div>
+</div></main>
+<dialog id="record-dialog" aria-labelledby="record-dialog-title"><div class="dialog-heading"><div><h2 id="record-dialog-title">采样记录</h2></div><button id="record-dialog-close" type="button" aria-label="关闭观测详情">关闭</button></div><dl id="record-details" class="record-details"></dl><details class="method-note"><summary>时间与号码含义</summary><p>采样时间不是精确叫号时间；未观测到的号码不等于真实过号。</p></details></dialog>
+<div id="workspace-announcement" class="sr-only" role="status" aria-live="polite"></div>
+</body></html>

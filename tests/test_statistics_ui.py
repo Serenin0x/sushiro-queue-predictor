@@ -2,6 +2,14 @@
 from pathlib import Path
 import shutil,subprocess,unittest
 class StatisticsUITests(unittest.TestCase):
+    def test_task_workspace_interaction_and_async_selection_boundaries(self):
+        node=shutil.which('node')
+        if node is None:self.skipTest('Node unavailable')
+        root=Path(__file__).resolve().parents[1]
+        result=subprocess.run([node,str(root/'tests/statistics-workspace.test.js'),
+            str(root/'src/sushiwait/web/statistics.js')],capture_output=True,text=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
     def test_engineering_navigation_preserves_private_inputs_without_fetching(self):
         node=shutil.which('node')
         if node is None:self.skipTest('Node unavailable')

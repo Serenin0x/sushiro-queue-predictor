@@ -51,3 +51,7 @@ README 通过 picture 的浅深主题及 600px 视口条件选图；桌面两列
 工程页使用Tabler Icons的database、layout-dashboard、chart-line、hourglass、book、clock、calendar、refresh、brand-github和chevron-down静态SVG路径，内嵌到原创HTML布局。上游为[tabler/tabler-icons](https://github.com/tabler/tabler-icons)，采用MIT；本次保留[完整许可](../docs/design/previews/engineering-20261013/TABLER-ICONS-LICENSE.txt)与[各资源来源及摘要](../docs/design/previews/engineering-20261013/icon-sources.json)。未安装收费模板或复制Pro素材。
 
 工程页`src/sushiwait/web/engineering-logo.svg`逐字复用本页上方既有正式浅色Logo；只在容器内按比例适配，字形、笔触和许可归属不变。
+
+## 工程标题字体 2026-10-14
+
+ENGINEERING WORKSPACE使用上方同一个用户字体包中的Unbounded Regular400，字体源及原SHA保持。FontTools从原TTF仅选取该标题所需字符，生成1,592字节WOFF2子集并嵌入`src/sushiwait/web/statistics.css`；CSS内保留完整SIL OFL1.1，浏览器无需下载第三方字体。原Logo SVG不改；标题字号9px、颜色#87909c保持，字体没有使用Cinzel或Kaushan Script。该子集只供工程标题，不新增全站字体替换。
