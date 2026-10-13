@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sushiwait"
-version = "0.2.0rc84"
+version = "0.2.0"
 description = "Mainland Sushiro read-only data and private outcome tools"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "docs/design/previews/engineering-20261013/TABLER-ICONS-LICENSE.txt"]
 dependencies = []
 
 [project.optional-dependencies]
