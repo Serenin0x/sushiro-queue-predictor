@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -19,7 +20,8 @@ import threading
 from sushiwait.cadence import planned_rounds, next_sample_at
 from sushiwait.auth import describe_authorization
 from sushiwait.credentials import _read_private_file, read_credentials_file
-from sushiwait.initialization import initialize_from_yyb, initialize_for_target_from_yyb
+from sushiwait.initialization import InitializationError, initialize_from_yyb, initialize_for_target_from_yyb
+from sushiwait.yyb import YYBCodeError
 from sushiwait.materialsource import prepare_material_source
 from sushiwait.packets import encoded, _write_packet
 from sushiwait.sessionverification import prepare_bootstrap_verifier, prepare_verifier
@@ -195,7 +197,23 @@ class Controller:
         if (end-now).total_seconds() < 100:
             return False
         self.ledger.reserve()
-        result = self.perform(start,end,previous)
+        try:
+            result = self.perform(start,end,previous)
+        except (YYBCodeError, InitializationError) as error:
+            # These types contain fixed local categories, never remote text.
+            # Preserve the actual failing layer before the terminal halt.
+            outcome = {'schema_version':1,'attempt':self.ledger.value['attempts'],
+                'at':stamp(utc_now()),'phase':'supplier' if isinstance(error,YYBCodeError) else 'initialization',
+                'error_code':error.error_code,'automatic_retry':False}
+            diagnostics = self.root/'refresh-diagnostics'
+            diagnostics.mkdir(mode=0o700,exist_ok=True)
+            info = diagnostics.lstat()
+            if not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o700:
+                raise TrialError('cloud_diagnostics_unsafe')
+            _write_packet(encoded(outcome),diagnostics/f"attempt-{outcome['attempt']:03}.json")
+            print(json.dumps({'event':'cloud_refresh_failed_detail',**outcome}),flush=True)
+            self.ledger.halt('cloud_refresh_failed')
+            raise TrialError('cloud_refresh_failed') from None
         if not all(result.get(k) is True for k in ('ok','query_accepted','committed','durability_confirmed')):
             self.ledger.halt('cloud_refresh_failed')
             raise TrialError('cloud_refresh_failed')
@@ -229,6 +247,148 @@ class Controller:
                 settings_file=self.root/'bootstrap-settings.json',**options)
         return initialize_from_yyb(prepare,consume,reference_context_file=self.credentials,
             settings_file=self.root/'renewal-settings.json',**options)
+
+
+SUCCESSOR_STATE = 'controller-state-successor'
+REAUTHORIZED_STATE = 'controller-state-reauthorized'
+
+
+def predecessor_directory(state_directory):
+    paths = {SUCCESSOR_STATE:'controller-state', REAUTHORIZED_STATE:SUCCESSOR_STATE}
+    if state_directory not in paths:
+        raise TrialError('cloud_successor_manifest_invalid')
+    return paths[state_directory]
+
+
+def create_successor_ledger(root, plan, *, state_directory=SUCCESSOR_STATE):
+    """One explicit fresh attempt after a terminal reader, without reviving it.
+
+    The predecessor remains immutable, including an uncertain reservation. Its
+    spent attempts, accepted context and finished windows seed a new epoch.
+    No code, initialization or query is performed by this function. Each fixed
+    successor path cannot be recreated or reset after a later failure. A second
+    explicit epoch is reserved for normal owner reauthorization, never auto-retry.
+    """
+    root = Path(root)
+    validate_plan(plan)
+    predecessor = root/predecessor_directory(state_directory)
+    if state_directory == REAUTHORIZED_STATE:
+        _successor_manifest(root,plan)
+    parent = Ledger.__new__(Ledger)
+    try:
+        Ledger.__init__(parent,predecessor,plan)
+    except TrialError as error:
+        if str(error) not in {'cloud_refresh_outcome_unknown','cloud_trial_halted'}:
+            raise
+    else:
+        raise TrialError('cloud_successor_requires_terminal_parent')
+    value = parent.value
+    if (not (value['pending'] or value['halted']) or value['highest_revision'] < 1
+            or value['attempts'] >= plan['renewal_limit']):
+        raise TrialError('cloud_successor_parent_invalid')
+    context = _read_private_file(root/'query-context.json')
+    if hashlib.sha256(context).hexdigest() != value['context_sha256']:
+        raise TrialError('cloud_successor_context_changed')
+    path = sorted(predecessor.glob('checkpoint-*.json'))[-1]
+    original = _read_private_file(path)
+    successor = root/state_directory
+    if os.path.lexists(successor) or os.path.lexists(root/'controller-continuation.json'):
+        raise TrialError('cloud_successor_already_exists')
+    successor.mkdir(mode=0o700)
+    seed = {**value,'pending':False,'halted':False,'error_code':None}
+    seed_bytes = encoded(seed)
+    _write_packet(seed_bytes,successor/'checkpoint-000.json')
+    manifest = {'schema_version':1,'state_directory':state_directory,
+        'plan_sha256':parent.digest,'predecessor_checkpoint':path.name,
+        'predecessor_sha256':hashlib.sha256(original).hexdigest(),
+        'seed_sha256':hashlib.sha256(seed_bytes).hexdigest(),
+        'inherited_attempts':value['attempts'],'inherited_revision':value['highest_revision'],
+        'inherited_uncertain_reservation':value['pending']}
+    _write_packet(encoded(manifest),successor/'manifest.json')
+    # The old bytes must remain the same throughout preparation.
+    if _read_private_file(path) != original:
+        raise TrialError('cloud_successor_parent_changed')
+    return Ledger(successor,plan)
+
+
+def _successor_manifest(root, plan, *, state_directory=SUCCESSOR_STATE):
+    root = Path(root)
+    predecessor = predecessor_directory(state_directory)
+    if state_directory == REAUTHORIZED_STATE:
+        _successor_manifest(root,plan)
+    state = root/state_directory
+    info = state.lstat()
+    if not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o700:
+        raise TrialError('cloud_successor_manifest_invalid')
+    manifest = _decode(_read_private_file(state/'manifest.json'))
+    keys = {'schema_version','state_directory','plan_sha256','predecessor_checkpoint',
+        'predecessor_sha256','seed_sha256','inherited_attempts','inherited_revision',
+        'inherited_uncertain_reservation'}
+    if (type(manifest) is not dict or set(manifest) != keys
+            or type(manifest['schema_version']) is not int or manifest['schema_version'] != 1
+            or manifest['state_directory'] != state_directory
+            or manifest['plan_sha256'] != hashlib.sha256(encoded(plan)).hexdigest()
+            or type(manifest['predecessor_checkpoint']) is not str
+            or not re.fullmatch(r'checkpoint-[0-9]{3}\.json',manifest['predecessor_checkpoint'])
+            or type(manifest['inherited_attempts']) is not int
+            or not 1 <= manifest['inherited_attempts'] < plan['renewal_limit']
+            or type(manifest['inherited_revision']) is not int or manifest['inherited_revision'] < 1
+            or type(manifest['inherited_uncertain_reservation']) is not bool):
+        raise TrialError('cloud_successor_manifest_invalid')
+    parent_path = root/predecessor/manifest['predecessor_checkpoint']
+    parent = _read_private_file(parent_path)
+    latest = sorted((root/predecessor).glob('checkpoint-*.json'))[-1]
+    seed = _read_private_file(state/'checkpoint-000.json')
+    if (latest != parent_path or hashlib.sha256(parent).hexdigest() != manifest['predecessor_sha256']
+            or hashlib.sha256(seed).hexdigest() != manifest['seed_sha256']):
+        raise TrialError('cloud_successor_parent_changed')
+    old,initial = _decode(parent),_decode(seed)
+    expected = {**old,'pending':False,'halted':False,'error_code':None}
+    if (not (old['pending'] or old['halted']) or initial != expected
+            or old['attempts'] != manifest['inherited_attempts']
+            or old['highest_revision'] != manifest['inherited_revision']
+            or old['pending'] != manifest['inherited_uncertain_reservation']):
+        raise TrialError('cloud_successor_manifest_invalid')
+    return manifest
+
+
+def activate_successor(root, plan, *, state_directory=SUCCESSOR_STATE):
+    """Select only a new epoch with a freshly verified, durable context."""
+    root = Path(root)
+    manifest = _successor_manifest(root,plan,state_directory=state_directory)
+    ledger = Ledger(root/state_directory,plan)
+    if (ledger.value['attempts'] <= manifest['inherited_attempts']
+            or ledger.value['highest_revision'] <= manifest['inherited_revision']):
+        raise TrialError('cloud_successor_not_verified')
+    current,digest = Controller(root,plan,None,ledger).context()
+    ledger.check_context(current.revision,digest)
+    selector = {'schema_version':1,'state_directory':state_directory,
+        'manifest_sha256':hashlib.sha256(_read_private_file(root/state_directory/'manifest.json')).hexdigest()}
+    _write_packet(encoded(selector),root/'controller-continuation.json')
+    return ledger
+
+
+def selected_ledger(root,plan):
+    """Default trials are unchanged; a linked successor never resets spend."""
+    root = Path(root)
+    selector_path = root/'controller-continuation.json'
+    if not os.path.lexists(selector_path):
+        return Ledger(root/'controller-state',plan)
+    selector = _decode(_read_private_file(selector_path))
+    if type(selector) is not dict or type(selector.get('state_directory')) is not str:
+        raise TrialError('cloud_successor_selector_invalid')
+    state_directory = selector['state_directory']
+    predecessor_directory(state_directory)
+    expected = {'schema_version':1,'state_directory':state_directory,
+        'manifest_sha256':hashlib.sha256(_read_private_file(root/state_directory/'manifest.json')).hexdigest()}
+    if selector != expected:
+        raise TrialError('cloud_successor_selector_invalid')
+    manifest = _successor_manifest(root,plan,state_directory=state_directory)
+    ledger = Ledger(root/state_directory,plan)
+    if (ledger.value['attempts'] <= manifest['inherited_attempts']
+            or ledger.value['highest_revision'] <= manifest['inherited_revision']):
+        raise TrialError('cloud_successor_not_verified')
+    return ledger
 
 
 def polling_policy(root):
@@ -340,7 +500,7 @@ def main():
         lock = os.open(root/'controller.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         state = root/'controller-state';state.mkdir(mode=0o700,exist_ok=True)
-        ledger = Ledger(state,plan)
+        ledger = selected_ledger(root,plan)
         source = prepare_material_source(bundle_file=root/'initialization-material.json',
             expected_app_id=plan['app_id'],expected_source_version=plan['source_version'],
             expected_package_sha256=plan['package_sha256'])
@@ -413,11 +573,13 @@ def main():
             'cloud_checkpoint_unconfirmed','cloud_refresh_limit','cloud_context_changed',
             'cloud_revision_invalid','cloud_context_invalid','cloud_context_missing',
             'cloud_auth_timing_unknown','cloud_refresh_failed','cloud_reader_failed',
-            'cloud_business_window_closed','cloud_polling_policy_invalid','cloud_task_budget_invalid'}
+            'cloud_business_window_closed','cloud_polling_policy_invalid','cloud_task_budget_invalid',
+            'cloud_successor_parent_changed','cloud_successor_manifest_invalid','cloud_successor_selector_invalid',
+            'cloud_successor_not_verified','cloud_diagnostics_unsafe'}
         code = str(error) if isinstance(error,TrialError) and str(error) in allowed else 'cloud_trial_failed'
         if ledger is not None:
             try:
-                ledger.halt('cloud_reader_failed' if code=='cloud_reader_failed' else 'cloud_trial_failed')
+                ledger.halt(code if code in {'cloud_reader_failed','cloud_refresh_failed'} else 'cloud_trial_failed')
             except Exception:
                 pass  # Preserve any pending immutable checkpoint; no retry.
         print(json.dumps({'ok':False,'event':'cloud_trial_stopped','error_code':code,

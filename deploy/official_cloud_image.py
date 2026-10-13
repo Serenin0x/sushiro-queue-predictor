@@ -15,6 +15,10 @@ BOUND_CONFIG_SHA = '41cffeb8200f90c3b302389d0d22b2d3a380298dd174d321f841a0671317
 
 BOUND_MANIFEST_SHA = '7b21d668ac50614d8096bb26e867f41e814399b6f1d92c51bc6b7eea80a7bf9b'
 
+KEEPALIVE_COMPOSE_SHA = '0239585a35bae32814ea084879c7d501ad26a4bedb373250bae28a2e33c18d10'
+KEEPALIVE_CONFIG_SHA = '261c7cb08dc4d9a88e2c552d29e78ab5d4540d1a710372bdd1a95fcc3aea8b10'
+KEEPALIVE_MANIFEST_SHA = 'd30bea96785737ed422bcf45e12bb4fce6c8a14c57f99598afc5e36f34a7ca9f'
+
 def validate_image(values):
     if (type(values) is not list or len(values) != 4
             or values[0] not in {CONFIG, MANIFEST}
@@ -43,7 +47,7 @@ def main(root, mode):
     with os.fdopen(fd, 'rb') as stream:
         body = stream.read(16385)
     digest = hashlib.sha256(body).hexdigest()
-    if len(body)>16384 or digest not in {COMPOSE_SHA, BOUND_CONFIG_SHA, BOUND_MANIFEST_SHA}:
+    if len(body)>16384 or digest not in {COMPOSE_SHA, BOUND_CONFIG_SHA, BOUND_MANIFEST_SHA, KEEPALIVE_COMPOSE_SHA, KEEPALIVE_CONFIG_SHA, KEEPALIVE_MANIFEST_SHA}:
         raise ValueError('approved_compose_mismatch')
     if mode == 'bind-local':
         try:
@@ -51,10 +55,10 @@ def main(root, mode):
         except ValueError as error:
             if str(error)!='approved_image_missing':raise
             identity=inspect_image(MANIFEST)
-        if digest != COMPOSE_SHA or body.count(SOURCE.encode()) != 1:
+        if digest not in {COMPOSE_SHA,KEEPALIVE_COMPOSE_SHA} or body.count(SOURCE.encode()) != 1:
             raise ValueError('approved_binding_already_changed')
         bound = body.replace(SOURCE.encode(), identity.encode())
-        if hashlib.sha256(bound).hexdigest() not in {BOUND_CONFIG_SHA, BOUND_MANIFEST_SHA}:
+        if hashlib.sha256(bound).hexdigest() not in {BOUND_CONFIG_SHA, BOUND_MANIFEST_SHA, KEEPALIVE_CONFIG_SHA, KEEPALIVE_MANIFEST_SHA}:
             raise ValueError('approved_binding_mismatch')
         backup=root/'yyb_cloud_trial.compose.original.yaml'
         fd=os.open(backup,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
@@ -67,9 +71,11 @@ def main(root, mode):
         try:os.fsync(fd)
         finally:os.close(fd)
     else:
-        inspect_image(CONFIG if digest == BOUND_CONFIG_SHA else MANIFEST if digest == BOUND_MANIFEST_SHA else SOURCE)
+        inspect_image(CONFIG if digest in {BOUND_CONFIG_SHA,KEEPALIVE_CONFIG_SHA}
+            else MANIFEST if digest in {BOUND_MANIFEST_SHA,KEEPALIVE_MANIFEST_SHA} else SOURCE)
     return {'approved_image_verified':True, 'all_layers_matched':True,
-            'network_pulls_added':0,'container_started':False}
+            'network_pulls_added':0,'container_started':False,
+            'keepalive_enabled':digest in {KEEPALIVE_COMPOSE_SHA,KEEPALIVE_CONFIG_SHA,KEEPALIVE_MANIFEST_SHA}}
 
 
 if __name__ == '__main__':

@@ -186,3 +186,98 @@ class OfficialCloudControllerTests(unittest.TestCase):
         restored=cloud.Ledger(state,self.value)
         self.assertEqual(restored.value['highest_revision'],2)
         self.socket.assert_not_called()
+
+    def terminal_parent(self):
+        import hashlib
+        from tests.test_credentials import write_bundle
+        state=self.root/'controller-state';state.mkdir(mode=0o700)
+        context=self.root/'query-context.json'
+        write_bundle(context,{'synthetic':'old-context'})
+        ledger=cloud.Ledger(state,self.value)
+        for revision in range(1,14):
+            ledger.reserve();ledger.accepted(revision,hashlib.sha256(context.read_bytes()).hexdigest())
+        ledger.reserve();ledger.halt('cloud_trial_failed')
+        return ledger,context
+
+    def test_successor_preserves_terminal_parent_and_uncertain_spend(self):
+        parent,context=self.terminal_parent()
+        original={p.name:p.read_bytes() for p in parent.root.glob('checkpoint-*.json')}
+        ledger=cloud.create_successor_ledger(self.root,self.value)
+        self.assertEqual(ledger.value['attempts'],14)
+        self.assertEqual(ledger.value['highest_revision'],13)
+        ledger.reserve();self.assertEqual(ledger.value['attempts'],15)
+        self.assertEqual(original,{p.name:p.read_bytes() for p in parent.root.glob('checkpoint-*.json')})
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_refresh_outcome_unknown'):
+            cloud.selected_ledger(self.root,self.value)
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_successor_already_exists'):
+            cloud.create_successor_ledger(self.root,self.value)
+        self.socket.assert_not_called()
+
+    def test_successor_refuses_clean_parent_and_changed_context(self):
+        state=self.root/'controller-state';state.mkdir(mode=0o700)
+        cloud.Ledger(state,self.value)
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_successor_requires_terminal_parent'):
+            cloud.create_successor_ledger(self.root,self.value)
+        self.assertFalse((self.root/cloud.SUCCESSOR_STATE).exists())
+
+    def test_successor_context_tampering_does_not_create_epoch(self):
+        _,context=self.terminal_parent();context.write_bytes(b'changed')
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_successor_context_changed'):
+            cloud.create_successor_ledger(self.root,self.value)
+        self.assertFalse((self.root/cloud.SUCCESSOR_STATE).exists())
+
+    def test_successor_activation_requires_fresh_verified_revision_and_bound_ancestry(self):
+        import hashlib
+        from types import SimpleNamespace
+        parent,context=self.terminal_parent()
+        ledger=cloud.create_successor_ledger(self.root,self.value)
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_successor_not_verified'):
+            cloud.activate_successor(self.root,self.value)
+        ledger.reserve();ledger.accepted(14,hashlib.sha256(context.read_bytes()).hexdigest())
+        with patch.object(cloud.Controller,'context',return_value=(SimpleNamespace(revision=14),ledger.value['context_sha256'])):
+            selected=cloud.activate_successor(self.root,self.value)
+        self.assertEqual(selected.value['attempts'],15)
+        self.assertEqual(cloud.selected_ledger(self.root,self.value).value['highest_revision'],14)
+        latest=sorted(parent.root.glob('checkpoint-*.json'))[-1]
+        latest.write_bytes(b'{}')
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_successor_parent_changed'):
+            cloud.selected_ledger(self.root,self.value)
+
+    def test_refresh_failure_records_fixed_layer_and_retains_pending_reservation(self):
+        import contextlib,io,json
+        for number,error,phase in [(1,cloud.YYBCodeError('yyb_protocol_failed'),'supplier'),
+                                   (2,cloud.InitializationError('initialize_transport_failed'),'initialization')]:
+            root=self.root/str(number);root.mkdir(mode=0o700)
+            state=root/'controller-state';state.mkdir(mode=0o700)
+            ledger=cloud.Ledger(state,self.value)
+            controller=cloud.Controller(root,self.value,Mock(),ledger)
+            controller.perform=Mock(side_effect=error)
+            start,end,_=cloud.validate_plan(self.value)[0]
+            with contextlib.redirect_stdout(io.StringIO()),self.assertRaisesRegex(cloud.TrialError,'cloud_refresh_failed'):
+                controller.ensure_refresh(start,end,now=start)
+            record=json.loads((root/'refresh-diagnostics'/'attempt-001.json').read_bytes())
+            self.assertEqual(record['phase'],phase)
+            self.assertEqual(record['error_code'],error.error_code)
+            self.assertTrue(ledger.value['pending']);self.assertTrue(ledger.value['halted'])
+            self.assertEqual(ledger.value['attempts'],1)
+        self.socket.assert_not_called()
+
+    def test_reauthorization_epoch_inherits_failed_successor_and_all_original_spend(self):
+        import hashlib
+        from types import SimpleNamespace
+        parent,context=self.terminal_parent()
+        first=cloud.create_successor_ledger(self.root,self.value)
+        first.reserve();first.halt('cloud_refresh_failed')
+        original={p:p.read_bytes() for folder in (parent.root,first.root) for p in folder.glob('checkpoint-*.json')}
+        second=cloud.create_successor_ledger(self.root,self.value,state_directory=cloud.REAUTHORIZED_STATE)
+        self.assertEqual(second.value['attempts'],15)
+        second.reserve();second.accepted(14,hashlib.sha256(context.read_bytes()).hexdigest())
+        with patch.object(cloud.Controller,'context',return_value=(SimpleNamespace(revision=14),second.value['context_sha256'])):
+            cloud.activate_successor(self.root,self.value,state_directory=cloud.REAUTHORIZED_STATE)
+        self.assertEqual(cloud.selected_ledger(self.root,self.value).value['attempts'],16)
+        self.assertTrue(all(p.read_bytes()==body for p,body in original.items()))
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_successor_already_exists'):
+            cloud.create_successor_ledger(self.root,self.value,state_directory=cloud.REAUTHORIZED_STATE)
+        with self.assertRaisesRegex(cloud.TrialError,'cloud_successor_manifest_invalid'):
+            cloud.create_successor_ledger(self.root,self.value,state_directory='../other')
+        self.socket.assert_not_called()

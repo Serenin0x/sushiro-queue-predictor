@@ -1,0 +1,38 @@
+# Prepared only: cloud account access/material storage has not been approved or run.
+# Fixed linux/amd64 child of the already reviewed immutable local image index.
+# Owner performs normal first QR authorization; no Mac account DB is imported.
+# Explicit private host directory must already exist with uid/gid 10001, mode 0700.
+services:
+  yyb-cloud-trial:
+    image: ghcr.io/525815266/yyb-go-enhanced@sha256:1a26a472f4c51322cf07ec087e946d5c38d259dd67273c62ef26b566c8aadddf
+    platform: linux/amd64
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 64
+    command: ["-host", "0.0.0.0", "-port", "8000", "-resource-root", "/app/resource", "-keepalive-interval", "5m"]
+    environment:
+      TZ: Asia/Shanghai
+      YYB_AUTH_DRIVER: sqlite
+      YYB_PROTOCOL_TOKEN: ${SUSHIWAIT_YYB_CLOUD_TOKEN:?private random protocol token required}
+      YYB_ENABLE_PC_LOGIN: "false"
+      YYB_COOKIE_SECURE: "false"
+    ports: ["127.0.0.1:18081:8000"]
+    volumes:
+      - type: bind
+        source: ${SUSHIWAIT_YYB_CLOUD_DATA_DIR:?explicit private cloud session directory required}
+        target: /app/resource/db
+        read_only: false
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /app/resource/avatars:rw,noexec,nosuid,size=8m,uid=10001,gid=10001,mode=0700
+      - /app/resource/qr:rw,noexec,nosuid,size=8m,uid=10001,gid=10001,mode=0700
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700
+    logging:
+      driver: none

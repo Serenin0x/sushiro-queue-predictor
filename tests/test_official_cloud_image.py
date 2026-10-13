@@ -77,3 +77,19 @@ class OfficialCloudImageTests(unittest.TestCase):
                 command.assert_not_called()
             self.assertEqual(target.read_bytes(), changed)
             self.assertFalse((root / 'yyb_cloud_trial.compose.original.yaml').exists())
+
+    def test_fixed_keepalive_config_preserves_image_network_and_session_mounts(self):
+        legacy=(DEPLOY/'yyb_cloud_trial.compose.yaml').read_bytes()
+        enabled=(DEPLOY/'yyb_cloud_trial_keepalive.compose.yaml').read_bytes()
+        self.assertEqual(enabled,legacy.replace(b'"-keepalive-interval", "0"',b'"-keepalive-interval", "5m"'))
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);target=root/'yyb_cloud_trial.compose.yaml'
+            target.write_bytes(enabled.replace(guard.SOURCE.encode(),guard.MANIFEST.encode()))
+            with patch.object(guard.subprocess,'run',return_value=image_result(guard.MANIFEST)) as command:
+                result=guard.main(root,'verify')
+            self.assertTrue(result['keepalive_enabled'])
+            self.assertEqual(command.call_count,1)
+            target.write_bytes(target.read_bytes().replace(b'"5m"',b'"1s"'))
+            with patch.object(guard.subprocess,'run') as command:
+                with self.assertRaisesRegex(ValueError,'approved_compose_mismatch'):guard.main(root,'verify')
+                command.assert_not_called()
