@@ -188,6 +188,47 @@ class StatisticsGatewayTests(unittest.TestCase):
             self.assertEqual(self.request('/statistics')[0]['status'],503)
         self.assertEqual(self.hub.calls, ['/statistics'])
 
+    def test_smooth_policy_reports_current_delay_without_origin_reads(self):
+        import json, tempfile
+        from unittest.mock import patch
+        from sushiwait.cadence import CHINA
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder).resolve()/'policy.json'
+            path.write_text(json.dumps({'schema_version':2,'interval_seconds':600,
+                'ordinary_query_limit':396,'cadence':'meal-peaks-v1'}))
+            path.chmod(0o600)
+            self.app=gateway.StatisticsGateway(self.hub,refresh_policy_file=path)
+            for hour,minute,expected in ((12,0,180),(15,0,600),(11,15,None)):
+                now=datetime(2026,10,13,hour,minute,tzinfo=CHINA)
+                value=self.app.polling_settings(now=now)
+                self.assertEqual(value['cadence_policy']['peak_seconds'],180)
+                if expected is None:
+                    self.assertTrue(180<value['poll_seconds']<600)
+                else:
+                    self.assertEqual(value['poll_seconds'],expected)
+            fixed=self.app.polling_settings(now=datetime(2026,10,13,12,tzinfo=CHINA))
+            with patch.object(self.app,'polling_settings',return_value=fixed):
+                response=self.request('/api/v1/statistics/settings')
+            self.assertEqual(response[0]['status'],200)
+            self.assertEqual(json.loads(response[1]['body']),fixed)
+        self.assertEqual(self.hub.calls,[])
+
+    def test_smooth_policy_rejects_invalid_limits_modes_and_extra_fields(self):
+        import json, tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder).resolve()/'policy.json'
+            self.app=gateway.StatisticsGateway(self.hub,refresh_policy_file=path)
+            base={'schema_version':2,'interval_seconds':600,
+                'ordinary_query_limit':1008,'cadence':'meal-peaks-v1'}
+            path.write_text(json.dumps(base));path.chmod(0o600)
+            self.assertEqual(self.request('/api/v1/statistics/settings')[0]['status'],200)
+            for changes in ({'ordinary_query_limit':True},{'ordinary_query_limit':1009},
+                            {'interval_seconds':180},{'schema_version':1},
+                            {'cadence':'unknown'},{'authorization':'private'}):
+                path.write_text(json.dumps({**base,**changes}));self.app.cache.clear()
+                self.assertEqual(self.request('/api/v1/statistics/settings')[0]['status'],503)
+        self.assertEqual(self.hub.calls,[])
+
 
 if __name__ == '__main__':
     unittest.main()

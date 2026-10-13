@@ -48,7 +48,8 @@ async function updatePollingPolicy() {
     const settings=await response.json();
     if(settings.schema_version!==1 || !Number.isInteger(settings.poll_seconds) || settings.poll_seconds<30 || settings.poll_seconds>3600)return;
     controller.setPollMs(settings.poll_seconds*1000);
-    el('sw-refresh').title=`每${settings.poll_seconds/60}分钟自动同步已保存观测；也可手动刷新`;
+    const duration=settings.poll_seconds%60===0?`${settings.poll_seconds/60}分钟`:`${settings.poll_seconds}秒`;
+    el('sw-refresh').title=`约每${duration}自动同步已保存观测；也可手动刷新`;
   } catch (_) { /* Keep the last declared cadence; data errors remain visible. */ }
 }
 function selectStatistics() {

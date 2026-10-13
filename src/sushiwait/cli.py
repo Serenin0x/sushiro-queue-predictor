@@ -329,11 +329,21 @@ def observe(
     return True
 
 
+def _collection_period(args, at=None) -> float:
+    policy = getattr(args, 'cadence', None)
+    if policy is None:
+        return args.interval
+    from .cadence import period_after
+    return period_after(_utc_clock() if at is None else at, policy)
+
+
 def _persistent_collect(args: argparse.Namespace) -> int:
     """Resume an explicitly selected bounded task; never silently replay a slot."""
     config = {"db": os.path.abspath(args.db), "api_profile": args.api_profile,
               "store_ids": args.store_id, "interval": args.interval, "samples": args.samples,
               "wait_for_credentials": args.wait_for_credentials}
+    if getattr(args, 'cadence', None):
+        config['cadence'] = args.cadence
     if args.transient_failure_budget:
         config["transient_failure_budget"] = args.transient_failure_budget
     with CollectionTask(args.task_file, config=config, resume=args.resume_task, now=_utc_clock()) as task:
@@ -346,6 +356,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                 return 0 if task.value["failed"] == task.value["uncertain"] == 0 else 1
             session = _QuerySession(args, on_context=task.check_context)
             last_completed = None
+            last_completed_at = None
             round_transient_failure = False
 
             def wait(deadline: float) -> bool:
@@ -359,7 +370,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                         emit({"event": "collection_task_stopped", **public_task(task.value)})
                         return False
                 try:
-                    session.wait_until(_recovery_poll_target(deadline, len(args.store_id), args.interval, last_completed))
+                    session.wait_until(_recovery_poll_target(deadline, len(args.store_id), _collection_period(args, last_completed_at), last_completed))
                     return True
                 except _PreflightStop as stop:
                     _record_preflight_stop(db, args.store_id[0], args.api_profile, stop)
@@ -370,13 +381,15 @@ def _persistent_collect(args: argparse.Namespace) -> int:
             # Every unfinished restarted task waits a full period, including a
             # partially completed round. Downtime cannot create a catch-up burst.
             if task.loaded and task.value["last_attempt_at"] is not None:
-                if not wait(time.monotonic() + args.interval):
+                if not wait(time.monotonic() + _collection_period(args)):
                     return 1
             count = len(args.store_id)
             started = time.monotonic()
+            started_at = _utc_clock()
             while task.value["cursor"] < count * args.samples:
                 if task.value["cursor"] % count == 0:
                     started = time.monotonic()
+                    started_at = _utc_clock()
                     round_transient_failure = False
                 store_id = args.store_id[task.value["cursor"] % count]
                 before_recovery = session.recovery_count
@@ -384,8 +397,9 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                 if client is not None and session.recovery_count != before_recovery:
                     if count > 1 and task.value["cursor"] % count == 0 and last_completed is not None:
                         client = _recovered_round_client(session, db, store_id,
-                            last_completed=last_completed, interval=args.interval)
+                            last_completed=last_completed, interval=_collection_period(args, last_completed_at))
                     started = time.monotonic()
+                    started_at = _utc_clock()
                 if client is None:
                     task.stop(session.last_stop_code or "client_configuration_error", now=_utc_clock())
                     emit({"event": "collection_task_stopped", **public_task(task.value)})
@@ -394,6 +408,7 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                 before_id = task.value["pending"]["after_sample_id"]
                 ok = observe(client, store_id, db, api_profile=args.api_profile)
                 last_completed = time.monotonic()
+                last_completed_at = _utc_clock()
                 task.reconcile(now=_utc_clock())
                 if not ok:
                     if (not args.transient_failure_budget
@@ -409,9 +424,9 @@ def _persistent_collect(args: argparse.Namespace) -> int:
                           "failed_slot_retried": False})
                 emit({"event": "collection_task_checkpoint", **public_task(task.value)})
                 if task.value["cursor"] < count * args.samples and task.value["cursor"] % count == 0:
-                    deadline = started + args.interval
+                    deadline = started + _collection_period(args, started_at)
                     if round_transient_failure:
-                        deadline = max(deadline, last_completed + args.interval)
+                        deadline = max(deadline, last_completed + _collection_period(args, last_completed_at))
                     if not wait(deadline):
                         return 1
             return 0 if task.value["failed"] == task.value["uncertain"] == 0 else 1
@@ -703,7 +718,9 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--api-profile", choices=API_PROFILES, default="legacy")
     collect.add_argument("--store-id", action="append", required=True)
     collect.add_argument("--interval", type=int, default=60)
-    collect.add_argument("--samples", type=int, default=3, help="每店轮数，1–120")
+    collect.add_argument('--cadence', choices=('meal-peaks-v1',),
+                         help='平滑午晚高峰3分钟、其它10分钟；须使用持久任务及600秒基础周期')
+    collect.add_argument("--samples", type=int, default=3, help="每店轮数，固定周期1–120；平滑策略1–240")
     collect.add_argument("--db", default=DEFAULT_DB)
     collect.add_argument("--wait-for-credentials", type=int, default=0,
                          help="私有文件模式到期后暂停等正常新上下文，0–600秒；默认停止")
@@ -1331,9 +1348,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     if args.command == "collect":
         ids = args.store_id
-        if not 1 <= len(ids) <= 3 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= 120:
+        if not 1 <= len(ids) <= 3 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= (240 if args.cadence else 120):
             emit({"ok": False, "error_code": "invalid_sampling_bounds",
-                  "detail": "验证阶段限 1–3 店、30–3600 秒周期、1–120 轮"})
+                  "detail": "验证阶段限1–3店、30–3600秒周期；固定周期1–120轮，平滑策略1–240轮"})
             return 2
         if (not 0 <= args.wait_for_credentials <= 600
                 or args.wait_for_credentials and args.credentials_file is None):
@@ -1345,6 +1362,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if (args.resume_task and not args.task_file or args.task_file and not args.credentials_file):
             emit({"ok": False, "error_code": "invalid_collection_task_options"})
+            return 2
+        if args.cadence and (not args.task_file or args.interval != 600):
+            emit({'ok': False, 'error_code': 'invalid_cadence_task_options'})
             return 2
         if args.task_file:
             paths = [os.path.abspath(p) for p in (args.task_file, args.db, args.credentials_file)]

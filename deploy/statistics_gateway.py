@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import re
 import time
 import json
+import math
 
 from sushiwait.monitorhub import MonitorHub, read_config
 
@@ -43,18 +44,32 @@ class StatisticsGateway:
         match = re.fullmatch(r'/api/v1/stores/([1-9][0-9]{0,9})/days/([0-9]{4}-[0-9]{2}-[0-9]{2})', path)
         return bool(match and match[1] in self.hub.names)
 
-    def polling_seconds(self):
+    def polling_settings(self, *, now=None):
         if self.refresh_policy_file is None:
-            return self.refresh_seconds
+            return {'schema_version':1, 'poll_seconds':self.refresh_seconds}
         from sushiwait.credentials import _read_private_file
         from sushiwait.storage import _unique_object
         value = json.loads(_read_private_file(self.refresh_policy_file), object_pairs_hook=_unique_object)
-        if (type(value) is not dict or set(value) != {'schema_version', 'interval_seconds', 'ordinary_query_limit'}
-                or type(value['schema_version']) is not int or value['schema_version'] != 1
+        keys = {'schema_version', 'interval_seconds', 'ordinary_query_limit'}
+        smooth = type(value) is dict and 'cadence' in value
+        if (type(value) is not dict or set(value) != (keys | {'cadence'} if smooth else keys)
+                or type(value['schema_version']) is not int or value['schema_version'] != (2 if smooth else 1)
                 or type(value['interval_seconds']) is not int or not 60 <= value['interval_seconds'] <= 3600
-                or type(value['ordinary_query_limit']) is not int or not 1 <= value['ordinary_query_limit'] <= 396):
+                or type(value['ordinary_query_limit']) is not int
+                or not (value['ordinary_query_limit'] in {396,1008} if smooth
+                        else 1 <= value['ordinary_query_limit'] <= 396)
+                or smooth and (value['interval_seconds'] != 600
+                    or type(value['cadence']) is not str or value['cadence'] != 'meal-peaks-v1')):
             raise ValueError('statistics_refresh_policy_invalid')
-        return value['interval_seconds']
+        if smooth:
+            from sushiwait.cadence import period_after, description
+            now = datetime.now(timezone.utc) if now is None else now
+            return {'schema_version':1, 'poll_seconds':math.ceil(period_after(now,value['cadence'])),
+                    'cadence_policy':description(value['cadence'])}
+        return {'schema_version':1, 'poll_seconds':value['interval_seconds']}
+
+    def polling_seconds(self):
+        return self.polling_settings()['poll_seconds']
 
     async def __call__(self, scope, receive, send):
         if scope['type'] == 'lifespan':
@@ -86,7 +101,7 @@ class StatisticsGateway:
                 else:
                     if path == '/api/v1/statistics/settings':
                         try:
-                            body = json.dumps({'schema_version':1, 'poll_seconds':self.polling_seconds()}).encode()
+                            body = json.dumps(self.polling_settings()).encode()
                             status, mime = 200, 'application/json'
                         except Exception:
                             status, body, mime = 503, b'Sampling policy unavailable', 'text/plain; charset=utf-8'

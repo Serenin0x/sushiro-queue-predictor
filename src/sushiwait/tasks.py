@@ -83,16 +83,20 @@ def _decode(body: bytes) -> dict:
             raise ValueError
         c = value["config"]
         config_keys = {"db", "api_profile", "store_ids", "interval", "samples", "wait_for_credentials"}
-        if (not isinstance(c, dict) or set(c) not in (config_keys, config_keys | {"transient_failure_budget"})
+        if (not isinstance(c, dict) or set(c) not in (config_keys, config_keys | {"transient_failure_budget"},
+                                                  config_keys | {"cadence"},
+                                                  config_keys | {"cadence", "transient_failure_budget"})
                 or not isinstance(c["db"], str) or len(c["db"]) > 4096 or not Path(c["db"]).is_absolute()
                 or c["api_profile"] not in ("legacy", "miniapp_gateway")
                 or not isinstance(c["store_ids"], list) or not 1 <= len(c["store_ids"]) <= 3
                 or len(set(c["store_ids"])) != len(c["store_ids"])
                 or not all(isinstance(s, str) and s.isascii() and s.isdecimal() and str(int(s)) == s
                            and 0 < int(s) <= 2**63-1 for s in c["store_ids"])
-                or not _integer(c["interval"], 30, 3600) or not _integer(c["samples"], 1, 120)
+                or not _integer(c["interval"], 30, 3600) or not _integer(c["samples"], 1, 240 if "cadence" in c else 120)
                 or not _integer(c["wait_for_credentials"], 0, 600)
-                or "transient_failure_budget" in c and not _integer(c["transient_failure_budget"], 1, 10)):
+                or "transient_failure_budget" in c and not _integer(c["transient_failure_budget"], 1, 10)
+                or "cadence" in c and (type(c["cadence"]) is not str
+                    or c["cadence"] != "meal-peaks-v1" or c["interval"] != 600)):
             raise ValueError
         total = len(c["store_ids"]) * c["samples"]
         if (not all(_integer(value[k], 0, total) for k in ("cursor", "successful", "failed", "uncertain"))
@@ -149,7 +153,7 @@ def _decode(body: bytes) -> dict:
 def public_task(value: dict) -> dict:
     """No paths, hashes, identities, run IDs, raw errors or context values."""
     c = value["config"]
-    return {"task_schema_version": 1, "state": value["state"],
+    result = {"task_schema_version": 1, "state": value["state"],
             "api_profile": c["api_profile"], "store_ids": c["store_ids"],
             "target_rounds": c["samples"], "target_slots": c["samples"] * len(c["store_ids"]),
             "completed_slots": value["cursor"], "successful_slots": value["successful"],
@@ -162,6 +166,11 @@ def public_task(value: dict) -> dict:
             "all_slots_successful": value["cursor"] == c["samples"] * len(c["store_ids"]) and value["failed"] == value["uncertain"] == 0,
             "updated_at": value["updated_at"], "last_gap": value["last_gap"],
             "upstream_freshness": "unknown", "eta_available": False}
+
+    if 'cadence' in c:
+        from .cadence import description
+        result['cadence_policy'] = description(c['cadence'])
+    return result
 
 
 def task_status(path: str | Path) -> dict:
