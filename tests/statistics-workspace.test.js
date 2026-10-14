@@ -71,6 +71,6 @@ const run=code=>vm.runInContext(code,context),settle=async()=>{await new Promise
  $('city').value='成都';$('city').onchange();await settle();assert.equal($('store').value,'');assert.deepEqual($('store').children.map(v=>v.value),['','2009']);assert.equal($('ticket-number').value,'4045');assert.equal(run('detail'),null);
  $('city').value='all';$('city').onchange();await settle();assert.equal($('store').disabled,true);assert.equal($('store').children.length,1);
  run("workspaceSelectStore('3014')");await settle();assert.equal($('city').value,'北京');assert.equal($('store').value,'3014');assert(!$('store').children.some(v=>v.value==='2009'));
- assert(reads.every(p=>p.startsWith('/api/v1/')&&!p.includes('4045')));
+ assert(reads.every(p=>(p.startsWith('/api/v1/')||p==='/model-advice.json')&&!p.includes('4045')));
  console.log('workspace async selection, private drafts, chart boundaries, quality states, pagination, route restoration and CSV isolation passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

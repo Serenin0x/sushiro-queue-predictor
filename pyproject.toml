@@ -15,6 +15,7 @@ dependencies = []
 [project.optional-dependencies]
 server = ["uvicorn==0.53.0"]
 protocol = ["cryptography==50.0.2"]
+screenshot = ["Pillow==12.3.0"]
 
 [project.scripts]
 sushiwait = "sushiwait.cli:main"
@@ -23,4 +24,4 @@ sushiwait = "sushiwait.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-sushiwait = ["data/*.json", "web/*.html", "web/*.css", "web/*.js", "web/*.mjs", "web/*.svg"]
+sushiwait = ["data/*.json", "web/*.html", "web/*.css", "web/*.js", "web/*.mjs", "web/*.svg", "web/*.json"]

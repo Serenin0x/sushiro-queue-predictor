@@ -69,7 +69,10 @@ def _digest(value):
 
 def _budget(value, now):
     try:
-        if (type(value) is not dict or set(value) != _BUDGET_FIELDS
+        if (type(value) is not dict or not _BUDGET_FIELDS <= set(value)
+                or set(value) - _BUDGET_FIELDS - {'thinking_mode', 'accounting_policy'}
+                or value.get('thinking_mode', 'nonthinking') not in ('nonthinking', 'thinking')
+                or value.get('accounting_policy', 'reserved') not in ('reserved', 'actual_known_reserved_unknown')
                 or not _int(value['schema_version'], 1, 1)
                 or value['provider'] != 'deepseek_official' or value['model'] != MODEL
                 or value['price_basis'] != 'caller_supplied_ceiling_not_verified'
@@ -77,7 +80,7 @@ def _budget(value, now):
                 or not _int(value['max_reserved_tokens'], 1, 100_000_000)
                 or not _int(value['max_reserved_cost_microunits'], 1, 1_000_000_000)
                 or not _int(value['max_prompt_tokens'], 4096, 65536)
-                or not _int(value['max_output_tokens'], 128, 2048)
+                or not _int(value['max_output_tokens'], 128, 4096 if value.get('thinking_mode') == 'thinking' else 2048)
                 or not _int(value['timeout_seconds'], 1, 30)
                 or any(not _int(value[k], 1, 1_000_000_000) for k in
                     ('input_rate_microunits_per_million', 'output_rate_microunits_per_million'))):
@@ -105,12 +108,15 @@ def _key(path):
         raise DeepSeekError('deepseek_invalid_key') from None
 
 
-def _wire(request, max_output_tokens):
-    return _canonical({'model': MODEL, 'thinking': {'type': 'disabled'},
+def _wire(request, max_output_tokens, thinking_mode='nonthinking'):
+    value = {'model': MODEL, 'thinking': {'type': 'enabled' if thinking_mode == 'thinking' else 'disabled'},
         'stream': False, 'temperature': 0, 'max_tokens': max_output_tokens,
         'response_format': {'type': 'json_object'},
         'messages': [{'role': 'system', 'content': _SYSTEM},
-                     {'role': 'user', 'content': _canonical(request)}]}).encode()
+                     {'role': 'user', 'content': _canonical(request)}]}
+    if thinking_mode == 'thinking':
+        value['reasoning_effort'] = 'low'
+    return _canonical(value).encode()
 
 
 def _observation_key(request):
@@ -193,7 +199,8 @@ class _Ledger:
                             or stored_usage['completion_tokens'] > self.budget['max_output_tokens'])
                         if actual_overrun != result['overrun']:
                             raise ValueError
-                    if result['advice'] is not None and (result['usage'] is None or result['usage']['reasoning_tokens'] != 0):
+                    if result['advice'] is not None and (result['usage'] is None or
+                            self.budget.get('thinking_mode', 'nonthinking') == 'nonthinking' and result['usage']['reasoning_tokens'] != 0):
                         raise ValueError
                     if result['overrun']:
                         raise DeepSeekError('deepseek_usage_overrun')
@@ -266,9 +273,15 @@ class _Ledger:
     def reserve(self, request, observation_key, now):
         tokens = self.budget['max_prompt_tokens'] + self.budget['max_output_tokens']
         cost = _cost(self.budget['max_prompt_tokens'], self.budget['max_output_tokens'], self.budget)
+        actual = self.budget.get('accounting_policy') == 'actual_known_reserved_unknown'
+        used_tokens = sum(result['usage']['total_tokens'] if actual and result and result['usage']
+                          else call['reserved_tokens'] for call, result in self.calls)
+        used_cost = sum(_cost(result['usage']['prompt_tokens'], result['usage']['completion_tokens'], self.budget)
+                        if actual and result and result['usage'] else call['reserved_cost_microunits']
+                        for call, result in self.calls)
         if (len(self.calls) >= self.budget['max_calls']
-                or sum(c['reserved_tokens'] for c, _ in self.calls) + tokens > self.budget['max_reserved_tokens']
-                or sum(c['reserved_cost_microunits'] for c, _ in self.calls) + cost > self.budget['max_reserved_cost_microunits']):
+                or used_tokens + tokens > self.budget['max_reserved_tokens']
+                or used_cost + cost > self.budget['max_reserved_cost_microunits']):
             raise DeepSeekError('deepseek_budget_exhausted')
         call = {'schema_version': 1, 'budget_sha256': self.budget_sha,
             'public_input_sha256': request['public_input_sha256'], 'observation_key': observation_key,
@@ -338,7 +351,7 @@ def _usage(response):
         raise DeepSeekError('deepseek_invalid_usage') from None
 
 
-def _response_advice(response, request, now):
+def _response_advice(response, request, now, thinking_mode='nonthinking'):
     try:
         choices = response['choices']
         if (response['object'] != 'chat.completion' or response['model'] != MODEL
@@ -347,7 +360,8 @@ def _response_advice(response, request, now):
             raise ValueError
         message = choices[0]['message']
         if (message['role'] != 'assistant' or message.get('tool_calls') not in (None, [])
-                or message.get('reasoning_content') not in (None, '')
+                or thinking_mode == 'nonthinking' and message.get('reasoning_content') not in (None, '')
+                or thinking_mode == 'thinking' and message.get('reasoning_content') is not None and type(message['reasoning_content']) is not str
                 or type(message['content']) is not str or len(message['content'].encode()) > 16_384):
             raise ValueError
         answer = _json(message['content'])
@@ -414,7 +428,7 @@ def run_deepseek(plan, *, budget_file=None, key_file=None, allow_paid_request=Fa
                 raise DeepSeekError('deepseek_duplicate_observation')
         if advice is None:
             key = _key(key_file)
-            body = _wire(request, ledger.budget['max_output_tokens'])
+            body = _wire(request, ledger.budget['max_output_tokens'], ledger.budget.get('thinking_mode', 'nonthinking'))
             # Byte ceiling plus conservative framing allowance. This is a local
             # guard, not a claim to know the provider's tokenizer/billing rules.
             if len(body) + 4096 > ledger.budget['max_prompt_tokens']:
@@ -440,13 +454,13 @@ def run_deepseek(plan, *, budget_file=None, key_file=None, allow_paid_request=Fa
             try:
                 if overrun:
                     raise DeepSeekError('deepseek_usage_overrun')
-                if usage['reasoning_tokens'] != 0:
+                if usage['reasoning_tokens'] != 0 and ledger.budget.get('thinking_mode', 'nonthinking') == 'nonthinking':
                     raise DeepSeekError('deepseek_unexpected_thinking')
                 if monotonic()-began >= ledger.budget['timeout_seconds']:
                     raise DeepSeekError('deepseek_timeout')
                 ledger.check_budget(now)
                 check_current()
-                advice = _response_advice(response, request, now)
+                advice = _response_advice(response, request, now, ledger.budget.get('thinking_mode', 'nonthinking'))
                 result['advice'] = advice
             except (DeepSeekError, FusionError) as error:
                 failure = error

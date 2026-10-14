@@ -1,0 +1,10 @@
+[Unit]
+Description=SUSHIWAIT IP certificate renewal under owner-approved CA terms
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/sushiwait-certbot/renew_ip_https.py
+TimeoutStartSec=240
+UMask=0077

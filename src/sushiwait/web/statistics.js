@@ -12,7 +12,8 @@ function today(){const parts=dateFormat.formatToParts(new Date()),v={};parts.for
 let index={days:{},store_names:{}},day=today(),detail=null,busy=false,detailLoading=false,detailRequestId=0,ticketScopeKey=null;
 // The same mounted views keep private drafts and selection state when navigating.
 const engineeringPanels=referenceRoot?.dataset?.engineeringPanels==="true";
-const engineeringSections={overview:["观测总览","按日期查看已保存的观测与采集覆盖。"],analysis:["门店分析","查看号码位置、数量、展示变化与原始观测。"],prediction:["预测实验","输入已有号码，查看历史初估与实时修正的参考状态。"],experience:["用餐记录","记录本人正常用餐的实际事件，保留本机私有草稿。"]};
+const engineeringSections={overview:["观测总览","按日期查看已保存的观测与采集覆盖。"],analysis:["门店分析","查看号码位置、数量、展示变化与原始观测。"],prediction:["预测与记录",""],experience:["用餐记录","记录本人正常用餐的实际事件，保留本机私有草稿。"]};
+engineeringSections.tickets=["我的号码",""];
 let engineeringSection="overview",engineeringPollingSeconds=null;
 const workspaceSectionScroll=new Map();
 const taskWorkspace=engineeringPanels&&referenceRoot?.dataset?.engineeringLayout==="tasks-v2";
@@ -33,8 +34,9 @@ function syncEngineeringSelection(){
   $("metric-interval").textContent=engineeringPollingSeconds===null?"读取中":engineeringPollingSeconds%60===0?`${engineeringPollingSeconds/60} 分钟`:`${engineeringPollingSeconds} 秒`;
   const store=$("store").value;
   $("analysis-empty").hidden=Boolean(store);
-  $("prediction-empty").hidden=Boolean(store);
-  $("prediction-content").hidden=!store;
+  $("prediction-empty").hidden=true;
+  $("prediction-content").hidden=false;
+  $("store-wait-card").hidden=!store;
   $("engineering-selection").textContent=`${day}，${store?(index.store_names[store]||store):taskWorkspace&&workspaceState.city!=="all"?workspaceState.city+"，全部门店":"全部门店"}，${$("queue").selectedOptions?.[0]?.textContent||"展示队列"}`;
 }
 function selectEngineeringSection(section){
@@ -55,14 +57,16 @@ function selectEngineeringSection(section){
   [$("engineering-title").textContent,$("engineering-description").textContent]=engineeringSections[section];
   syncEngineeringSelection();
   if(taskWorkspace){
+    $("workspace-filters").hidden=section==="tickets";$("engineering-selection").hidden=section==="tickets";$("archive-status").hidden=section==="tickets";
     $("filter-queue").hidden=section==="overview"||section==="experience";
-    $("filter-date").hidden=section==="experience";$("date-shortcuts").hidden=section==="experience";
+    $("filter-date").hidden=["experience","tickets"].includes(section);$("date-shortcuts").hidden=["experience","tickets"].includes(section);
     $("record-source-label").hidden=section==="overview"||section==="experience"||!(detail&&index.days[day]?.[$("store").value]?.record_sources?.length>1);
     workspaceWriteRoute({push:true});
     if(document.body.classList.contains("nav-open"))workspaceNav(false);
     if(section==="quality")workspaceRenderQuality();
   }
   if(section==="prediction"&&taskWorkspace&&detail)loadHistory($("store").value,day);
+  window.SushiWaitResearch?.notify();
   if(section==="analysis")graphs();
   if(taskWorkspace&&changed&&typeof window.requestAnimationFrame==='function')window.requestAnimationFrame(()=>{
     if(engineeringSection===section)window.scrollTo({top:workspaceSectionScroll.get(section)||0,behavior:'instant'});
@@ -382,27 +386,68 @@ function loadHistory(store,date){
     if(historyCache.get(key)===entry&&day===date&&$("store").value===store)renderPrediction();
   })();
 }
-const predictionReasons={unsupported_queue:"仅支持堂食或预约队列；请切换展示队列。",today_only:"实验预测只用于今天的号码；历史日期可查看统计曲线。",scope_mismatch:"门店或数据语义不匹配，暂不计算。",invalid_projection:"观测格式或数量超出支持范围。",confirm_ticket_scope:"请确认这是今天在所选门店与队列取得的号码。",numeric_ticket_required:"请输入最多七位的纯数字号码，保留原有前导零。",issue_time_required:"请填写今天实际取号的时间，不能使用未来时间。",future_or_invalid_clock:"观测时间或本机时钟异常，暂不计算。",awaiting_post_issue_sample:"等待取号之后的新观测。",ticket_cycle_uncertain:"参考曾倒退或重置，无法确认这个号码属于当前轮次。",reference_at_or_beyond_ticket:"参考已到达或越过这个号码，请核对官方号单；这里不能确认已叫号或过号。",no_current_sample:"最新观测失败、暂停或没有有效号码，暂不计算。",stale_sample:"观测已超过90秒，暂停预测并等待新数据。",sampling_density_unsupported:"近期采样密度超出实验支持范围。",insufficient_positive_trend:"需要至少六个有效观测点、五分钟的连续推进；低频采样暂不足以计算精细等待。",sampling_continuity_unavailable:"这些观测之间的采集连续性尚未确认，暂不连接成等待时间趋势。",forecast_horizon_unsupported:"推进过慢或预测已超出有效时限，暂不计算。"};
+const predictionReasons={insufficient_sparse_trend:"正在积累历史与实时趋势，暂时无法给出时间。",awaiting_arrival_evidence:"显示号码已接近，等待完整的到号判定证据。",median_upper_unknown:"历史记录的较晚端还不确定，等待新观测。",unsupported_queue:"仅支持堂食或预约队列；请切换展示队列。",today_only:"实验预测只用于今天的号码；历史日期可查看统计曲线。",scope_mismatch:"门店或数据语义不匹配，暂不计算。",invalid_projection:"观测格式或数量超出支持范围。",confirm_ticket_scope:"请确认这是今天在所选门店与队列取得的号码。",numeric_ticket_required:"请输入最多七位的纯数字号码，保留原有前导零。",issue_time_required:"请填写今天实际取号的时间，不能使用未来时间。",future_or_invalid_clock:"观测时间或本机时钟异常，暂不计算。",awaiting_post_issue_sample:"等待取号之后的新观测。",ticket_cycle_uncertain:"参考曾倒退或重置，无法确认这个号码属于当前轮次。",reference_at_or_beyond_ticket:"参考已到达或越过这个号码，请核对官方号单；这里不能确认已叫号或过号。",no_current_sample:"最新观测失败、暂停或没有有效号码，暂不计算。",stale_sample:"数据已超过当前采样周期，暂停预测并等待新观测。",sampling_density_unsupported:"近期采样密度超出实验支持范围。",insufficient_positive_trend:"需要至少六个有效观测点、五分钟的连续推进；低频采样暂不足以计算精细等待。",sampling_continuity_unavailable:"这些观测之间的采集连续性尚未确认，暂不连接成等待时间趋势。",forecast_horizon_unsupported:"推进过慢或预测已超出有效时限，暂不计算。"};
+let latestReferenceResult=null;
+const trackingStorageKey='sushiwait.ticket-tracking.v1';
+let publicAdvice=null,publicAdviceReading=false,publicAdviceScope=null;
+function privateTrackingScope(){return {source:referenceSource,date:day,store:$('store').value,queue:$('queue').value};}
+function restoreTrackingInputs(){
+ if($('ticket-number').value)return;
+ try{const raw=window.localStorage?.getItem(trackingStorageKey);if(!raw||raw.length>4096)return;const v=JSON.parse(raw),scope=privateTrackingScope();
+  if(v.schema_version!==1||v.date!==today()||Object.keys(scope).some(k=>v[k]!==scope[k])||!/^\d{1,7}$/.test(v.number)||Number(v.number)<1||!/^\d{2}:\d{2}$/.test(v.issued)||!['unknown','yes','no'].includes(v.checkin))return;
+  $('ticket-number').value=v.number;$('ticket-issued').value=v.issued;$('ticket-checkin').value=v.checkin;$('ticket-scope').checked=true;ticketScopeKey=scopeKey();
+ }catch(_){/* Storage may be unavailable; the current page still tracks. */}
+}
+function saveTrackingInputs(options){
+ if(!options.confirmedScope||!/^\d{1,7}$/.test(options.ticket)||Number(options.ticket)<1||!options.issuedAt||Date.parse(options.issuedAt)>options.now||day!==today())return;
+ try{window.localStorage?.setItem(trackingStorageKey,JSON.stringify({schema_version:1,...privateTrackingScope(),number:options.ticket,issued:$('ticket-issued').value,checkin:$('ticket-checkin').value}));}catch(_){}
+}
+function loadPublicAdvice(){
+ const key=JSON.stringify([referenceSource,day,$('store').value,detail?.points?.at(-1)?.queue_received_at,Math.floor(Date.now()/30000)]);
+ if(publicAdviceReading||key===publicAdviceScope)return;publicAdviceScope=key;publicAdviceReading=true;
+ get('/model-advice.json').then(v=>{if(v?.schema_version===1&&v.policy==='public_display_scenarios_v1')publicAdvice=v;else publicAdvice=null;})
+  .catch(()=>{publicAdvice=null;}).finally(()=>{publicAdviceReading=false;if(publicAdviceScope===key)renderPrediction();});
+}
+function selectedAdvice(options){
+ if($('prediction-mode').value==='algorithm')return null;
+ const models=publicAdvice?.stores?.[options.storeId]?.[options.queueType];if(!models)return null;
+ const mode=$('prediction-mode').value;return mode==='auto'?(models.nonthinking?.advice||models.thinking?.advice||null):models[mode]?.advice||null;
+}
+function renderTrackingPrecaution(options,result,arrived){
+ const el=$('ticket-precaution');let message='';
+ if(arrived?.available)message=arrived.state==='arrived'?'号码已经进入前两位，请准备就餐。':'展示的三个号码均已越过你的号码，按约定判定已到号。';
+ else if(arrived?.state==='upcoming')message='号码已进入第3位，即将到号。';
+ else if(result?.acceleration_signal)message='号码推进突然加快，预计时间可能提前。';
+ else if(result?.available&&options.desiredArrivalAt&&Date.parse(result.scenario_earliest)<Date.parse(options.desiredArrivalAt))message='较早情景早于计划到店时间，建议提前到场。';
+ el.hidden=!message;if(el.textContent!==message)el.textContent=message;el.dataset.state=message?'attention':'tracking';
+}
 function renderPrediction(){
+  restoreTrackingInputs();
+  latestReferenceResult=null;
+  if(window.SushiWaitResearch?.workflow){window.SushiWaitResearch.notify();return;}
+  window.SushiWaitResearch?.notify();
   if(taskWorkspace&&workspaceState.readError){$("prediction").textContent="归档读取失败，参考预测与风险判断已暂停。";$("prediction-note").textContent="保留的快照只供查阅，不能当作新响应。";$("ticket-precaution").hidden=true;return;}
   const issued=$("ticket-issued").value,ms=/^\d{2}:\d{2}$/.test(issued)?Date.parse(`${day}T${issued}:00+08:00`):NaN;
   const arrival=$("ticket-arrival").value,arrivalAt=/^\d{2}:\d{2}$/.test(arrival)?`${day}T${arrival}:00+08:00`:arrival?"invalid":null;
   const offset=$("ticket-offset").value;
-  const options={source:referenceSource,storeId:$("store").value,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value],ticket:$("ticket-number").value,issuedAt:Number.isFinite(ms)?new Date(ms).toISOString():null,now:Date.now(),confirmedScope:$("ticket-scope").checked&&ticketScopeKey===scopeKey(),desiredArrivalAt:arrivalAt,callOffsetMinutes:/^-?\d{1,3}$/.test(offset)?Number(offset):NaN,readPending:detailLoading};
+  const options={source:referenceSource,storeId:$("store").value,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value],ticket:$("ticket-number").value,issuedAt:Number.isFinite(ms)?new Date(ms).toISOString():null,now:Date.now(),confirmedScope:$("ticket-scope").checked&&ticketScopeKey===scopeKey(),desiredArrivalAt:arrivalAt,callOffsetMinutes:/^-?\d{1,3}$/.test(offset)?Number(offset):NaN,readPending:detailLoading,samplingSeconds:engineeringPollingSeconds,checkedIn:$('ticket-checkin').value==='unknown'?null:$('ticket-checkin').value==='yes'};
+  saveTrackingInputs(options);$('ticket-tracking-state').textContent=options.confirmedScope&&options.issuedAt?'自动跟踪中':'尚未开始跟踪';$('prediction-ai').textContent='';
   $("prediction-note").textContent="";
-  if(!$("ticket-number").value){renderPrecaution(options);$("prediction").textContent="输入号码、取号时间并确认门店与队列后计算。";return;}
+  if(!$("ticket-number").value){loadPublicAdvice();renderPrecaution(options);$("prediction").textContent="输入号码、取号时间并确认门店与队列后计算。";return;}
   if(!detail){renderPrecaution(options);$("prediction").textContent="正在等待所选门店的新观测；旧结果已暂停。";return;}
   if(!window.SushiWaitReference){renderPrecaution(options);$("prediction").textContent="实验计算模块未加载，暂不计算。";return;}
-  const entry=historyCache.get(`${referenceSource}|${$("store").value}|${day}`),compute=window.SushiWaitReference.forecastWithHistory||window.SushiWaitReference.forecast;
-  const result=compute(detail,options,entry?.days||[]);
-  const precaution=renderPrecaution(options,result);
-  if(precaution&&["number_displayed","previously_displayed_now_absent","reference_at_or_beyond_ticket"].includes(precaution.reason)){
-    $("prediction").textContent="当前展示涉及你的号码，等待时间参考已暂停；请先核对官方号单。";return;
-  }
+  const entry=historyCache.get(`${referenceSource}|${$("store").value}|${day}`),compute=window.SushiWaitReference.trackedForecast||window.SushiWaitReference.forecastWithHistory||window.SushiWaitReference.forecast;
+  const arrived=window.SushiWaitReference.arrival?.(detail,options);
+  if(arrived?.available){renderTrackingPrecaution(options,null,arrived);$('ticket-tracking-state').textContent=arrived.state==='arrived'?'已到号':'推定已到号';
+   $('prediction').textContent=`${arrived.state==='arrived'?'号码进入前两位':'三位展示号码已全部越过'}，首次检测 ${estimateTime(arrived.detected_at)}。`;
+   $('prediction-note').textContent=`本次等待约 ${arrived.wait_lower_minutes.toFixed(1)}—${arrived.wait_upper_minutes.toFixed(1)} 分钟。`;return;}
+  loadPublicAdvice();const result=compute(detail,options,entry?.days||[],selectedAdvice(options));latestReferenceResult=result;
+  renderTrackingPrecaution(options,result,arrived);
+  $('prediction-ai').textContent=result.ai_participated?`DeepSeek Flash ${result.ai_mode==='thinking'?'思考':'非思考'}已参与本轮计算`:$('prediction-mode').value==='algorithm'?'使用历史与实时算法':publicAdvice?.status==='budget_exhausted'?'本轮模型额度已用完，继续使用算法':'Flash 等待可用的新观测结果，当前使用算法';
   const historyNote=!(result.available||result.history)?"":entry?.state==="loading"?"历史曲线正在加载，现有实时参考先显示。":result.history?.state==="available"?`参考 ${result.history.selected_days} 天的 ${result.history.samples} 段历史；${result.history.cohort==="date_type_all_hours"?"相近时段不足，已采用同日期类型的其他时段。":""}${result.history.right_censored+result.history.boundary_censored?"未观察到目标到达的片段也保留在范围中。":""}`:entry?.failed?"部分历史读取失败，未补成零等待；可手动刷新重试。":"历史样本尚不足，暂以连续实时趋势为依据。";
   if(!result.available){$("prediction").textContent=result.reason==="truncated_current_projection"?"当天投影有截断，暂不计算历史融合。":predictionReasons[result.reason]||"实验资料不足，暂不计算。";$("prediction-note").textContent=historyNote;return;}
   const stage=result.mode==="history_initial"?"历史初估，":result.mode==="history_live_mix"?"历史＋实时修正，":"";
-  $("prediction").textContent=`${stage}参考位置预计在 ${estimateTime(result.reference_time)} 到达；快慢情景 ${estimateTime(result.scenario_earliest)}—${result.scenario_latest?estimateTime(result.scenario_latest):"较晚端尚不确定"}。`;
+  $("prediction").textContent=`${stage}预计 ${estimateTime(result.reference_time)} 到号，范围 ${estimateTime(result.scenario_earliest)}—${result.scenario_latest?estimateTime(result.scenario_latest):"较晚端尚不确定"}。`;
   $("prediction-note").textContent=`最新参考 ${result.reference}；位置差 ${result.position_difference}（不是前方桌数）。依据连续 ${result.continuous_minutes.toFixed(1)} 分钟观测，距最近响应 ${Math.round(result.sample_age_seconds)} 秒。${historyNote}情景范围不是已校准的预测误差。${result.acceleration_signal?"最近一段突然加速，已加入更早到达的情景，请及时核对官方号单。":""}${result.latest_interval_stalled?"最新一段参考未推进，历史速度可能滞后。":""}`;
 }
 async function showDay({quiet=false}={}){
@@ -495,4 +540,8 @@ if(combinedHistory){
   $("record-source").onchange=()=>{recordSource=$("record-source").value;historyCache.clear();resetTicketScope();if(taskWorkspace)workspaceWriteRoute({push:true});showDay().catch(showError);};
   get('/api/v1/statistics/settings').then(value=>{if(value.schema_version===1&&Number.isInteger(value.poll_seconds)&&value.poll_seconds>=30&&value.poll_seconds<=3600&&value.poll_seconds*1000!==pollingMs){clearInterval(pollingTimer);pollingMs=value.poll_seconds*1000;engineeringPollingSeconds=value.poll_seconds;syncEngineeringSelection();pollingTimer=setInterval(refresh,pollingMs);}}).catch(()=>{});
 }
+$('ticket-checkin').onchange=$('prediction-mode').onchange=renderPrediction;
+$('ticket-clear').onclick=()=>{try{window.localStorage?.removeItem(trackingStorageKey);}catch(_){}$('ticket-number').value='';$('ticket-issued').value='';$('ticket-scope').checked=false;ticketScopeKey=null;$('ticket-tracking-state').textContent='尚未开始跟踪';renderPrediction();};
 setInterval(renderPrediction,15000);
+
+window.SushiWaitResearch?.attach({getState:()=>({section:engineeringSection,source:referenceSource,day,storeId:$("store").value,storeName:index.store_names[$("store").value]||$("store").value,storeNames:index.store_names,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value],mode:$("prediction-mode").value,number:$("ticket-number").value,issued:$("ticket-issued").value,checkedIn:$("ticket-checkin").value,confirmed:$("ticket-scope").checked&&ticketScopeKey===scopeKey(),detail,samplingSeconds:engineeringPollingSeconds,result:latestReferenceResult,advice:selectedAdvice({storeId:$("store").value,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value]})}),today,render:renderPrediction,navigate:selectEngineeringSection,history:()=>historyCache.get(`${referenceSource}|${$("store").value}|${day}`)?.days||[],index:()=>index,cityById:workspaceCityById});

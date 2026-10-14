@@ -282,7 +282,177 @@
     return {policy: POLICY, target_semantics: "first_display_position_reaches_target", actual_call_verified: false,
       calibration_for_actual_wait: false, offset_positions: offset, stride_points: stride, cases};
   }
-  const api = {POLICY, HISTORY_POLICY, forecast, forecastWithHistory, replay};
+  const ARRIVAL_POLICY = 'display_top_two_or_all_three_passed_v2';
+  function displayState(ticket, labels) {
+    const target = number(ticket);
+    if (target === null || target < 1) return 'unsupported_ticket';
+    if (!Array.isArray(labels) || labels.length > 3 || labels.some(v => number(v) === null || number(v) < 1)) return 'unavailable';
+    if (!labels.length) return 'empty_display';
+    const values = labels.map(number);
+    if (values.slice(0, 2).includes(target)) return 'display_top_two';
+    if (values.length === 3 && values.every(v => v > target)) return 'display_all_three_passed';
+    return values.includes(target) ? 'display_third' : 'not_reached';
+  }
+  function arrivalScope(detail, options) {
+    const field = FIELDS[options?.queueType], source = requestedSource(options), target = number(options?.ticket), issued = stamp(options?.issuedAt);
+    if (!field) return {reason:'unsupported_queue'};
+    if (!Number.isFinite(options?.now)) return {reason:'future_or_invalid_clock'};
+    if (!options?.confirmedScope) return {reason:'confirm_ticket_scope'};
+    if (target === null || target < 1) return {reason:'numeric_ticket_required'};
+    if (!Number.isFinite(issued) || issued > options.now || localDay(issued) !== detail?.local_date) return {reason:'issue_time_required'};
+    if (!sourceMatches(detail, source) || detail?.daily_schema_version !== 1 || detail.requested_store_id !== options.storeId ||
+        detail.network_performed_by_read !== false || detail.graph_truncated !== false || !Array.isArray(detail.points) || detail.points.length > MAX_POINTS) return {reason:'scope_mismatch'};
+    const generated = stamp(detail.generated_at);
+    if (!Number.isFinite(generated) || generated > options.now) return {reason:'future_or_invalid_clock'};
+    return {field, source, target, issued, generated};
+  }
+  function arrivalPoint(row, context, day) {
+    const at = stamp(row?.queue_received_at), started = stamp(row?.request_started_at), labels = row?.queues?.[context.field];
+    if (!Number.isFinite(at) || !Number.isFinite(started) || started > at || at > context.generated || localDay(at) !== day ||
+        row?.pair_ok !== true || row.scheduled_pause !== false || row.error_codes && Object.keys(row.error_codes).length ||
+        context.source === OFFICIAL && (row.success_semantics !== SINGLE || row.queue_field_presence?.[context.field] !== 'present') ||
+        !Array.isArray(labels) || !labels.length || labels.length > 3 || labels.some(v => number(v) === null || number(v) < 1)) return null;
+    return {at, position:number(labels[0]), labels, row};
+  }
+  function arrivalConnected(a, b, maxGap) {
+    if (!(b.at > a.at && b.at-a.at <= maxGap)) return false;
+    if(b.position<a.position&&!(a.labels.length===3&&b.labels.length===3&&Math.max(...b.labels.map(number))>=Math.min(...a.labels.map(number))))return false;
+    const link = b.row.continuity, before = a.row.continuity;
+    if (link || before) return Boolean(link?.writer_id && link.writer_id === before?.writer_id &&
+      link.predecessor_writer_id === before.writer_id && link.predecessor_id === a.row.observation_id);
+    return b.row.comparison_state === 'comparable_display_sets';
+  }
+  function arrival(detail, options) {
+    const c = arrivalScope(detail, options);
+    if (c.reason) return {policy:ARRIVAL_POLICY, available:false, state:'invalid', reason:c.reason};
+    let previous=null, negative=null, suspended=false, result={policy:ARRIVAL_POLICY, available:false, state:'waiting', quality_flags:[]};
+    const flags=new Set();
+    for (const row of detail.points) {
+      const p=arrivalPoint(row,c,detail.local_date);
+      if (p && p.at < c.issued) continue;
+      if (!p) {negative=null;flags.add('observation_gap');result.state='awaiting_observation';continue;}
+      if (previous && !arrivalConnected(previous,p,660000)) {negative=null;flags.add('sampling_boundary');}
+      if (previous && p.position < previous.position) {
+        const backfill=previous.labels.length===3&&p.labels.length===3&&Math.max(...p.labels.map(number))>=Math.min(...previous.labels.map(number));
+        if(backfill)flags.add('display_position_backfill');
+        else{negative=null;suspended=true;flags.add('number_reversal');}
+      }
+      previous=p;
+      const state=displayState(options.ticket,p.labels);
+      if (state==='display_top_two' || state==='display_all_three_passed' && !suspended) {
+        const lower=negative?.at??c.issued;
+        if (!negative) flags.add('no_adjacent_before_arrival_sample');
+        return {policy:ARRIVAL_POLICY, available:true, state:state==='display_top_two'?'arrived':'inferred_arrived',
+          label_kind:state, detected_at:new Date(p.at).toISOString(), lower_at:new Date(lower).toISOString(),
+          upper_at:new Date(p.at).toISOString(), wait_lower_minutes:(lower-c.issued)/60000,
+          wait_upper_minutes:(p.at-c.issued)/60000, display_numbers:p.labels.slice(),
+          observation_id:row.observation_id??null, checked_in_reported:options.checkedIn??null,
+          actual_call_verified:false, quality_flags:[...flags]};
+      }
+      result.state=suspended?'number_cycle_uncertain':state==='display_third'?'upcoming':'waiting';
+      result.sample_at=new Date(p.at).toISOString();
+      if (!suspended) negative=p;
+    }
+    result.quality_flags=[...flags];return result;
+  }
+  function trackedForecast(detail, options, days=[], advice=null) {
+    const c=arrivalScope(detail,options), arrived=arrival(detail,options);
+    if (c.reason) return unavailable(c.reason);
+    if (arrived.available) return {available:false, reason:'arrival_complete', arrival:arrived};
+    if (localDay(options.now)!==detail.local_date) return unavailable('today_only');
+    if (arrived.state==='number_cycle_uncertain') return unavailable('ticket_cycle_uncertain');
+    let segment=[],last=null;
+    for(const row of detail.points){const p=arrivalPoint(row,c,detail.local_date);if(!p){segment=[];last=null;continue;}
+      if(last&&!arrivalConnected(last,p,660000))segment=[];segment.push(p);last=p;}
+    if(!last)return unavailable('no_current_sample');
+    const cadence=Number.isInteger(options.samplingSeconds)?Math.max(180,Math.min(600,options.samplingSeconds)):600;
+    const maxAge=(cadence+60)*1000,age=options.now-last.at;
+    if(age<0||age>maxAge)return unavailable('stale_sample',{sample_at:new Date(last.at).toISOString()});
+    const gap=c.target-last.position;
+    if(gap<=0)return unavailable('awaiting_arrival_evidence');
+    segment=segment.filter(p=>p.at>=last.at-3600000);
+    if(segment.length>128)return unavailable('sampling_density_unsupported');
+    const rates=[];
+    for(const windowMinutes of [30,60]){const rows=segment.filter(p=>p.at>=last.at-windowMinutes*60000);
+      if(rows.length<4||rows.at(-1).at-rows[0].at<900000)continue;
+      const robust=slope(rows),end=(rows.at(-1).position-rows[0].position)*60000/(rows.at(-1).at-rows[0].at);
+      if(robust>0)rates.push(robust);if(end>0)rates.push(end);}
+    const lastRate=segment.length>1?(last.position-segment.at(-2).position)*60000/(last.at-segment.at(-2).at):0;
+    const stable=rates.length?median(rates):null;
+    const live=stable?{steady:stable,fast:Math.max(...rates,lastRate),slow:Math.min(...rates)}:{};
+    // Reconstruct fixed historical origins with the same arrival rule and preserve censoring.
+    const samples=[],acceptedDays=new Set();
+    for(const past of Array.isArray(days)?days.slice(0,7):[]){
+      if(past?.local_date>=detail.local_date||past?.requested_store_id!==options.storeId||!sourceMatches(past,c.source)||past.graph_truncated!==false||!Array.isArray(past.points)||past.points.length>MAX_POINTS)continue;
+      const generated=stamp(past.generated_at);if(!Number.isFinite(generated)||generated>options.now)continue;
+      const pc={...c,generated},buckets=new Set(),sameClass=calendarClass(past).type===calendarClass(detail).type;
+      if(!sameClass)continue;
+      for(let i=0;i<past.points.length;i++){const start=arrivalPoint(past.points[i],pc,past.local_date);if(!start)continue;
+        const bucket=Math.floor(minuteOfDay(start.at)/60);if(buckets.has(bucket))continue;buckets.add(bucket);
+        if(Math.abs(minuteOfDay(start.at)-minuteOfDay(last.at))>120)continue;
+        const target=String(start.position+gap);let prior=start,lower=0,upper=null;
+        for(const row of past.points.slice(i+1)){const next=arrivalPoint(row,pc,past.local_date);
+          if(!next||!arrivalConnected(prior,next,660000)||next.at-start.at>7200000)break;
+          if(['display_top_two','display_all_three_passed'].includes(displayState(target,next.labels))){upper=(next.at-start.at)/60000;break;}
+          prior=next;lower=(next.at-start.at)/60000;}
+        samples.push({day:past.local_date,lower,upper});acceptedDays.add(past.local_date);
+      }
+    }
+    const useHistory=acceptedDays.size>=2&&samples.length>=3;
+    const available={history:useHistory,steady:Boolean(live.steady),fast:Boolean(live.fast),slow:Boolean(live.slow)};
+    if(!Object.values(available).some(Boolean))return unavailable('insufficient_sparse_trend');
+    const sinceIssue=segment.filter(p=>p.at>=c.issued),span=sinceIssue.length?(last.at-sinceIssue[0].at)/60000:0;
+    const liveShare=stable?useHistory?Math.min(.85,Math.max(.15,span*.85/30)):1:0;
+    let weights={history:useHistory?1-liveShare:0,steady:liveShare*.6,fast:liveShare*.25,slow:liveShare*.15};
+    const validAdvice=advice?.schema_version===1&&advice.policy==='public_display_scenarios_v1'&&advice.source===c.source&&
+      advice.store_id===options.storeId&&advice.queue_type===options.queueType&&advice.local_date===detail.local_date&&
+      stamp(advice.sample_at)===last.at&&stamp(advice.expires_at)>options.now&&stamp(advice.generated_at)<=options.now&&
+      ['thinking','nonthinking'].includes(advice.thinking_mode)&&advice.model==='deepseek-flash'&&
+      advice.weights_ppm&&Object.keys(advice.weights_ppm).sort().join(',')==='fast,history,slow,steady'&&
+      Object.values(advice.weights_ppm).every(v=>Number.isInteger(v)&&v>=0&&v<=1000000)&&Object.values(advice.weights_ppm).reduce((a,b)=>a+b,0)===1000000;
+    if(validAdvice){let total=0;for(const key of Object.keys(weights)){weights[key]=available[key]?weights[key]*.7+advice.weights_ppm[key]/1000000*.3:0;total+=weights[key];}
+      if(total>0)for(const key of Object.keys(weights))weights[key]/=total;}
+    const distribution=[];
+    if(useHistory){const counts=new Map();samples.forEach(s=>counts.set(s.day,(counts.get(s.day)||0)+1));
+      samples.forEach(s=>distribution.push({...s,weight:weights.history/(acceptedDays.size*counts.get(s.day))}));}
+    for(const key of ['steady','fast','slow'])if(live[key]){const minutes=gap/live[key];distribution.push({lower:Math.max(0,Math.min(120,minutes-cadence/60)),upper:minutes>120?null:minutes+cadence/60,weight:weights[key]});}
+    const total=distribution.reduce((n,s)=>n+s.weight,0);if(total<=0)return unavailable('forecast_horizon_unsupported');
+    distribution.forEach(s=>s.weight/=total);
+    const lower=endpointQuantile(distribution,'lower',.1),upper=endpointQuantile(distribution,'upper',.9),ml=endpointQuantile(distribution,'lower',.5),mu=endpointQuantile(distribution,'upper',.5);
+    if(mu===null)return unavailable('median_upper_unknown');
+    const central=(ml+mu)/2,reference=last.at+central*60000;
+    if(central>120||reference<=options.now)return unavailable('forecast_horizon_unsupported');
+    return {policy:'display_arrival_history_live_v4',available:true,eta_available:false,actual_call_verified:false,
+      calibrated_interval:false,mode:stable?useHistory?'history_live_mix':'recent_only':'history_initial',
+      reference_time:new Date(reference).toISOString(),scenario_earliest:new Date(Math.max(options.now,last.at+lower*60000)).toISOString(),
+      scenario_latest:upper===null?null:new Date(last.at+upper*60000).toISOString(),sample_at:new Date(last.at).toISOString(),sample_age_seconds:age/1000,
+      reference:last.position,position_difference:gap,sample_count:segment.length,continuous_minutes:segment.length?(last.at-segment[0].at)/60000:0,
+      acceleration_signal:Boolean(stable&&lastRate>Math.max(20,stable*3)),latest_interval_stalled:segment.length>1&&lastRate===0,
+      history:{state:useHistory?'available':'insufficient_history',selected_days:acceptedDays.size,samples:samples.length},
+      ai_participated:Boolean(validAdvice),ai_mode:validAdvice?advice.thinking_mode:null,weights,arrival:arrived};
+  }
+  function storeWait(detail, options, cohort, advice=null) {
+    const field=FIELDS[options?.queueType],source=requestedSource(options);
+    if(!field||!sourceMatches(detail,source)||detail.requested_store_id!==options.storeId||!Array.isArray(detail.points)||detail.points.length>MAX_POINTS||detail.graph_truncated!==false)return unavailable('scope_mismatch');
+    if(!Number.isFinite(options.now)||localDay(options.now)!==detail.local_date)return unavailable('today_only');
+    if(!cohort||!Number.isInteger(cohort.sample_count)||cohort.sample_count<5||cohort.distinct_days<2)return unavailable('waiting_for_test_cohort');
+    const numbers=['median_lower','median_upper','early_lower','late_upper'].map(k=>cohort[k]);
+    if(numbers.some(n=>!Number.isFinite(n)||n<0||n>720)||cohort.median_lower>cohort.median_upper||cohort.early_lower>cohort.late_upper)return unavailable('invalid_wait_cohort');
+    const context={field,source,generated:stamp(detail.generated_at)};let segment=[],last=null;
+    for(const row of detail.points){const p=arrivalPoint(row,context,detail.local_date);if(!p){segment=[];last=null;continue;}if(last&&!arrivalConnected(last,p,660000))segment=[];segment.push(p);last=p;}
+    if(!last||options.now-last.at<0||options.now-last.at>((options.samplingSeconds||600)+60)*1000)return unavailable('no_current_sample');
+    segment=segment.filter(p=>p.at>=last.at-3600000);const recent=segment.filter(p=>p.at>=last.at-1800000);
+    const rate=recent.length>=4&&last.at-recent[0].at>=900000?slope(recent):null;
+    const ratio=rate>0&&cohort.issue_rate_median>0?Math.max(.5,Math.min(2,cohort.issue_rate_median/rate)):1;
+    let weights={history:rate>0?.4:1,steady:rate>0?.4:0,fast:rate>0?.15:0,slow:rate>0?.05:0};
+    const valid=advice?.source===source&&advice.store_id===options.storeId&&advice.queue_type===options.queueType&&stamp(advice.sample_at)===last.at&&stamp(advice.expires_at)>options.now&&stamp(advice.generated_at)<=options.now&&advice.model==='deepseek-flash'&&advice.policy==='public_display_scenarios_v1'&&advice.weights_ppm&&Object.keys(advice.weights_ppm).sort().join(',')==='fast,history,slow,steady'&&Object.values(advice.weights_ppm).every(v=>Number.isInteger(v)&&v>=0)&&Object.values(advice.weights_ppm).reduce((a,b)=>a+b,0)===1000000;
+    if(valid&&rate>0)for(const k of Object.keys(weights))weights[k]=weights[k]*.7+advice.weights_ppm[k]/1000000*.3;
+    const factors={history:1,steady:ratio,fast:ratio*.75,slow:ratio*1.25};
+    const center=(cohort.median_lower+cohort.median_upper)/2;
+    const estimate=Object.keys(weights).reduce((n,k)=>n+weights[k]*factors[k]*center,0);
+    return {available:true,policy:'store_wait_test_cohort_v1',wait_minutes:estimate,early_minutes:Math.max(0,cohort.early_lower*Math.min(1,ratio*.75)),late_minutes:cohort.late_upper*Math.max(1,ratio*1.25),sample_count:cohort.sample_count,distinct_days:cohort.distinct_days,ai_participated:Boolean(valid&&rate>0),actual_call_verified:false,calibrated_interval:false,weights,position_known:false};
+  }
+  const api = {POLICY, HISTORY_POLICY, ARRIVAL_POLICY, forecast, forecastWithHistory, replay, displayState, arrival, trackedForecast, storeWait};
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SushiWaitReference = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

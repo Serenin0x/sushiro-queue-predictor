@@ -1,0 +1,11 @@
+[Unit]
+Description=Check SUSHIWAIT short-lived IP certificate twice daily
+
+[Timer]
+OnCalendar=*-*-* 00,12:15:00 UTC
+RandomizedDelaySec=900
+Persistent=true
+Unit=sushiwait-ip-https-renew.service
+
+[Install]
+WantedBy=timers.target

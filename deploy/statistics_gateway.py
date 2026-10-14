@@ -1,7 +1,7 @@
-"""Optional read-only statistics gateway; exposure requires an operator decision.
+"""Public saved statistics and optional owner-scoped ticket research.
 
-Reads configured loopback projections only. No tickets, credentials, writes,
-collector control routes or filesystem downloads are exposed.
+Private POST forms require the exact HTTPS origin. No query credentials,
+collector control, account sessions or filesystem downloads are exposed.
 """
 import argparse
 import asyncio
@@ -11,18 +11,61 @@ import re
 import time
 import json
 import math
+from urllib.parse import parse_qsl
 
 from sushiwait.monitorhub import MonitorHub, read_config
 
 
+class JoinedOfficialViews:
+    """Join disjoint saved archives without widening any packet's scope."""
+    def __init__(self, primary, extra):
+        if set(primary.names) & set(extra.names) or len(primary.names) + len(extra.names) > 5:
+            raise ValueError('official_view_join_scope_invalid')
+        self.views = (primary, extra)
+        self.names = {**primary.names, **extra.names}
+
+    def allowed(self, path):
+        return any(view.allowed(path) for view in self.views)
+
+    def dispatch(self, path):
+        if not re.fullmatch(r'/api/v1/official/months/20[0-9]{2}-(?:0[1-9]|1[0-2])', path):
+            view = next((v for v in self.views if v.allowed(path)), None)
+            return view.dispatch(path) if view else (404, b'Unknown saved route', 'text/plain')
+        rows = []
+        for view in self.views:
+            status, body, mime = view.dispatch(path)
+            if status != 200:
+                return status, body, mime
+            rows.append(json.loads(body))
+        a, b = rows
+        for key in ('source', 'api_profile', 'data_origin', 'month', 'timezone', 'daily_schema_version'):
+            if a[key] != b[key]:
+                return 503, b'Archive scope mismatch', 'text/plain'
+        result = {**a, 'store_names': self.names,
+                  'configured_store_ids': list(self.names),
+                  'unavailable_store_ids': list(dict.fromkeys(a['unavailable_store_ids'] + b['unavailable_store_ids'])),
+                  'days': {day: {**a['days'].get(day, {}), **b['days'].get(day, {})}
+                           for day in sorted(set(a['days']) | set(b['days']))}}
+        return 200, json.dumps(result, ensure_ascii=False, allow_nan=False).encode(), mime
+
+
 class StatisticsGateway:
     def __init__(self, hub, *, official_view=None, calendar_source='crm_remote_v1_1',
-                 refresh_seconds=30, refresh_policy_file=None):
+                 refresh_seconds=30, refresh_policy_file=None, model_advice_file=None,
+                 research_file=None, public_origin='https://124.222.57.236', ocr_enabled=False):
         if (calendar_source not in {'crm_remote_v1_1', 'sapi_miniapp_gateway'}
                 or calendar_source == 'sapi_miniapp_gateway' and official_view is None):
             raise ValueError('calendar_source_requires_configured_view')
         self.hub = hub
         self.official_view = official_view
+        self.model_advice_file = model_advice_file
+        self.research_file = research_file
+        self.public_origin = public_origin
+        self.research_clients = OrderedDict()
+        self.ocr_enabled = ocr_enabled
+        self.ocr_clients = OrderedDict()
+        self.ocr_lock = asyncio.Lock()
+        self.research_lock = asyncio.Lock()
         self.calendar_source = calendar_source
         if type(refresh_seconds) is not int or not 30 <= refresh_seconds <= 3600:
             raise ValueError('statistics_refresh_interval_invalid')
@@ -33,6 +76,12 @@ class StatisticsGateway:
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
 
     def allowed(self, path):
+        if path == '/wait-reference.json':
+            return self.research_file is not None
+        if path in {'/research-ui.js','/screenshot-ui.js'}:
+            return True
+        if path == '/model-advice.json':
+            return True
         if path in {'/statistics-history', '/api/v1/statistics/settings'}:
             return True
         if path.startswith('/api/v1/official/'):
@@ -71,6 +120,134 @@ class StatisticsGateway:
     def polling_seconds(self):
         return self.polling_settings()['poll_seconds']
 
+    async def research_request(self, scope, receive):
+        if (scope['path']=='/api/v1/research/tickets' and self.public_origin.startswith('https:') and scope.get('scheme')!='https'):
+            return 400, b'{"error_code":"https_required"}', 'application/json'
+        if (scope.get('query_string') or scope.get('raw_path', scope['path'].encode()) != scope['path'].encode()
+                or dict(scope.get('headers',[])).get(b'origin',b'').decode() not in
+                   ({self.public_origin, 'http://124.222.57.236:18080'} if scope['path']=='/api/v1/prediction/presence' else {self.public_origin})
+                or dict(scope.get('headers',[])).get(b'content-type',b'').split(b';')[0] != b'application/json'):
+            return 400, b'{"error_code":"invalid_research_request"}', 'application/json'
+        peer = str(scope.get('client', ('unknown',))[0])
+        now = time.monotonic()
+        start, count = self.research_clients.get(peer, (now, 0))
+        if now-start >= 60:
+            start, count = now, 0
+        if count >= 40:
+            return 429, b'{"error_code":"research_rate_limited"}', 'application/json'
+        self.research_clients[peer] = (start, count+1)
+        self.research_clients.move_to_end(peer)
+        while len(self.research_clients)>256:
+            self.research_clients.popitem(last=False)
+        raw = bytearray()
+        for _ in range(16):
+            event = await receive()
+            if event['type'] != 'http.request':
+                raise ValueError('research_request_disconnected')
+            raw.extend(event.get('body',b''))
+            if len(raw)>4096:
+                raise ValueError('research_request_too_large')
+            if not event.get('more_body',False):
+                break
+        else:
+            raise ValueError('research_request_too_many_chunks')
+        from sushiwait.storage import _unique_object
+        value = json.loads(raw, object_pairs_hook=_unique_object)
+        if type(value) is not dict or type(value.get('schema_version')) is not int or value['schema_version'] != 1:
+            raise ValueError('invalid_research_request')
+        from sushiwait.ticketresearch import TicketResearch
+        def process():
+            research = TicketResearch(self.research_file)
+            try:
+                if scope['path']=='/api/v1/prediction/presence':
+                    return research.presence({k:v for k,v in value.items() if k!='schema_version'})
+                if value.get('action')=='submit' and set(value)=={'schema_version','action','record_id','owner_secret','ticket'}:
+                    saved = research.submit(value['record_id'],value['owner_secret'],value['ticket'])
+                    def read_day(store, date):
+                        if self.official_view is None:
+                            raise ValueError('official_view_not_configured')
+                        status, body, _ = self.official_view.dispatch(f'/api/v1/official/stores/{store}/days/{date}')
+                        if status != 200:
+                            raise ValueError('saved_archive_unavailable')
+                        return json.loads(body)
+                    research.update_labels(read_day, record_id=value['record_id'])
+                    return saved
+                if value.get('action')=='list' and set(value)=={'schema_version','action','owner_secret'}:
+                    return {'records':research.own_records(value['owner_secret'])}
+                raise ValueError('invalid_research_action')
+            finally:
+                research.close()
+        async with self.research_lock:
+            result = await asyncio.to_thread(process)
+        return 200, json.dumps(result,ensure_ascii=False,allow_nan=False).encode(), 'application/json'
+
+    @staticmethod
+    def supports_query(path, query):
+        """Accept only the engineering page's public selection bookmark.
+
+        Selection stays in browser code. It never changes a projection route,
+        source request, cache key, file path, or model invocation.
+        """
+        if not query:
+            return True
+        if path != '/statistics-legacy' or len(query) > 1024:
+            return False
+        try:
+            pairs = parse_qsl(query.decode('ascii'), keep_blank_values=True,
+                             strict_parsing=True, errors='strict', max_num_fields=6)
+            if len(dict(pairs)) != len(pairs):
+                return False
+            for key, value in pairs:
+                if key == 'section':
+                    valid = value in {'overview', 'analysis', 'quality', 'prediction', 'experience', 'tickets'}
+                elif key == 'date':
+                    valid = bool(re.fullmatch(r'20[0-9]{2}-[0-9]{2}-[0-9]{2}', value))
+                    if valid:
+                        datetime.strptime(value, '%Y-%m-%d')
+                elif key == 'store':
+                    valid = bool(re.fullmatch(r'[1-9][0-9]{0,9}', value))
+                elif key == 'city':
+                    valid = value == 'all' or bool(re.fullmatch(r'[\u4e00-\u9fff]{1,16}', value))
+                elif key == 'queue':
+                    valid = value in {'mixedQueue', 'reservationQueue'}
+                elif key == 'source':
+                    valid = value in {'crm_remote_v1_1', 'sapi_miniapp_gateway'}
+                else:
+                    return False
+                if not valid:
+                    return False
+            return bool(pairs)
+        except (ValueError, UnicodeError):
+            return False
+
+    async def screenshot_request(self, scope, receive):
+        headers = dict(scope.get('headers', []))
+        if (scope.get('scheme')!='https' or headers.get(b'origin', b'').decode()!=self.public_origin
+                or scope.get('query_string') or scope.get('raw_path',scope['path'].encode())!=scope['path'].encode()
+                or headers.get(b'content-type') not in {b'image/png',b'image/jpeg'}):
+            return 400, b'{"error_code":"invalid_screenshot_request"}', 'application/json'
+        peer=str(scope.get('client', ('unknown',))[0]);now=time.monotonic()
+        start,count=self.ocr_clients.get(peer,(now,0))
+        if now-start>=60:start,count=now,0
+        if count>=20 or self.ocr_lock.locked():
+            return 429,b'{"error_code":"screenshot_busy"}','application/json'
+        self.ocr_clients[peer]=(start,count+1);self.ocr_clients.move_to_end(peer)
+        while len(self.ocr_clients)>128:self.ocr_clients.popitem(last=False)
+        from sushiwait.screenshot import MAX_BYTES, recognize
+        raw=bytearray()
+        for _ in range(1024):
+            event=await receive()
+            if event['type']!='http.request':raise ValueError('image_disconnected')
+            raw.extend(event.get('body',b''))
+            if len(raw)>MAX_BYTES:raise ValueError('image_size_unsupported')
+            if not event.get('more_body',False):break
+        else:raise ValueError('image_chunks_unsupported')
+        names={**self.hub.names,**(self.official_view.names if self.official_view else {})}
+        from pathlib import Path
+        async with self.ocr_lock:
+            value=await asyncio.to_thread(recognize,bytes(raw),names,directory=Path(self.research_file).parent)
+        return 200,json.dumps(value,ensure_ascii=False).encode(),'application/json'
+
     async def __call__(self, scope, receive, send):
         if scope['type'] == 'lifespan':
             while True:
@@ -83,9 +260,23 @@ class StatisticsGateway:
         if scope['type'] != 'http':
             return
         path = scope['path']
-        if scope['method'] != 'GET':
+        if scope['method']=='POST' and path=='/api/v1/research/screenshots/recognize' and self.ocr_enabled and self.research_file is not None:
+            try:
+                status,body,mime=await asyncio.wait_for(self.screenshot_request(scope,receive),timeout=30)
+            except Exception:
+                status,body,mime=400,b'{"error_code":"screenshot_not_recognized"}','application/json'
+        elif (scope['method']=='POST' and self.research_file is not None
+                and path in {'/api/v1/research/tickets','/api/v1/prediction/presence'}):
+            try:
+                if self.deadline is not None and datetime.now(timezone.utc)>=self.deadline:
+                    raise ValueError('trial_deadline_reached')
+                status,body,mime = await asyncio.wait_for(self.research_request(scope,receive),timeout=3)
+            except Exception:
+                status,body,mime = 400,b'{"error_code":"research_request_not_saved"}','application/json'
+        elif scope['method'] != 'GET':
             status, body, mime = 405, b'GET only', 'text/plain; charset=utf-8'
-        elif scope.get('query_string') or scope.get('raw_path', path.encode()) != path.encode():
+        elif (not self.supports_query(path, scope.get('query_string', b''))
+              or scope.get('raw_path', path.encode()) != path.encode()):
             status, body, mime = 400, b'Parameters are not supported', 'text/plain; charset=utf-8'
         elif not self.allowed(path):
             status, body, mime = 404, b'Statistics route not found', 'text/plain; charset=utf-8'
@@ -99,7 +290,25 @@ class StatisticsGateway:
                 if saved and time.monotonic() - saved[0] < 5:
                     _, status, body, mime = saved
                 else:
-                    if path == '/api/v1/statistics/settings':
+                    if path == '/wait-reference.json' and self.research_file:
+                        try:
+                            from sushiwait.ticketresearch import TicketResearch
+                            research = TicketResearch(self.research_file)
+                            try:value=research.public_wait_summary()
+                            finally:research.close()
+                            status,body,mime=200,json.dumps(value).encode(),'application/json'
+                        except Exception:
+                            status,body,mime=503,b'Wait reference unavailable','text/plain'
+                    elif path == '/model-advice.json' and self.model_advice_file:
+                        try:
+                            from sushiwait.credentials import _read_private_file
+                            from sushiwait.modeladvice import public_projection
+                            value = json.loads(_read_private_file(self.model_advice_file))
+                            body = json.dumps(public_projection(value)).encode()
+                            status, mime = 200, 'application/json'
+                        except Exception:
+                            status, body, mime = 503, b'Model advice unavailable', 'text/plain; charset=utf-8'
+                    elif path == '/api/v1/statistics/settings':
                         try:
                             body = json.dumps(self.polling_settings()).encode()
                             status, mime = 200, 'application/json'
@@ -136,7 +345,7 @@ class StatisticsGateway:
         headers = [(b'content-type', mime.encode()), (b'content-length', str(len(body)).encode()),
             (b'cache-control', b'no-store'), (b'x-content-type-options', b'nosniff'),
             (b'referrer-policy', b'no-referrer'),
-            (b'content-security-policy', b"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")]
+            (b'content-security-policy', b"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")]
         if status == 405:
             headers.append((b'allow', b'GET'))
         await send({'type': 'http.response.start', 'status': status, 'headers': headers})
@@ -148,13 +357,18 @@ async def serve(args):
     from sushiwait.officialview import read_config as read_official_config
     hub = MonitorHub(read_config(args.config_file))
     official = read_official_config(args.official_view_file) if args.official_view_file else None
+    if args.extra_official_view_file:
+        if official is None:
+            raise ValueError('primary_official_view_required')
+        official = JoinedOfficialViews(official, read_official_config(args.extra_official_view_file))
     app = StatisticsGateway(hub, official_view=official, calendar_source=args.calendar_source,
-        refresh_seconds=args.refresh_seconds, refresh_policy_file=args.refresh_policy_file)
+        refresh_seconds=args.refresh_seconds, refresh_policy_file=args.refresh_policy_file, model_advice_file=args.model_advice_file,
+        research_file=args.research_file, public_origin=args.public_origin, ocr_enabled=args.ocr_enabled)
     remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds() if app.deadline is not None else None
     if remaining is not None and remaining <= 0:
         raise ValueError('original_trial_deadline_reached')
     server = uvicorn.Server(uvicorn.Config(app, host=args.listen_host, port=args.port,
-        proxy_headers=False, server_header=False, access_log=False,
+        proxy_headers=args.listen_host=='127.0.0.1', forwarded_allow_ips='127.0.0.1', server_header=False, access_log=False,
         limit_concurrency=16, backlog=32, timeout_keep_alive=3))
     async def expire():
         await asyncio.sleep(remaining)
@@ -174,7 +388,12 @@ async def serve(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config-file', required=True)
+    parser.add_argument('--model-advice-file', help='Optional validated public Flash advice copy; never a key file')
+    parser.add_argument('--ocr-enabled', action='store_true', help='Optional private on-server screenshot OCR')
+    parser.add_argument('--public-origin', default='https://124.222.57.236', help='Exact HTTPS origin for private forms')
+    parser.add_argument('--research-file', help='Optional private owner-scoped test database and viewing leases')
     parser.add_argument('--official-view-file', help='Optional private official public-field archive configuration; no credentials')
+    parser.add_argument('--extra-official-view-file', help='Optional disjoint two-store saved archive; no extra upstream access')
     parser.add_argument('--calendar-source', choices=['crm_remote_v1_1', 'sapi_miniapp_gateway'],
         default='crm_remote_v1_1', help='Explicit source for the calendar; official mode requires its view file')
     parser.add_argument('--refresh-seconds', type=int, default=30, help='Saved-statistics refresh cadence, 30–3600 seconds')

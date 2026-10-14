@@ -2,11 +2,42 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 import importlib.util
 from pathlib import Path
+import json
 import unittest
 
 spec = importlib.util.spec_from_file_location('statistics_gateway', Path(__file__).resolve().parents[1] / 'deploy/statistics_gateway.py')
 gateway = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gateway)
+
+
+class JoinedViewTests(unittest.TestCase):
+    def view(self, store):
+        class View:
+            names = {store: 'Synthetic'}
+            def allowed(self, path):
+                return path == '/api/v1/official/months/2026-10' or path == '/api/v1/official/stores/'+store+'/days/2026-10-14'
+            def dispatch(self, path):
+                value = {'source':'sapi_miniapp_gateway','api_profile':'miniapp_gateway','data_origin':'synthetic',
+                         'month':'2026-10','timezone':'Asia/Shanghai','daily_schema_version':1,
+                         'configured_store_ids':[store],'store_names':self.names,'unavailable_store_ids':[],
+                         'days':{'2026-10-14':{store:{'observations':1}}}}
+                return 200, json.dumps(value).encode(), 'application/json'
+        return View()
+
+    def test_disjoint_archives_keep_store_routes_and_merge_month(self):
+        joined = gateway.JoinedOfficialViews(self.view('3014'), self.view('3015'))
+        status, body, _ = joined.dispatch('/api/v1/official/months/2026-10')
+        self.assertEqual(status, 200)
+        self.assertEqual(set(json.loads(body)['days']['2026-10-14']), {'3014','3015'})
+        self.assertTrue(joined.allowed('/api/v1/official/stores/3015/days/2026-10-14'))
+        self.assertEqual(joined.dispatch('/api/v1/official/stores/9999/days/2026-10-14')[0], 404)
+
+    def test_overlapping_scope_and_archive_failure_are_not_hidden(self):
+        with self.assertRaises(ValueError):
+            gateway.JoinedOfficialViews(self.view('3014'), self.view('3014'))
+        extra = self.view('3015'); extra.dispatch = lambda path: (503, b'Unavailable', 'text/plain')
+        joined = gateway.JoinedOfficialViews(self.view('3014'), extra)
+        self.assertEqual(joined.dispatch('/api/v1/official/months/2026-10')[0], 503)
 
 
 class Hub:
@@ -70,6 +101,24 @@ class StatisticsGatewayTests(unittest.TestCase):
     def test_query_and_encoded_route_rejected(self):
         self.assertEqual(self.request(query=b'url=https://example.com')[0]['status'], 400)
         self.assertEqual(self.request(raw=b'/api/v1/%64ays')[0]['status'], 400)
+        self.assertEqual(self.hub.calls, [])
+
+    def test_engineering_bookmark_reload_does_not_forward_query(self):
+        self.hub.dispatch = lambda path: (self.hub.calls.append(path) or
+            (200, b'<div id="sushiwait-reference"></div>', 'text/html'))
+        query = b'section=prediction&date=2026-10-14&city=%E5%8C%97%E4%BA%AC&store=3014&queue=mixedQueue&source=sapi_miniapp_gateway'
+        self.assertEqual(self.request('/statistics-legacy', query=query)[0]['status'], 200)
+        self.assertEqual(self.request('/statistics-legacy', query=b'section=overview&date=2026-10-14')[0]['status'], 200)
+        self.assertEqual(self.hub.calls, ['/statistics-legacy'])
+
+    def test_engineering_bookmark_rejects_private_or_malformed_parameters(self):
+        for query in [b'ticket=4045', b'url=https://example.com', b'section=analysis&section=prediction',
+                      b'section=', b'date=2026-02-30', b'store=../1', b'queue=other', b'source=other',
+                      b'city=%3Cscript%3E', b'city=%FF', b'section=overview&extra=x', b'x'*1025]:
+            with self.subTest(query=query):
+                self.assertEqual(self.request('/statistics-legacy', query=query)[0]['status'], 400)
+        for path in ['/statistics', '/statistics.js', '/api/v1/days', '/model-advice.json']:
+            self.assertEqual(self.request(path, query=b'section=overview')[0]['status'], 400)
         self.assertEqual(self.hub.calls, [])
 
     def test_read_cache_does_not_repeat_worker_reads(self):

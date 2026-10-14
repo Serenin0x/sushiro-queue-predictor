@@ -89,6 +89,13 @@ class DisplayArrivalTests(unittest.TestCase):
             self.assertEqual(result['state'], 'number_cycle_uncertain')
             self.assertIn('number_reversal', result['quality_flags'])
 
+    def test_partial_position_backfill_does_not_suspend_all_three_crossing(self):
+        value = sample([['130','140','145'], ['125','140','146'], ['152','156','160']])
+        result = label(value)
+        self.assertEqual(result['state'], 'inferred_arrived')
+        self.assertIn('display_position_backfill', result['quality_flags'])
+        self.assertNotIn('number_reversal', result['quality_flags'])
+
     def test_exact_match_after_reversal_still_records_display_evidence(self):
         result = label(sample([['140'], ['1'], ['150', '151', '152']]))
         self.assertEqual(result['state'], 'arrived')

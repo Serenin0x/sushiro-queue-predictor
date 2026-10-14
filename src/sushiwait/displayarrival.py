@@ -10,7 +10,7 @@ import re
 
 from .displayreplay import SHANGHAI, _boundary, _iso, _points, _time
 
-POLICY = 'display_top_two_or_all_three_passed_v1'
+POLICY = 'display_top_two_or_all_three_passed_v2'
 
 
 def _number(value):
@@ -93,9 +93,14 @@ def label_ticket_arrival(detail, *, store_id, number, issued_at, queue='ordinary
                 last_negative = None
             # Check this separately: a gap or writer boundary must not hide a reset.
             if point['position'] < previous['position']:
-                flags.add('number_reversal')
-                inferred_suspended = True
-                last_negative = None
+                backfill = (len(point['labels']) == len(previous['labels']) == 3
+                    and max(map(int,point['labels'])) >= min(map(int,previous['labels'])))
+                if backfill:
+                    flags.add('display_position_backfill')
+                else:
+                    flags.add('number_reversal')
+                    inferred_suspended = True
+                    last_negative = None
         previous = point
         direct = state == 'display_top_two'
         passed = state == 'display_all_three_passed' and not inferred_suspended
