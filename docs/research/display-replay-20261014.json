@@ -1,0 +1,343 @@
+{
+  "policy": "sparse_display_shadow_v1",
+  "input_sha256": [
+    {
+      "store_id": "3014",
+      "local_date": "2026-10-12",
+      "sha256": "9c6f818e9c386f72b4a4e60bbeeea73d96a96459b9048c1cecaa8fb7fbdcb595"
+    },
+    {
+      "store_id": "3014",
+      "local_date": "2026-10-13",
+      "sha256": "47dce26ade2e5b908db7f1c06e0b1974a7b5e21f4c9fc44aa6210f7cac35118e"
+    },
+    {
+      "store_id": "3004",
+      "local_date": "2026-10-12",
+      "sha256": "9cb4b0fbea06c07456e1e18b845b3415457b96b3317d1ccef80c91e7c1ec8d30"
+    },
+    {
+      "store_id": "3004",
+      "local_date": "2026-10-13",
+      "sha256": "3247c02807fbc8000fe6d178be5fbd2141fbe3d9394964a77aceaa3c4d5456c6"
+    },
+    {
+      "store_id": "2009",
+      "local_date": "2026-10-12",
+      "sha256": "951c668dc9cd146f8a18f96b02151b4ff12ac607c72f3662ade4018c08c782cf"
+    },
+    {
+      "store_id": "2009",
+      "local_date": "2026-10-13",
+      "sha256": "52e33db19691f1b6fc567fe8ef2655795f5ce2023d41631cc90f1e3bd89afd53"
+    }
+  ],
+  "summary": {
+    "cases": 303,
+    "outcome_states": {
+      "boundary_censored": 117,
+      "sampled_bracket": 186
+    },
+    "paired_cases": 81,
+    "methods": {
+      "endpoint_30": {
+        "available": 121,
+        "unavailable_reasons": {
+          "insufficient_history": 180,
+          "outside_horizon": 2
+        },
+        "paired_mean_bracket_error_lower_minutes": 9.025881699428744,
+        "paired_mean_bracket_error_upper_minutes": 15.102622576369484
+      },
+      "median_30": {
+        "available": 123,
+        "unavailable_reasons": {
+          "insufficient_history": 180
+        },
+        "paired_mean_bracket_error_lower_minutes": 10.711072478344228,
+        "paired_mean_bracket_error_upper_minutes": 16.78003981664475
+      },
+      "median_60": {
+        "available": 190,
+        "unavailable_reasons": {
+          "insufficient_history": 111,
+          "outside_horizon": 2
+        },
+        "paired_mean_bracket_error_lower_minutes": 9.895057806793679,
+        "paired_mean_bracket_error_upper_minutes": 15.944474311199853
+      }
+    }
+  },
+  "actual_call_verified": false,
+  "eta_available": false,
+  "tickets_created": 0,
+  "independent_customers": 0,
+  "days": [
+    {
+      "store_id": "3014",
+      "local_date": "2026-10-12",
+      "sample_count": 47,
+      "invalid_samples": {
+        "empty_display": 19
+      },
+      "summary": {
+        "cases": 60,
+        "outcome_states": {
+          "boundary_censored": 19,
+          "sampled_bracket": 41
+        },
+        "paired_cases": 14,
+        "methods": {
+          "endpoint_30": {
+            "available": 21,
+            "unavailable_reasons": {
+              "insufficient_history": 39
+            },
+            "paired_mean_bracket_error_lower_minutes": 7.888431994137644,
+            "paired_mean_bracket_error_upper_minutes": 16.508639157719944
+          },
+          "median_30": {
+            "available": 21,
+            "unavailable_reasons": {
+              "insufficient_history": 39
+            },
+            "paired_mean_bracket_error_lower_minutes": 7.966374715874904,
+            "paired_mean_bracket_error_upper_minutes": 16.571831853313412
+          },
+          "median_60": {
+            "available": 42,
+            "unavailable_reasons": {
+              "insufficient_history": 18
+            },
+            "paired_mean_bracket_error_lower_minutes": 8.3106296348229,
+            "paired_mean_bracket_error_upper_minutes": 16.984173247557205
+          }
+        }
+      }
+    },
+    {
+      "store_id": "3014",
+      "local_date": "2026-10-13",
+      "sample_count": 76,
+      "invalid_samples": {
+        "empty_display": 15
+      },
+      "summary": {
+        "cases": 69,
+        "outcome_states": {
+          "sampled_bracket": 50,
+          "boundary_censored": 19
+        },
+        "paired_cases": 25,
+        "methods": {
+          "endpoint_30": {
+            "available": 38,
+            "unavailable_reasons": {
+              "insufficient_history": 30,
+              "outside_horizon": 1
+            },
+            "paired_mean_bracket_error_lower_minutes": 8.752090527627784,
+            "paired_mean_bracket_error_upper_minutes": 14.211541702834714
+          },
+          "median_30": {
+            "available": 39,
+            "unavailable_reasons": {
+              "insufficient_history": 30
+            },
+            "paired_mean_bracket_error_lower_minutes": 10.505674505258682,
+            "paired_mean_bracket_error_upper_minutes": 15.900524742074074
+          },
+          "median_60": {
+            "available": 54,
+            "unavailable_reasons": {
+              "insufficient_history": 15
+            },
+            "paired_mean_bracket_error_lower_minutes": 9.628355189711488,
+            "paired_mean_bracket_error_upper_minutes": 14.914435067592313
+          }
+        }
+      }
+    },
+    {
+      "store_id": "3004",
+      "local_date": "2026-10-12",
+      "sample_count": 47,
+      "invalid_samples": {
+        "empty_display": 22
+      },
+      "summary": {
+        "cases": 54,
+        "outcome_states": {
+          "boundary_censored": 13,
+          "sampled_bracket": 41
+        },
+        "paired_cases": 12,
+        "methods": {
+          "endpoint_30": {
+            "available": 18,
+            "unavailable_reasons": {
+              "insufficient_history": 36
+            },
+            "paired_mean_bracket_error_lower_minutes": 2.5397039203076828,
+            "paired_mean_bracket_error_upper_minutes": 11.122363112384445
+          },
+          "median_30": {
+            "available": 18,
+            "unavailable_reasons": {
+              "insufficient_history": 36
+            },
+            "paired_mean_bracket_error_lower_minutes": 2.596931464648088,
+            "paired_mean_bracket_error_upper_minutes": 11.157937688034199
+          },
+          "median_60": {
+            "available": 33,
+            "unavailable_reasons": {
+              "insufficient_history": 21
+            },
+            "paired_mean_bracket_error_lower_minutes": 3.727068811170637,
+            "paired_mean_bracket_error_upper_minutes": 12.427759533542972
+          }
+        }
+      }
+    },
+    {
+      "store_id": "3004",
+      "local_date": "2026-10-13",
+      "sample_count": 76,
+      "invalid_samples": {
+        "empty_display": 16
+      },
+      "summary": {
+        "cases": 66,
+        "outcome_states": {
+          "sampled_bracket": 41,
+          "boundary_censored": 25
+        },
+        "paired_cases": 28,
+        "methods": {
+          "endpoint_30": {
+            "available": 33,
+            "unavailable_reasons": {
+              "insufficient_history": 33
+            },
+            "paired_mean_bracket_error_lower_minutes": 13.131238189476289,
+            "paired_mean_bracket_error_upper_minutes": 17.467414081566357
+          },
+          "median_30": {
+            "available": 33,
+            "unavailable_reasons": {
+              "insufficient_history": 33
+            },
+            "paired_mean_bracket_error_lower_minutes": 16.455821611591368,
+            "paired_mean_bracket_error_upper_minutes": 20.80445188912474
+          },
+          "median_60": {
+            "available": 39,
+            "unavailable_reasons": {
+              "insufficient_history": 27
+            },
+            "paired_mean_bracket_error_lower_minutes": 14.222056521217898,
+            "paired_mean_bracket_error_upper_minutes": 18.472671664556415
+          }
+        }
+      }
+    },
+    {
+      "store_id": "2009",
+      "local_date": "2026-10-12",
+      "sample_count": 47,
+      "invalid_samples": {
+        "empty_display": 35
+      },
+      "summary": {
+        "cases": 27,
+        "outcome_states": {
+          "boundary_censored": 18,
+          "sampled_bracket": 9
+        },
+        "paired_cases": 1,
+        "methods": {
+          "endpoint_30": {
+            "available": 3,
+            "unavailable_reasons": {
+              "insufficient_history": 24
+            },
+            "paired_mean_bracket_error_lower_minutes": 0,
+            "paired_mean_bracket_error_upper_minutes": 7.646629411764705
+          },
+          "median_30": {
+            "available": 3,
+            "unavailable_reasons": {
+              "insufficient_history": 24
+            },
+            "paired_mean_bracket_error_lower_minutes": 0,
+            "paired_mean_bracket_error_upper_minutes": 8.749609439583901
+          },
+          "median_60": {
+            "available": 13,
+            "unavailable_reasons": {
+              "insufficient_history": 12,
+              "outside_horizon": 2
+            },
+            "paired_mean_bracket_error_lower_minutes": 0,
+            "paired_mean_bracket_error_upper_minutes": 10.00024998298595
+          }
+        }
+      }
+    },
+    {
+      "store_id": "2009",
+      "local_date": "2026-10-13",
+      "sample_count": 76,
+      "invalid_samples": {
+        "empty_display": 47
+      },
+      "summary": {
+        "cases": 27,
+        "outcome_states": {
+          "sampled_bracket": 4,
+          "boundary_censored": 23
+        },
+        "paired_cases": 1,
+        "methods": {
+          "endpoint_30": {
+            "available": 8,
+            "unavailable_reasons": {
+              "insufficient_history": 18,
+              "outside_horizon": 1
+            },
+            "paired_mean_bracket_error_lower_minutes": 3.704990196078434,
+            "paired_mean_bracket_error_upper_minutes": 6.7003568627451
+          },
+          "median_30": {
+            "available": 9,
+            "unavailable_reasons": {
+              "insufficient_history": 18
+            },
+            "paired_mean_bracket_error_lower_minutes": 1.4995793918314106,
+            "paired_mean_bracket_error_upper_minutes": 4.494946058498076
+          },
+          "median_60": {
+            "available": 9,
+            "unavailable_reasons": {
+              "insufficient_history": 18
+            },
+            "paired_mean_bracket_error_lower_minutes": 1.4995793918314106,
+            "paired_mean_bracket_error_upper_minutes": 4.494946058498076
+          }
+        }
+      }
+    }
+  ],
+  "existing_dense_realtime_baseline": {
+    "policy": "first_position_experiment_v1",
+    "cases": 303,
+    "available": 0,
+    "reasons": {
+      "insufficient_positive_trend": 63,
+      "sampling_continuity_unavailable": 237,
+      "ticket_cycle_uncertain": 3
+    },
+    "real_tickets_created": 0
+  }
+}

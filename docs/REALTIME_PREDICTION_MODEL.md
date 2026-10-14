@@ -1,5 +1,7 @@
 # 历史初估、实时更新与大模型融合
 
+2026-10-14 E0510新增[低频公共记录回放](SPARSE_DISPLAY_REPLAY.md)：原有等待标签模型继续保留，另用三店两日记录建立无需真实出票的批量趋势对照。303个目标仍只是展示位置代理任务，不能作为真实叫号标签；三个固定基线的误差界、不可计算和删失均公开记录，没有修改线上ETA或启用付费AI。后台取号的可行性与验证分工见[专项研究](AUTO_TICKET_FEASIBILITY.md)。
+
 研究日期：2026-10-08。按用户 R34，输入已有号码后先利用历史资料估计，随后随真实叫号趋势更新，大模型参与状态判断和数值融合。这是整体模型设计，仍待训练与回测；rc46已实现[公共特征与候选分布融合组件](DISTRIBUTION_FUSION.md)，rc47增加[有界DeepSeek适配器](DEEPSEEK_ADAPTER.md)，rc48增加[历史经验候选](HISTORY_FUSION.md)，实时候选、真实模型调用和发布链路待验证，不是已训练模型或准确率承诺。当前认证真实结果为 0，`eta_available=false`。已有研究基线、时间顺序回放、日期和观测工具继续复用，见[预测验收](PREDICTION_EVALUATION.md)、[历史基线](HISTORY_BASELINE.md)、[结果特征](OUTCOME_FEATURES.md)。供应商选择见[模型与费用](LLM_MODEL_CHOICES.md)。
 
 ## 预测什么
