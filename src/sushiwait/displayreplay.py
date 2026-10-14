@@ -72,7 +72,8 @@ def _points(detail, field):
         else:
             position = int(labels[0])
         link = row.get('continuity') or {}
-        result.append(dict(at=at, position=position, reason=reason, id=label_id,
+        result.append(dict(at=at, position=position, labels=list(labels) if reason is None else None,
+                           reason=reason, id=label_id,
                            predecessor=link.get('predecessor_id'), writer=link.get('writer_id'),
                            predecessor_writer=link.get('predecessor_writer_id')))
     return result
