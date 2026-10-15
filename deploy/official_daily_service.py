@@ -30,6 +30,7 @@ def sibling(name):
 
 campaign = sibling('official_cloud_campaign')
 projection = sibling('official_cloud_campaign_sync')
+reauthorization = sibling('official_reauthorization')
 UTC, CHINA = campaign.UTC, campaign.CHINA
 STORES = ['3014', '3004', '2009', '3015', '2001']
 
@@ -123,13 +124,48 @@ def publish_status(root, mode, value):
 
 
 def latched(root):
-    return os.path.lexists(root / 'collection-blocked.json')
+    return reauthorization.active_block(root) is not None
 
 
 def latch(root, code, day):
-    put_once(root / 'collection-blocked.json', encoded({
-        'schema_version': 1, 'at': datetime.now(UTC).isoformat(),
-        'day': day, 'error_code': code, 'automatic_retry': False}))
+    reauthorization.latch(root, code, day, datetime.now(UTC))
+
+
+def accept_reauthorization(root, config, now):
+    """Only new signed owner confirmations may clear a stopped incident."""
+    settings_file = root / 'recovery-settings.json'
+    if not settings_file.exists():
+        return False
+    settings = reauthorization.read(settings_file)
+    if (set(settings) != {'schema_version', 'receipt_directory', 'signing_key_file'}
+            or settings['schema_version'] != 1):
+        raise ValueError('daily_recovery_settings_invalid')
+    receipt_dir, key_file = Path(settings['receipt_directory']), Path(settings['signing_key_file'])
+    if not receipt_dir.is_absolute() or not key_file.is_absolute():
+        raise ValueError('daily_recovery_settings_invalid')
+    key = _read_private_file(key_file)
+    if len(key) != 32:
+        raise ValueError('daily_recovery_key_invalid')
+    block = reauthorization.active_block(root)
+    if not block:
+        return False
+    if not reauthorization.requires_scan(root, block):
+        return False
+    paths = sorted(receipt_dir.glob('*.json'))
+    if len(paths) > 1000:
+        raise ValueError('daily_recovery_receipt_limit')
+    for path in reversed(paths):
+        try:
+            value = reauthorization.read(path)
+            reauthorization.validate_receipt(value, block, key, now)
+        except (ValueError, TypeError, KeyError):
+            continue
+        target = now
+        if now >= window_for(now)[1]:
+            target = now + timedelta(days=1)
+        day, plan = prepare_day(root, config, target)
+        return reauthorization.prepare_recovery(root, day, plan, value, key, now)
+    return False
 
 
 def run_collection(root, config, stopped):
@@ -139,9 +175,21 @@ def run_collection(root, config, stopped):
         start, end = window_for(now)
         day_text = start.date().isoformat()
         if latched(root):
+            try:
+                if accept_reauthorization(root, config, now):
+                    print('{"event":"daily_owner_reauthorization_accepted"}', flush=True)
+                    continue
+            except Exception:
+                print('{"event":"daily_owner_reauthorization_not_accepted"}', flush=True)
             publish_status(root, 'collection', {'state': 'needs_attention', 'day': day_text,
                            'error_code': 'collection_latched', 'store_ids': STORES})
-            stopped.wait(60)
+            stopped.wait(10)
+            continue
+        deferred = reauthorization.resume_not_before(root)
+        if deferred and now < deferred:
+            publish_status(root, 'collection', {'state': 'closed', 'day': day_text,
+                           'next_open_at': deferred.isoformat(), 'store_ids': STORES})
+            stopped.wait(min(60, max(1, (deferred-now).total_seconds())))
             continue
         if not start <= now < end:
             next_at = start if now < start else window_for(now + timedelta(days=1))[0]
@@ -151,7 +199,7 @@ def run_collection(root, config, stopped):
             continue
         try:
             day, plan = prepare_day(root, config, now)
-            state = day / 'controller-state'
+            state, selected_task = reauthorization.selected(day, plan)
             state.mkdir(mode=0o700, exist_ok=True)
             ledger = campaign.CampaignLedger(state, plan)
             if ledger.value['finished_windows']:
@@ -167,7 +215,7 @@ def run_collection(root, config, stopped):
                 nonlocal last_pulse
                 at = datetime.now(UTC)
                 if last_pulse is None or (at - last_pulse).total_seconds() >= 30:
-                    task = campaign.task_path(day, start, plan['cadence'])
+                    task = selected_task
                     status = campaign.legacy.task_status(task) if task.exists() else None
                     publish_status(root, 'collection', {'state': 'running' if status else 'starting',
                         'day': day_text, 'opened_at': start.isoformat(), 'closes_at': end.isoformat(),
@@ -177,7 +225,8 @@ def run_collection(root, config, stopped):
                         'last_progress_at': status['updated_at'] if status else None})
                     last_pulse = at
                 return at
-            result = campaign.run_campaign(day, plan, ledger, stopped, clock=pulse)
+            result = campaign.run_campaign(day, plan, ledger, stopped, clock=pulse,
+                                           budget=reauthorization.window_budget)
             if result != 0:
                 raise campaign.TrialError('cloud_reader_failed')
         except Exception as error:

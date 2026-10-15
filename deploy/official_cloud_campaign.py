@@ -127,11 +127,12 @@ class CampaignLedger(legacy.Ledger):
         super().__init__(root, plan)
 
 
-def run_campaign(root, plan, ledger, stopped, *, clock=None, popen=None, prepare=None):
+def run_campaign(root, plan, ledger, stopped, *, clock=None, popen=None, prepare=None, budget=None):
     """Shared validated initialization pipeline; no implicit retry or catch-up."""
     clock = legacy.utc_now if clock is None else clock
     popen = subprocess.Popen if popen is None else popen
     prepare = legacy.prepare_material_source if prepare is None else prepare
+    budget = window_budget if budget is None else budget
     controller = child = None
     try:
         for index, (start, end, _) in enumerate(validate_plan(plan)):
@@ -145,10 +146,11 @@ def run_campaign(root, plan, ledger, stopped, *, clock=None, popen=None, prepare
                 ledger.finish(index)
                 print(json.dumps({'event': 'cloud_window_missed', 'index': index, 'backfill': False}), flush=True)
                 continue
-            task, rounds, resume, previous = window_budget(root, plan, start)
+            task, rounds, resume, previous = budget(root, plan, start)
             if rounds == 0:
                 print(json.dumps({'event': 'cloud_ordinary_budget_exhausted',
                                   'limit': plan['ordinary_query_limit'], 'automatic_retry': False}), flush=True)
+                ledger.finish(index)
                 return 0
             if resume:
                 if (previous['failed_slots'] or previous['uncertain_slots'] or previous['pending_attempt']

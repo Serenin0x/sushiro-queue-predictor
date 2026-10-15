@@ -1,0 +1,24 @@
+[Unit]
+Description=SUSHIWAIT owner mobile reauthorization
+After=network-online.target sushiwait-official-daily-supplier.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=@ROOT@
+ExecStart=@PYTHON@ @ROOT@/reauthorization_portal.py @ROOT@
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@ROOT@
+RestrictAddressFamilies=AF_INET AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

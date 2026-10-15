@@ -102,6 +102,22 @@ class CollectionAlertTests(unittest.TestCase):
         self.assertNotIn('query-context', body)
         self.assertLessEqual(len(title), 32)
 
+    def test_recovery_link_is_fixed_host_and_only_generated_when_due(self):
+        with tempfile.TemporaryDirectory() as temp:
+            calls=[]; sent=[]
+            link='https://124.222.57.236/recover/#'+'A'*43
+            def issue(): calls.append(1); return link
+            monitor=alerts.Monitor(Path(temp).resolve()/'state.json', CONFIG,
+                                   lambda *args: sent.append(args) is None)
+            monitor.step('collection_stopped', NOW, issue)
+            monitor.step('collection_stopped', NOW+timedelta(minutes=1), issue)
+            monitor.step('healthy', NOW+timedelta(minutes=2), issue)
+            self.assertEqual(len(calls),1)
+            self.assertIn(link,sent[0][2]); self.assertNotIn(link,sent[1][2])
+        for link in ('http://124.222.57.236/recover/#'+'A'*43,
+                     'https://example.com/recover/#'+'A'*43):
+            with self.assertRaises(ValueError): alerts.message('incident','collection_stopped', NOW,link)
+
 
 if __name__ == '__main__':
     unittest.main()

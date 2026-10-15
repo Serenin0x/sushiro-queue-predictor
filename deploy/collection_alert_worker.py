@@ -8,12 +8,58 @@ from pathlib import Path
 import signal
 import sys
 import threading
+import urllib.request
 
 spec = importlib.util.spec_from_file_location('collection_alerts',
     Path(__file__).with_name('collection_alerts.py'))
 alerts = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(alerts)
 Monitor, condition, read_status = alerts.Monitor, alerts.condition, alerts.read_status
+
+
+def delivery_settings(root):
+    selector = root / 'active-provider.json'
+    if selector.exists():
+        value = read_status(selector)
+        if (set(value) != {'schema_version', 'provider'} or value['schema_version'] != 1
+                or value['provider'] not in {'qq_smtp', 'serverchan_turbo'}):
+            raise ValueError('alert_provider_invalid')
+        use_mail = value['provider'] == 'qq_smtp'
+    else:
+        use_mail = (root / 'email.private.json').exists()
+    # An explicit channel selection never falls back if its credential is lost.
+    return (root / ('email-notification-state.json' if use_mail else 'notification-state.json'),
+            read_status(root / ('email.private.json' if use_mail else 'serverchan.private.json')))
+
+
+def recovery_link(root):
+    """Local broker decides whether this exact incident requires owner login."""
+    path = root / 'recovery-notifications.json'
+    if not path.exists():
+        return None
+    try:
+        value = read_status(path)
+        if (set(value) != {'schema_version', 'internal_key_file'} or value['schema_version'] != 1
+                or not Path(value['internal_key_file']).is_absolute()):
+            raise ValueError('alert_recovery_config_invalid')
+        key = alerts._read_private_file(Path(value['internal_key_file']))
+        if len(key) != 32:
+            raise ValueError('alert_recovery_config_invalid')
+        request = urllib.request.Request('http://127.0.0.1:18910/internal/issue',
+            data=b'{"verification":false}', method='POST', headers={
+                'Content-Type': 'application/json', 'X-SUSHIWAIT-Internal': key.hex()})
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *_args, **_kwargs): return None
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        with opener.open(request, timeout=5) as response:
+            value = json.loads(response.read(1025))
+        link = value.get('url')
+        # Same strict validator as the message constructor; no arbitrary URL.
+        alerts.message('incident', 'collection_stopped', datetime.now(timezone.utc), link)
+        return link
+    except Exception:
+        # The basic incident alert is still useful if the broker is unavailable.
+        return None
 
 
 def main():
@@ -30,7 +76,8 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stopped.set())
     try:
-        monitor = Monitor(root / 'notification-state.json', read_status(root / 'serverchan.private.json'))
+        state_file, config = delivery_settings(root)
+        monitor = Monitor(state_file, config)
         while not stopped.is_set():
             now = datetime.now(timezone.utc)
             try:
@@ -38,7 +85,8 @@ def main():
                                    read_status(collection_root / 'projection-status.json'), now)
             except Exception:
                 status = 'collection_status_unavailable'
-            delivery = monitor.step(status, now)
+            delivery = monitor.step(status, now,
+                recovery_link=(lambda: recovery_link(root)) if status == 'collection_stopped' else None)
             print(json.dumps({'event': 'collection_alert_check', 'condition': status,
                               'delivery': delivery}), flush=True)
             stopped.wait(60)

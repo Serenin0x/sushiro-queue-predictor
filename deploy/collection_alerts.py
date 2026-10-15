@@ -5,12 +5,16 @@ reserved durably before sending; an ambiguous response is not retried in a loop.
 The monitor never restarts a failed collector or alters its journals.
 """
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
+from email.utils import format_datetime
 import hashlib
+import html
 import json
 import os
 from pathlib import Path
 import re
 import ssl
+import smtplib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -77,6 +81,17 @@ def condition(collection, projection, now):
 
 
 def validate_config(value):
+    if type(value) is dict and value.get('provider') == 'qq_smtp':
+        fields = {'schema_version', 'provider', 'from_address', 'to_address',
+                  'authorization_code', 'statistics_url'}
+        address = value.get('from_address')
+        if (set(value) != fields or value['schema_version'] != 1
+                or type(address) is not str or not re.fullmatch(r'[A-Za-z0-9._+-]{1,64}@qq\.com', address)
+                or value['to_address'] != address or value['statistics_url'] != STATISTICS_URL
+                or type(value['authorization_code']) is not str
+                or not re.fullmatch(r'[A-Za-z0-9]{16,128}', value['authorization_code'])):
+            raise ValueError('alert_config_invalid')
+        return value
     if (type(value) is not dict
             or set(value) != {'schema_version', 'provider', 'sendkey', 'statistics_url'}
             or value['schema_version'] != 1 or value['provider'] != 'serverchan_turbo'
@@ -87,7 +102,7 @@ def validate_config(value):
     return value
 
 
-def message(kind, reason, now):
+def message(kind, reason, now, recovery_link=None):
     labels = {
         'collection_stopped': '采集服务已暂停，需要检查授权或来源错误。',
         'collection_heartbeat_stale': '采集状态超过两分钟没有更新。',
@@ -102,6 +117,12 @@ def message(kind, reason, now):
         description = labels[reason]
     stamp = now.astimezone(CHINA).strftime('%Y-%m-%d %H:%M:%S')
     body = f'{description}\n\n北京时间：{stamp}\n\n[查看统计与采样状态]({STATISTICS_URL})'
+    if recovery_link is not None:
+        if (kind not in {'incident', 'reminder'} or reason != 'collection_stopped'
+                or type(recovery_link) is not str
+                or not re.fullmatch(r'https://124\.222\.57\.236/recover/#[A-Za-z0-9_-]{43}', recovery_link)):
+            raise ValueError('alert_recovery_link_invalid')
+        body += '\n\n[重新授权并自动恢复采集](' + recovery_link + ')\n\n请勿转发此专用链接。'
     return title, body
 
 
@@ -128,6 +149,42 @@ def serverchan_send(config, title, body):
     return True
 
 
+def smtp_message(config, title, body):
+    """Fixed owner-to-self envelope. HTML only adds the fixed HTTPS links."""
+    validate_config(config)
+    message = EmailMessage()
+    message['From'] = config['from_address']
+    message['To'] = config['to_address']
+    message['Subject'] = title
+    message['Date'] = format_datetime(datetime.now(UTC))
+    message.set_content(body)
+    paragraphs = []
+    for paragraph in body.split('\n\n'):
+        match = re.fullmatch(r'\[([^\]\n]{1,64})\]\((https://124\.222\.57\.236/(?:statistics|recover/#[A-Za-z0-9_-]{43}))\)', paragraph)
+        if match:
+            paragraphs.append('<p><a href="'+html.escape(match[2],quote=True)+'">'+html.escape(match[1])+'</a></p>')
+        else:
+            paragraphs.append('<p>'+html.escape(paragraph).replace('\n','<br>')+'</p>')
+    message.add_alternative('<html><body>'+''.join(paragraphs)+'</body></html>', subtype='html')
+    return message
+
+
+def qq_smtp_send(config, title, body):
+    message = smtp_message(config, title, body)
+    # SMTP only. No IMAP/POP or inbox access; no recipient/group override.
+    with smtplib.SMTP_SSL('smtp.qq.com',465,timeout=15,context=ssl.create_default_context()) as client:
+        client.login(config['from_address'], config['authorization_code'])
+        refused = client.send_message(message, from_addr=config['from_address'], to_addrs=[config['to_address']])
+        if refused:
+            raise ValueError('alert_delivery_not_accepted')
+    return True
+
+
+def notify_send(config, title, body):
+    validate_config(config)
+    return qq_smtp_send(config,title,body) if config['provider']=='qq_smtp' else serverchan_send(config,title,body)
+
+
 def save_state(path, value):
     pending = path.with_suffix('.pending')
     fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
@@ -145,11 +202,13 @@ def save_state(path, value):
 
 class Monitor:
     """Call under one exclusive worker lock. No account access is needed."""
-    def __init__(self, state_file, config, sender=serverchan_send):
+    def __init__(self, state_file, config, sender=notify_send):
         self.path = Path(state_file)
         self.config = validate_config(config)
         self.sender = sender
-        self.pin = hashlib.sha256(config['sendkey'].encode()).hexdigest()
+        identity = (config['sendkey'] if config['provider']=='serverchan_turbo'
+                    else config['provider']+'\0'+config['from_address']+'\0'+config['to_address'])
+        self.pin = hashlib.sha256(identity.encode()).hexdigest()
         self.state = {'schema_version': 1, 'channel_sha256': self.pin,
                       'incident_since': None, 'reason': None, 'last_attempt_at': None,
                       'day': None, 'attempts_today': 0, 'delivery': None}
@@ -166,7 +225,7 @@ class Monitor:
                     instant(value[field])
             self.state = value
 
-    def step(self, status, now):
+    def step(self, status, now, recovery_link=None):
         day = now.astimezone(CHINA).date().isoformat()
         if self.state['day'] != day:
             self.state.update(day=day, attempts_today=0)
@@ -186,7 +245,9 @@ class Monitor:
         if kind is None or self.state['attempts_today'] >= DAILY_LIMIT:
             save_state(self.path, self.state)
             return 'suppressed'
-        title, body = message(kind, status, now)
+        # Issue a link only when a message is actually due, never every minute.
+        link = recovery_link() if callable(recovery_link) and kind != 'recovered' else None
+        title, body = message(kind, status, now, link)
         # Persist reservation first: process death or a timeout must not cause
         # a duplicate send every minute after restart.
         self.state.update(last_attempt_at=now.isoformat(), delivery='pending')

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>恢复采集 | SUSHIWAIT</title>
+  <link rel="stylesheet" href="/recover/style.css">
+  <script src="/recover/app.js?v=20261015-e0521" defer></script>
+</head>
+<body>
+  <main>
+    <a class="brand" href="/statistics">SUSHIWAIT</a>
+    <section class="card">
+      <div class="status-mark" id="mark" aria-hidden="true">↗</div>
+      <h1 id="heading">恢复采集</h1>
+      <p id="message" role="status" aria-live="polite">正在检查授权状态</p>
+      <form id="login-form" hidden>
+        <label for="password">授权管理密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="512">
+        <button type="submit">验证并继续</button>
+      </form>
+      <button id="start" type="button" hidden>重新授权</button>
+      <div id="qr-wrap" hidden>
+        <img id="qr" alt="微信授权二维码">
+        <p id="scan-hint">请在另一块屏幕打开此页，再用微信扫一扫</p>
+        <button class="secondary" id="save-qr" type="button" hidden>系统保存</button>
+        <a class="secondary" id="download-qr" download>下载二维码</a>
+        <a class="secondary" id="open-qr" target="_blank" rel="noopener noreferrer">打开原图</a>
+        <button class="secondary" id="copy-link" type="button">复制授权链接</button>
+        <input id="share-link" type="text" readonly aria-label="授权链接" hidden>
+      </div>
+      <button class="secondary" id="retry" type="button" hidden>刷新二维码</button>
+      <a class="statistics" id="statistics" href="/statistics" hidden>查看采集</a>
+    </section>
+  </main>
+</body>
+</html>
