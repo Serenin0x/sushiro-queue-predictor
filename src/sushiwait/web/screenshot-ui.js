@@ -72,10 +72,13 @@
  function fill(row,response){
   const f=response?.fields||{},set=(key,value)=>{if(value!==undefined&&value!==null&&!row.dirty.has(key))row.fields[key].value=value;};
   row.suggestedName=response.store_name;row.imageSha=/^[0-9a-f]{64}$/.test(response.image_sha256||'')?response.image_sha256:null;
-  if(!row.dirty.has('city')&&!row.dirty.has('store'))populateCities(row,f.store_id||response.store_suggestion?.store_id||'');
+  if(!row.dirty.has('city')&&!row.dirty.has('store')){
+   if(!f.store_id)row.fields.city.value='';
+   populateCities(row,f.store_id||'');
+  }
   set('number',f.number);set('queue',f.queue_type);set('checkin',f.checked_in===null?'unknown':f.checked_in===undefined?undefined:f.checked_in?'yes':'no');
   if(Number.isFinite(Date.parse(f.issued_at))){const local=new Date(Date.parse(f.issued_at)+28800000).toISOString();set('date',local.slice(0,10));set('time',local.slice(11,16));if(!row.dirty.has('date')&&!row.dirty.has('time'))row.preciseAt=new Date(f.issued_at).toISOString();}
-  row.status.textContent=response.auto_accept?'已填入，可修改':'请核对识别结果';
+  row.status.textContent=!f.store_id?'门店未确认，请选择城市和门店':response.auto_accept?'已填入，可修改':'请核对识别结果';
  }
  async function upload(files){
   if(recognizing||submitting)return;const selected=[...files];if(!selected.length)return;

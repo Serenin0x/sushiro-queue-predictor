@@ -1,6 +1,6 @@
 # 截图录入
 
-2026-10-16 E0527：录入流程改为统一可编辑草稿，已部署到原工程页。开发版本0.3.0.dev1，不改已发布的0.2.0。
+2026-10-16 E0528：统一可编辑草稿与轻量中文OCR已部署到原工程页。开发版本0.3.0.dev1，不改已发布的0.2.0。
 
 ## 使用
 
@@ -16,7 +16,9 @@
 
 ## 识别方法与限制
 
-图片仅发送到本人服务器，使用Tesseract与Pillow，不调用DeepSeek或其他图像模型。先识别中文及时间，再单独提取暖色票卡内的大号白字；两种数字分割结果一致且置信度足够时标为已识别；仍需本人点击提交。原号码前导零保留。7000–7999识别为预约段，不与堂食混用；其他不明确号码需要确认。
+图片仅发送到本人服务器。E0528改用RapidOCR 3.10.0、PP-OCRv5中文移动版检测／识别模型及ONNX Runtime CPU 1.24.1，不调用DeepSeek或外部图像API。两份模型合计21,450,882字节，无需GPU。全图提取文字，门店区域另行放大识别，大号白字独立复核；冲突或低置信度保留核对状态。前导零保留，7000–7999仍识别为预约段。
+
+门店只允许高置信的精确目录匹配，处理全半角、已知字形变体与城市前缀；短名称不能匹配另一个更长名称。城市来自同一门店目录，后台与网页映射有一致性测试。相似名称仅作为接口候选，前端不自动选中候选门店或城市；同名多店、城市与门店矛盾时留空，显示「门店未确认，请选择城市和门店」。此前虽然后端标为候选，前端仍自动填入候选ID，E0528已纠正这一具体问题。
 
 取号时间锚定「取号」标签下的日期与秒级时间，按北京时间解析，不使用手机状态栏、页面「现在时刻」或「过号保留」时间。门店自动接受要求精确目录匹配，近似名称只供确认。历史截图可以录入，未纳入采集的店也可以保存，缺少归档保持未知，不为上传图片新增寿司郎查询。
 
@@ -24,11 +26,13 @@
 
 ## 部署与数据处理
 
-安装系统包`tesseract-ocr`、`tesseract-ocr-chi-sim`、`tesseract-ocr-eng`及Python可选依赖`.[screenshot]`（Pillow12.3.0）；网关显式启用`--ocr-enabled`且配置私有研究库。识别失败或没有这些依赖时保留手动录入。
+网关显式启用`--ocr-enabled`且配置私有研究库。CPU识别安装在独立venv，Linux x86_64／CPython3.12使用`deploy/requirements-ocr.cp312-x86_64.txt`并启用`--require-hashes --only-binary=:all:`。其他平台可使用可选依赖`.[screenshot-rapid]`并单独核对轮子。
 
-`POST /api/v1/research/screenshots/recognize`接收图片二进制，Content-Type只允许image/png或image/jpeg；必须匹配精确HTTPS Origin及真实HTTPS请求。尺寸不超过4096×8192、总像素不超过800万，文件签名与实际解码格式共同验证。每个来源每分钟最多20次、OCR串行、总识别期限24秒；Tesseract单进程限制内存与CPU。图像路由单独设置Nginx 6MiB传输边界，正文仍限5MiB，普通私人JSON仍4KiB。
+使用`deploy/install_ocr_models.py --directory <模型绝对目录>`在部署时下载，清单与摘要在`deploy/ocr-models.json`。设置`SUSHIWAIT_OCR_ENGINE=rapidocr`、`SUSHIWAIT_OCR_MODELS=<模型目录>`和`SUSHIWAIT_OCR_PYTHON=<独立venv/bin/python>`。运行时每次核对模型摘要，只读本地模型，识别进程禁止联网，依赖输出不返回客户端。新引擎失败时保留手动录入，不静默换引擎猜结果。旧Tesseract仅供显式回滚或离线对照。
 
-响应schema1包含`fields`（store_id、number、issued_at、checked_in、queue_type）、auto_accept、missing_fields、store_name、store_suggestion、reason、engine及image_sha256。接口本身不创建研究记录；前端复用原私人提交接口，保存识别字段、校正标记与摘要。临时图片和完整OCR文本处理后删除，数据库、GitHub、公共归档及模型输入均不保存原图。
+`POST /api/v1/research/screenshots/recognize`接收图片二进制，Content-Type只允许image/png或image/jpeg；必须匹配精确HTTPS Origin及真实HTTPS请求。尺寸不超过4096×8192、总像素不超过800万，文件签名与实际解码格式共同验证。每个来源每分钟最多20次、OCR串行、总识别期限24秒；每张图独立子进程，24秒硬截止、Linux虚拟内存2GiB／CPU20秒，推理与OpenCV单线程，结束即释放像素。图像路由单独设置Nginx 6MiB传输边界，正文仍限5MiB，普通私人JSON仍4KiB。
+
+响应schema1包含`fields`（store_id、number、issued_at、checked_in、queue_type）、auto_accept、missing_fields、store_name、store_city、store_candidates、store_suggestion、reason、engine及image_sha256。接口本身不创建研究记录；前端复用原私人提交接口，保存识别字段、校正标记与摘要。临时图片和完整OCR文本处理后删除，数据库、GitHub、公共归档及模型输入均不保存原图。
 
 ## 历史验证
 
@@ -43,3 +47,13 @@
 浏览器扩展文件网址权限关闭，自动文件选择器上传测试未完成；没有擅自开启权限，也不把合成响应测试写成真实截图识别准确率验证。服务器OCR实现未修改，仍可由本人正常选图上传。静态五文件部署已备份，失败可回滚，四后台进程PID不变，未重启服务；00:52公开健康为营业外暂停、心跳新鲜、下次11:00。
 
 最终源码3a642ce的[GitHub检查](https://github.com/Serenin0x/sushiro-queue-predictor/actions/runs/38773735739)整体、三个Python版本任务、Linux容器任务及所有步骤通过。
+
+## E0528 选型与验证
+
+参考[RapidOCR官方使用文档](https://rapidai.github.io/RapidOCRDocs/main/install_usage/rapidocr/usage/)、[PP-OCRv5介绍](https://www.paddleocr.ai/main/en/version3.x/algorithm/PP-OCRv5/PP-OCRv5.html)及[固定版本模型清单](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)。选择移动版CPU模型，避免部署大型视觉语言模型的内存和推理开销；截图不新增外部数据接收方。RapidOCR代码及上游PaddleOCR来源分别保留各自Apache-2.0归属，模型权重不纳入本仓库、不重新打包发布；部署直接下载原作者固定版本制品，摘要一致才启用。
+
+本机7张合成／压缩样例覆盖五个门店名称及600／800像素JPEG，门店ID、城市、前导零号码和秒级取号时间全部正确，约1.6–2.2秒。21项OCR解析／网关与模型摘要检查在包含Pillow的隔离环境全部通过；完整2215项检查通过，4项按基础环境可选依赖跳过。首次无回环权限的完整检查受到本机端口沙箱限制，允许回环后重跑通过，不视为代码故障。
+
+实际4核4GB服务器对照同一合成票据的1200／600像素JPEG：旧引擎出现0321→03271／0371、09月→07月误读，新引擎全部三字段正确；门店区域增强后600像素门店也正确。最终新引擎两次约2.487／2.322秒，子进程峰值RSS约431MiB。样例仅证明这些输入，不能替代用户真实截图准确率评估。旧五张真实附件的本机文件仍不存在，本轮没有声称已对其跑过新模型。
+
+01:31:49原HTTPS网站已实际切换新引擎，生产合成请求4.056秒返回正确字段；每日采集、同步、授权和提醒四PID不变，仅显示网关重启。闭店健康且心跳新鲜，下一营业窗口为10-16 11:00。部署文件、独立环境、备份及回执位于本人服务器`/home/ubuntu/sushiwait-ocr-e0528-20261016`。

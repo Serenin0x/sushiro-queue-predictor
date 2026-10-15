@@ -16,6 +16,7 @@ dependencies = []
 server = ["uvicorn==0.53.0"]
 protocol = ["cryptography==50.0.2"]
 screenshot = ["Pillow==12.3.0"]
+screenshot-rapid = ["Pillow==12.3.0", "rapidocr==3.10.0", "onnxruntime==1.24.1"]
 
 [project.scripts]
 sushiwait = "sushiwait.cli:main"

@@ -59,5 +59,10 @@ function manual(row,number='456'){const f=fields(row);edit(f.city,'测试乙市'
  context.location.protocol='http:';await api.upload([file('insecure.png')]);assert.equal(requests.length,before);
  assert(requests.every(r=>r.path==='/api/v1/research/screenshots/recognize'&&r.opts.body.name));
  rows()[0].children[0].children[2].onclick();cfg.today='2026-10-16';api.directoryChanged();assert.equal(fields(rows()[0]).date.max,'2026-10-16');assert.equal(fields(rows()[0]).date.value,'2026-10-16');
+ // A fuzzy candidate must never silently choose the wrong city or shop.
+ context.location.protocol='https:';edit(fields(rows()[0]).city,'测试乙市');edit(fields(rows()[0]).store,'900002');
+ response={...sample,fields:{...sample.fields,store_id:null},store_name:null,auto_accept:false,store_suggestion:{store_id:'900001',name:'合成一店'}};
+ await api.upload([file('ambiguous.png')]);assert.equal(fields(rows()[0]).city.value,'');assert.equal(fields(rows()[0]).store.value,'');assert.equal(fields(rows()[0]).number.value,'0321');
+ assert(rows()[0].children[0].children[1].textContent.includes('门店未确认'));
  console.log('manual store selection, OCR autofill only, editable minutes, submit-time model, isolated drafts, partial retry and automatic clearing passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
