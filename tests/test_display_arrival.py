@@ -147,3 +147,20 @@ class DisplayArrivalTests(unittest.TestCase):
         self.assertFalse(result['result_available'])
         self.assertIsNone(result['wait_minutes'])
         self.assertEqual(result['last_observed_at'], '2026-10-13T03:10:00Z')
+
+    def test_pre_issue_pass_is_a_conflict_not_a_new_arrival(self):
+        value=sample([['140','145','148'],['155','156','160'],['165','170','180']])
+        result=label_ticket_arrival(value,store_id='900001',number='150',issued_at='2026-10-13T03:07:00Z')
+        self.assertFalse(result['result_available'])
+        self.assertEqual(result['state'],'input_conflict')
+        self.assertEqual(result['reason'],'ticket_precedes_issue')
+        self.assertIsNone(result['wait_minutes'])
+        value['points'][-1]['queues']['mixedQueue']=['150','160','170']
+        self.assertTrue(label_ticket_arrival(value,store_id='900001',number='150',issued_at='2026-10-13T03:07:00Z')['result_available'])
+
+    def test_direct_appearance_resolves_an_earlier_post_issue_conflict(self):
+        value=sample([['155','156','160'],['165','170','180'],['150','181','185']])
+        result=label_ticket_arrival(value,store_id='900001',number='150',issued_at='2026-10-13T03:02:00Z')
+        self.assertTrue(result['result_available'])
+        self.assertEqual(result['state'],'arrived')
+        self.assertNotIn('reason',result)

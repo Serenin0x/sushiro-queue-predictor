@@ -14,7 +14,7 @@ import sqlite3
 import stat
 from statistics import median
 
-from .displayarrival import label_ticket_arrival
+from .displayarrival import POLICY as ARRIVAL_POLICY, label_ticket_arrival
 from .displayreplay import SHANGHAI, _points, _boundary, _time
 
 STORES = {'3014', '3004', '2009', '3015', '2001'}
@@ -139,7 +139,7 @@ class TicketResearch:
         now = now or clock()
         result = {}
         for store, queue, mode in self.db.execute('SELECT store_id,queue,mode FROM viewers WHERE expires_at>?', [now.isoformat()]):
-            result.setdefault(store, {}).setdefault(queue, set()).add('nonthinking' if mode == 'auto' else mode)
+            result.setdefault(store, {}).setdefault(queue, set()).add('thinking' if mode == 'auto' else mode)
         return result
 
     def update_labels(self, read_day, *, now=None, record_id=None):
@@ -149,7 +149,7 @@ class TicketResearch:
                 if record_id is not None else self.db.execute('SELECT record_id,reported,result FROM tickets LIMIT 5000').fetchall())
         for identity, raw, previous in rows:
             old = json.loads(previous) if previous else None
-            if old and old.get('result_available'):
+            if old and old.get('result_available') and old.get('policy') == ARRIVAL_POLICY:
                 continue
             value = json.loads(raw)
             key = (value['store_id'], value['local_date'])

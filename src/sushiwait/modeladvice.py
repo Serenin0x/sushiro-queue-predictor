@@ -22,7 +22,35 @@ POLICY = 'public_display_scenarios_v1'
 CANDIDATES = {'history', 'steady', 'fast', 'slow'}
 REASONS = {'history_dominant', 'rapid_display_turnover', 'slower_display_turnover',
            'mixed_evidence', 'insufficient_evidence'}
-FEATURES = {'rate_recent', 'rate_30', 'rate_60', 'history_rate_median', 'sample_count'}
+FEATURES = {'rate_recent', 'rate_30', 'rate_60', 'history_rate_median', 'sample_count',
+            'history_window_count', 'history_day_count', 'stalled_minutes', 'span_minutes', 'backfill_count'}
+PROMPT_VERSION = 'public-curve-weights-2'
+SYSTEM_PROMPT = '''You analyse sampled Sushiro public display progression, not physical service throughput.
+Return only JSON with exactly weights_ppm, feature_ids, reason_code.
+weights_ppm must include history, steady, fast, slow, nonnegative integer weights summing to 1000000.
+The application computes ticket-specific waiting times locally from numeric distance and empirical
+rates/interval-censored historical analogues. You adjust scenario weights using ONLY supplied evidence.
+trend_points are chronological [minutes before latest sample, first, second, third display number].
+Null positions mean absent, not zero. Display order is meaningful; backfilled lower labels can return.
+history_windows are same-store, same-queue, same day-type windows near this time of day; each has
+sample count, time span and robust numeric progression rate. Do not treat zero growth as missing.
+Compare the recent interval with robust 30/60-minute trends. A single jump is weak evidence;
+sustained acceleration supports fast, a plateau or deceleration supports slow. Prefer steady when
+no change persists. Weight history only when historical windows exist; sparse history has low weight.
+With sparse current observations use available history; with neither, choose insufficient_evidence.
+Do not invent rates, missing observations, queue length, table counts, ticket issuance or attendance.
+A number difference is NOT the number of parties ahead. These are uncalibrated proxy scenarios.
+feature_ids: nonempty distinct IDs of supplied non-null numeric features used in your conclusion.
+reason_code: history_dominant, rapid_display_turnover, slower_display_turnover, mixed_evidence,
+or insufficient_evidence. No prose or reasoning text in the JSON output.'''
+
+
+def _trend_boundary(a, b):
+    reason = _boundary(a, b, 660)
+    if reason == 'reference_reversal' and len(a['labels']) == len(b['labels']) == 3 and max(map(int,b['labels'])) >= min(map(int,a['labels'])):
+        return None
+    return reason
+
 
 
 def public_projection(value):
@@ -66,7 +94,7 @@ def public_context(detail, *, queue='ordinary', history=(), now=None, cadence=60
     for p in points:
         if p['reason']:
             segment = []; continue
-        if segment and _boundary(segment[-1], p, 660):
+        if segment and _trend_boundary(segment[-1], p):
             segment = []
         segment.append(p)
         last_nonempty_segment = segment[:]
@@ -80,38 +108,64 @@ def public_context(detail, *, queue='ordinary', history=(), now=None, cadence=60
     segment = [p for p in segment if p['at'] >= end['at']-timedelta(hours=1)]
     def rate(a, b):
         return (b['position']-a['position'])*60/(b['at']-a['at']).total_seconds()
-    values = {'sample_count': len(segment), 'rate_recent': rate(*segment[-2:]) if len(segment)>1 else None,
+    values = {'sample_count': len(segment), 'rate_recent': max(0,rate(*segment[-2:])) if len(segment)>1 else None,
               'rate_30': None, 'rate_60': None, 'history_rate_median': None}
     for minutes in (30, 60):
         rows = [p for p in segment if p['at'] >= end['at']-timedelta(minutes=minutes)]
         if 4 <= len(rows) <= 128 and (rows[-1]['at']-rows[0]['at']).total_seconds() >= 900:
-            values['rate_'+str(minutes)] = median(rate(a,b) for i,a in enumerate(rows) for b in rows[i+1:])
-    prior_rates = []
+            values['rate_'+str(minutes)] = max(0,median(rate(a,b) for i,a in enumerate(rows) for b in rows[i+1:]))
+    prior_rates, windows, history_days = [], [], set()
+    from .calendar import date_features
+    current_class = date_features(_iso(end['at']), as_of=_iso(now))['date_type']
     for past in list(history)[:7]:
         if past.get('requested_store_id') != detail['requested_store_id'] or past.get('local_date') >= detail['local_date']:
             continue
         try:
             rows = _points(past, field)
+            past_class = date_features(past['local_date']+'T12:00:00+08:00', as_of=_iso(now))['date_type']
         except (ValueError, KeyError):
             continue
-        for a,b in zip(rows,rows[1:]):
-            if not a['reason'] and not b['reason'] and not _boundary(a,b,660):
-                prior_rates.append(rate(a,b))
-    if prior_rates:
-        values['history_rate_median'] = median(prior_rates)
+        if past_class != current_class:
+            continue
+        run=[]
+        for point in rows:
+            if point['reason']:
+                run=[]; continue
+            if run and _trend_boundary(run[-1],point): run=[]
+            run.append(point)
+            # One comparable 60-minute window per historical day.
+            if abs((point['at'].hour*60+point['at'].minute)-(end['at'].hour*60+end['at'].minute))>30: continue
+            recent=[p for p in run if (point['at']-p['at']).total_seconds()<=3600]
+            if len(recent)<3 or (recent[-1]['at']-recent[0]['at']).total_seconds()<600: continue
+            robust=max(0,median(rate(a,b) for i,a in enumerate(recent) for b in recent[i+1:]))
+            windows.append({'local_date':past['local_date'],'sample_count':len(recent),
+                'span_minutes':round((recent[-1]['at']-recent[0]['at']).total_seconds()/60,3),
+                'rate':round(robust,6)})
+            prior_rates.append(robust);history_days.add(past['local_date']);break
+    if prior_rates: values['history_rate_median'] = median(prior_rates)
+    stalled=end['at']
+    for point in reversed(segment):
+        if point['position']!=end['position']: break
+        stalled=point['at']
+    values.update(history_window_count=len(windows),history_day_count=len(history_days),
+        stalled_minutes=(end['at']-stalled).total_seconds()/60,
+        span_minutes=(end['at']-segment[0]['at']).total_seconds()/60,
+        backfill_count=sum(b['position']<a['position'] for a,b in zip(segment,segment[1:])))
     features = [{'feature_id':key, 'value':round(value,6) if value is not None else None}
                 for key,value in sorted(values.items())]
     return {'schema_version':1, 'policy':POLICY, 'source':SOURCE,
         'store_id':detail['requested_store_id'], 'queue_type':queue, 'local_date':detail['local_date'],
         'sample_at':_iso(end['at']), 'observation_id':end['id'],
-        'date_type':detail.get('summary',{}).get('date_type','unknown') if detail.get('summary') else 'unknown',
+        'date_type':current_class, 'prompt_version':PROMPT_VERSION,
+        'trend_points':[[round((end['at']-p['at']).total_seconds()/60,3),*[int(n) for n in p['labels']],*[None]*(3-len(p['labels']))] for p in segment[-24:]],
+        'history_windows':windows,
         'features':features, 'candidate_ids':sorted(CANDIDATES), 'cadence_seconds':cadence,
         'source_update_time_verified':False, 'phase':'historical_connection_check' if connection_check else 'live_shared'}
 
 
 def _validate_context(value):
     fields = {'schema_version','policy','source','store_id','queue_type','local_date','sample_at',
-              'observation_id','date_type','features','candidate_ids','cadence_seconds','source_update_time_verified','phase'}
+              'observation_id','date_type','prompt_version','trend_points','history_windows','features','candidate_ids','cadence_seconds','source_update_time_verified','phase'}
     if (type(value) is not dict or set(value)!=fields or value['schema_version']!=1 or value['policy']!=POLICY
             or value['source']!=SOURCE or value['queue_type'] not in ('ordinary','reservation')
             or value['candidate_ids']!=sorted(CANDIDATES) or value['source_update_time_verified'] is not False
@@ -121,6 +175,17 @@ def _validate_context(value):
             or type(value['observation_id']) is not str or not 1<=len(value['observation_id'])<=128
             or value['date_type'] not in ('ordinary_workday','ordinary_weekend','holiday','makeup_workday','unknown')):
         raise ValueError('invalid_public_model_context')
+    if value['prompt_version']!=PROMPT_VERSION: raise ValueError('invalid_prompt_version')
+    curve=value['trend_points']; windows=value['history_windows']
+    if type(curve) is not list or not 1<=len(curve)<=24 or type(windows) is not list or len(windows)>7:
+        raise ValueError('invalid_public_curve')
+    previous=61
+    for row in curve:
+        if type(row) is not list or len(row)!=4 or type(row[0]) not in (int,float) or not 0<=row[0]<previous or any(v is not None and (type(v) is not int or not 0<=v<=9999999) for v in row[1:]): raise ValueError('invalid_public_curve')
+        previous=row[0]
+    for row in windows:
+        if type(row) is not dict or set(row)!={'local_date','sample_count','span_minutes','rate'} or type(row['sample_count']) is not int or not 3<=row['sample_count']<=128 or any(type(row[k]) not in (int,float) or not math.isfinite(row[k]) or not 0<=row[k]<=1000000 for k in ('span_minutes','rate')): raise ValueError('invalid_public_history')
+        datetime.strptime(row['local_date'],'%Y-%m-%d')
     _time(value['sample_at']);datetime.strptime(value['local_date'],'%Y-%m-%d')
     features=value['features']
     if (type(features) is not list or len(features)!=len(FEATURES)
@@ -160,10 +225,17 @@ def suggest_weights(context, *, budget_file, key_file, now=None, transport=None)
                 return {'state':'cached' if result and result['advice'] else 'previous_attempt_unknown',
                         'advice':result['advice'] if result else None,'network_performed':False,
                         'attempts_used':len(ledger.calls),'thinking_mode':mode}
-        body=_wire(request,ledger.budget['max_output_tokens'],mode)
+        wire=json.loads(_wire(request,ledger.budget['max_output_tokens'],mode));wire['messages'][0]['content']=SYSTEM_PROMPT
+        if mode=='thinking':wire['reasoning_effort']='high'
+        body=_canonical(wire).encode()
         if len(body)+4096>ledger.budget['max_prompt_tokens']:
             raise DeepSeekError('deepseek_input_too_large')
-        key=_key(key_file);ledger.check_budget(now);ledger.reserve(request,observation_key,now)
+        key=_key(key_file);ledger.check_budget(now)
+        # Retain the exact public-only input locally for auditing what the
+        # provider received, without retaining its reasoning or personal data.
+        input_name='public-input-'+digest+'.json'
+        if not (ledger.path.parent/input_name).exists(): ledger.publish(input_name,context)
+        ledger.reserve(request,observation_key,now)
         began=time.monotonic();raw=(transport or _https_post)(body,key,ledger.budget['timeout_seconds'])
         response=_json(raw);usage=_usage(response);advice=None;error=None
         overrun=usage['prompt_tokens']>ledger.budget['max_prompt_tokens'] or usage['completion_tokens']>ledger.budget['max_output_tokens']

@@ -37,6 +37,24 @@ class PublicModelTests(unittest.TestCase):
         context=deepcopy(self.context);context['ticket_number']='4045'
         with self.assertRaises(ValueError):suggest_weights(context,budget_file=None,key_file=None,now=self.now)
         self.assertNotIn('number',self.context);self.assertNotIn('issued_at',self.context)
+    def test_exact_curve_input_is_auditable_without_private_reasoning(self):
+        from sushiwait.modeladvice import SYSTEM_PROMPT, PROMPT_VERSION
+        path=self.budget('thinking');sent=[]
+        def transport(body,*_):
+            sent.append(json.loads(body));return self.response(True)
+        suggest_weights(self.context,budget_file=path,key_file=self.key,now=self.now,transport=transport)
+        self.assertEqual(sent[0]['messages'][0]['content'],SYSTEM_PROMPT)
+        stored=json.loads(next(path.parent.glob('public-input-*.json')).read_text())
+        self.assertEqual(stored,self.context)
+        self.assertEqual(stored['prompt_version'],PROMPT_VERSION)
+        self.assertEqual(stored['trend_points'][-1][0],0)
+        self.assertTrue(all(len(row)==4 for row in stored['trend_points']))
+        self.assertNotIn('private reasoning discarded',''.join(p.read_text() for p in path.parent.glob('*.json')))
+    def test_curve_nested_extras_cannot_reach_provider(self):
+        for field,extra in [('trend_points',[[0,100,101,102,'private']]),('history_windows',[{'rate':2,'personal_ticket':123}])]:
+            context=deepcopy(self.context);context[field]=extra
+            with self.assertRaises(ValueError):
+                suggest_weights(context,budget_file=None,key_file=None,now=self.now)
     def test_modes_have_separate_budget_and_durable_cache(self):
         for mode in ('nonthinking','thinking'):
             path=self.budget(mode);bodies=[]
@@ -44,7 +62,7 @@ class PublicModelTests(unittest.TestCase):
             result=suggest_weights(self.context,budget_file=path,key_file=self.key,now=self.now,transport=transport)
             self.assertEqual(result['state'],'ready');self.assertEqual(result['thinking_mode'],mode)
             self.assertEqual(bodies[0]['thinking']['type'],'enabled' if mode=='thinking' else 'disabled')
-            if mode=='thinking':self.assertEqual(bodies[0]['reasoning_effort'],'low')
+            if mode=='thinking':self.assertEqual(bodies[0]['reasoning_effort'],'high')
             self.assertNotIn('api_key',bodies[0]);self.assertFalse(result['network_performed'])
             cached=suggest_weights(self.context,budget_file=path,key_file=self.key,now=self.now,transport=lambda *a: self.fail('must not retry'))
             self.assertEqual(cached['state'],'cached');self.assertEqual(cached['attempts_used'],1)

@@ -41,7 +41,7 @@ class TicketResearchTests(unittest.TestCase):
     def test_lease_expiry_hiding_and_algorithm_mode_stop_demand(self):
         value={'client_id':'2'*32,'store_id':'3014','queue_type':'ordinary','mode':'auto','visible':True}
         self.store.presence(value,now=self.now)
-        self.assertEqual(self.store.demand(now=self.now),{'3014':{'ordinary':{'nonthinking'}}})
+        self.assertEqual(self.store.demand(now=self.now),{'3014':{'ordinary':{'thinking'}}})
         self.assertEqual(self.store.demand(now=self.now+timedelta(seconds=91)),{})
         self.store.presence({**value,'mode':'thinking'},now=self.now)
         self.assertEqual(self.store.demand(now=self.now)['3014']['ordinary'],{'thinking'})

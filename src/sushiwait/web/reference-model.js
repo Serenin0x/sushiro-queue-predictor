@@ -282,7 +282,7 @@
     return {policy: POLICY, target_semantics: "first_display_position_reaches_target", actual_call_verified: false,
       calibration_for_actual_wait: false, offset_positions: offset, stride_points: stride, cases};
   }
-  const ARRIVAL_POLICY = 'display_top_two_or_all_three_passed_v2';
+  const ARRIVAL_POLICY = 'display_top_two_or_all_three_passed_v3';
   function displayState(ticket, labels) {
     const target = number(ticket);
     if (target === null || target < 1) return 'unsupported_ticket';
@@ -325,6 +325,8 @@
   function arrival(detail, options) {
     const c = arrivalScope(detail, options);
     if (c.reason) return {policy:ARRIVAL_POLICY, available:false, state:'invalid', reason:c.reason};
+    const prior=detail.points.map(row=>arrivalPoint(row,c,detail.local_date)).filter(p=>p&&p.at<c.issued).at(-1);
+    const conflict=Boolean(prior&&displayState(options.ticket,prior.labels)==='display_all_three_passed');
     let previous=null, negative=null, suspended=false, result={policy:ARRIVAL_POLICY, available:false, state:'waiting', quality_flags:[]};
     const flags=new Set();
     for (const row of detail.points) {
@@ -339,6 +341,7 @@
       }
       previous=p;
       const state=displayState(options.ticket,p.labels);
+      if(state==='display_all_three_passed'&&conflict){flags.add('display_passed_before_reported_issue');continue;}
       if (state==='display_top_two' || state==='display_all_three_passed' && !suspended) {
         const lower=negative?.at??c.issued;
         if (!negative) flags.add('no_adjacent_before_arrival_sample');
@@ -353,12 +356,14 @@
       result.sample_at=new Date(p.at).toISOString();
       if (!suspended) negative=p;
     }
+    if(conflict)Object.assign(result,{state:'input_conflict',reason:'ticket_precedes_issue',prior_sample_at:new Date(prior.at).toISOString(),prior_display_numbers:prior.labels.slice()});
     result.quality_flags=[...flags];return result;
   }
   function trackedForecast(detail, options, days=[], advice=null) {
     const c=arrivalScope(detail,options), arrived=arrival(detail,options);
     if (c.reason) return unavailable(c.reason);
     if (arrived.available) return {available:false, reason:'arrival_complete', arrival:arrived};
+    if (arrived.state==='input_conflict') return {available:false,reason:arrived.reason,arrival:arrived};
     if (localDay(options.now)!==detail.local_date) return unavailable('today_only');
     if (arrived.state==='number_cycle_uncertain') return unavailable('ticket_cycle_uncertain');
     let segment=[],last=null;
@@ -378,8 +383,14 @@
       const robust=slope(rows),end=(rows.at(-1).position-rows[0].position)*60000/(rows.at(-1).at-rows[0].at);
       if(robust>0)rates.push(robust);if(end>0)rates.push(end);}
     const lastRate=segment.length>1?(last.position-segment.at(-2).position)*60000/(last.at-segment.at(-2).at):0;
+    // A short but genuine positive segment can provide an explicitly broad
+    // provisional estimate instead of treating sparse observations as no data.
+    let provisional=false;
+    if(!rates.length&&segment.length>=2&&last.at-segment[0].at>=180000){
+      const short=slope(segment);if(short>0){rates.push(short);provisional=true;}
+    }
     const stable=rates.length?median(rates):null;
-    const live=stable?{steady:stable,fast:Math.max(...rates,lastRate),slow:Math.min(...rates)}:{};
+    const live=stable?{steady:stable,fast:Math.max(...rates,lastRate,provisional?stable*1.5:stable),slow:Math.min(...rates)*(provisional?.5:1)}:{};
     // Reconstruct fixed historical origins with the same arrival rule and preserve censoring.
     const samples=[],acceptedDays=new Set();
     for(const past of Array.isArray(days)?days.slice(0,7):[]){
@@ -398,7 +409,8 @@
         samples.push({day:past.local_date,lower,upper});acceptedDays.add(past.local_date);
       }
     }
-    const useHistory=acceptedDays.size>=2&&samples.length>=3;
+    const useHistory=acceptedDays.size>=1&&samples.length>=1;
+    provisional=provisional||(useHistory&&(acceptedDays.size<2||samples.length<3));
     const available={history:useHistory,steady:Boolean(live.steady),fast:Boolean(live.fast),slow:Boolean(live.slow)};
     if(!Object.values(available).some(Boolean))return unavailable('insufficient_sparse_trend');
     const sinceIssue=segment.filter(p=>p.at>=c.issued),span=sinceIssue.length?(last.at-sinceIssue[0].at)/60000:0;
@@ -415,14 +427,14 @@
     const distribution=[];
     if(useHistory){const counts=new Map();samples.forEach(s=>counts.set(s.day,(counts.get(s.day)||0)+1));
       samples.forEach(s=>distribution.push({...s,weight:weights.history/(acceptedDays.size*counts.get(s.day))}));}
-    for(const key of ['steady','fast','slow'])if(live[key]){const minutes=gap/live[key];distribution.push({lower:Math.max(0,Math.min(120,minutes-cadence/60)),upper:minutes>120?null:minutes+cadence/60,weight:weights[key]});}
+    for(const key of ['steady','fast','slow'])if(live[key]){const minutes=gap/live[key],error=cadence/60+(provisional?minutes*.5:0);distribution.push({lower:Math.max(0,Math.min(120,minutes-error)),upper:minutes>120?null:minutes+error,weight:weights[key]});}
     const total=distribution.reduce((n,s)=>n+s.weight,0);if(total<=0)return unavailable('forecast_horizon_unsupported');
     distribution.forEach(s=>s.weight/=total);
     const lower=endpointQuantile(distribution,'lower',.1),upper=endpointQuantile(distribution,'upper',.9),ml=endpointQuantile(distribution,'lower',.5),mu=endpointQuantile(distribution,'upper',.5);
     if(mu===null)return unavailable('median_upper_unknown');
     const central=(ml+mu)/2,reference=last.at+central*60000;
     if(central>120||reference<=options.now)return unavailable('forecast_horizon_unsupported');
-    return {policy:'display_arrival_history_live_v4',available:true,eta_available:false,actual_call_verified:false,
+    return {policy:'display_arrival_history_live_v5',available:true,eta_available:false,actual_call_verified:false,provisional,
       calibrated_interval:false,mode:stable?useHistory?'history_live_mix':'recent_only':'history_initial',
       reference_time:new Date(reference).toISOString(),scenario_earliest:new Date(Math.max(options.now,last.at+lower*60000)).toISOString(),
       scenario_latest:upper===null?null:new Date(last.at+upper*60000).toISOString(),sample_at:new Date(last.at).toISOString(),sample_age_seconds:age/1000,

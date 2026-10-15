@@ -31,9 +31,9 @@ assert.equal(model.trackedForecast(d,options(d,'132'),[],advice).reason,'arrival
 assert.equal(model.arrival(d,{...o,queueType:'reservation'}).available,false);
 assert.equal(model.arrival(d,{...o,storeId:'2009'}).reason,'scope_mismatch');
 const bad=JSON.parse(JSON.stringify(d));bad.points[4].pair_ok=false;
-assert.equal(model.trackedForecast(bad,o,[]).reason,'insufficient_sparse_trend');
+assert.equal(model.trackedForecast(bad,o,[]).provisional,true,'short valid segment remains a broad provisional estimate');
 const history=[detail('2026-10-12'),detail('2026-10-13')];
-const sparse=detail('2026-10-14',[100,110]);o=options(sparse,'130');
+const sparse=detail('2026-10-14',[100]);o=options(sparse,'130');
 assert.equal(model.trackedForecast(sparse,o,history).mode,'history_initial');
 const before=JSON.stringify(history);model.trackedForecast(d,options(d),history);assert.equal(JSON.stringify(history),before);
 console.log('arrival positions, passing, sparse history/live fusion, AI expiry and sampling boundaries passed');
@@ -51,3 +51,12 @@ d=detail('2026-10-14',[100,110,108,120,130,140,139,150,160],5);o=options(d,'200'
 assert.equal(model.arrival(d,o).state,'waiting');assert(model.arrival(d,o).quality_flags.includes('display_position_backfill'));
 assert.equal(model.trackedForecast(d,o).available,true);
 assert.equal(model.arrival(d,options(d,'115')).state,'inferred_arrived');
+
+// Supplied issue time must not turn a number passed earlier into a new arrival.
+d=detail('2026-10-14',[100,110,120,130]);o={...options(d,'105'),issuedAt:d.points[2].queue_received_at};
+r=model.arrival(d,o);assert.equal(r.available,false);assert.equal(r.state,'input_conflict');
+assert.equal(model.trackedForecast(d,o).reason,'ticket_precedes_issue');
+const direct=JSON.parse(JSON.stringify(d));direct.points.at(-1).queues.mixedQueue=['105','135','140'];
+assert.equal(model.arrival(direct,o).state,'arrived','an actual later appearance remains direct evidence');
+d=detail('2026-10-14',[100,104],3);r=model.trackedForecast(d,options(d,'120'));
+assert.equal(r.available,true);assert.equal(r.provisional,true);assert(Date.parse(r.scenario_latest)-Date.parse(r.scenario_earliest)>360000);

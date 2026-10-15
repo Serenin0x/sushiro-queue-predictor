@@ -27,7 +27,7 @@ HOST = 'api.deepseek.com'
 PATH = '/chat/completions'
 MODEL = 'deepseek-flash'
 PROMPT_VERSION = 'public-scenario-weights-1'
-MAX_RESPONSE_BYTES = 32_768
+MAX_RESPONSE_BYTES = 131_072
 _BUDGET_FIELDS = {'schema_version', 'provider', 'model', 'created_at', 'deadline_at',
     'max_calls', 'max_reserved_tokens', 'max_reserved_cost_microunits',
     'max_prompt_tokens', 'max_output_tokens', 'input_rate_microunits_per_million',
@@ -80,8 +80,8 @@ def _budget(value, now):
                 or not _int(value['max_reserved_tokens'], 1, 100_000_000)
                 or not _int(value['max_reserved_cost_microunits'], 1, 1_000_000_000)
                 or not _int(value['max_prompt_tokens'], 4096, 65536)
-                or not _int(value['max_output_tokens'], 128, 4096 if value.get('thinking_mode') == 'thinking' else 2048)
-                or not _int(value['timeout_seconds'], 1, 30)
+                or not _int(value['max_output_tokens'], 128, 16384 if value.get('thinking_mode') == 'thinking' else 2048)
+                or not _int(value['timeout_seconds'], 1, 90)
                 or any(not _int(value[k], 1, 1_000_000_000) for k in
                     ('input_rate_microunits_per_million', 'output_rate_microunits_per_million'))):
             raise ValueError

@@ -10,7 +10,7 @@ import re
 
 from .displayreplay import SHANGHAI, _boundary, _iso, _points, _time
 
-POLICY = 'display_top_two_or_all_three_passed_v2'
+POLICY = 'display_top_two_or_all_three_passed_v3'
 
 
 def _number(value):
@@ -73,6 +73,12 @@ def label_ticket_arrival(detail, *, store_id, number, issued_at, queue='ordinary
         'display_numbers': None, 'display_position': None,
         'actual_call_verified': False, 'no_show_verified': False,
         'source_update_time_verified': False, 'network_performed': False}
+    # A number already passed before its reported issue time cannot become a
+    # new arrival at the first subsequent poll. Preserve the contradiction;
+    # an exact subsequent appearance can still supply direct display evidence.
+    before_issue = [p for p in points if p['at'] < issued and not p['reason']]
+    prior = before_issue[-1] if before_issue else None
+    conflict = bool(prior and classify_display(number, prior['labels']) == 'display_all_three_passed')
     previous = last_negative = None
     inferred_suspended = False
     flags = set()
@@ -104,7 +110,15 @@ def label_ticket_arrival(detail, *, store_id, number, issued_at, queue='ordinary
         previous = point
         direct = state == 'display_top_two'
         passed = state == 'display_all_three_passed' and not inferred_suspended
+        if passed and conflict:
+            result.update(state='input_conflict', reason='ticket_precedes_issue',
+                prior_sample_at=_iso(prior['at']), prior_display_numbers=prior['labels'])
+            flags.add('display_passed_before_reported_issue')
+            continue
         if direct or passed:
+            if direct:
+                for key in ('reason', 'prior_sample_at', 'prior_display_numbers'):
+                    result.pop(key, None)
             lower = last_negative['at'] if last_negative is not None else issued
             if last_negative is None:
                 flags.add('no_adjacent_before_arrival_sample')
@@ -125,4 +139,7 @@ def label_ticket_arrival(detail, *, store_id, number, issued_at, queue='ordinary
         if not inferred_suspended:
             last_negative = point
     result['quality_flags'] = sorted(flags)
+    if conflict and not result['result_available']:
+        result.update(state='input_conflict', reason='ticket_precedes_issue',
+            prior_sample_at=_iso(prior['at']), prior_display_numbers=prior['labels'])
     return result
