@@ -60,6 +60,20 @@ class EmailAlertTests(unittest.TestCase):
             self.assertEqual(restarted.state['attempts_today'],1)
             self.assertEqual(restarted.step('collection_stopped',NOW),'suppressed')
 
+    def test_mail_does_not_inherit_retired_free_wechat_five_message_limit(self):
+        from datetime import timedelta
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp).resolve()/'mail-state.json'
+            sent=[]
+            monitor=alerts.Monitor(path,CONFIG,lambda *args:sent.append(args) is None)
+            for index in range(22):
+                monitor.step('collection_stopped' if index % 2 == 0 else 'healthy',
+                             NOW+timedelta(minutes=index))
+            self.assertEqual(len(sent),20)
+            restarted=alerts.Monitor(path,CONFIG,lambda *_:True)
+            self.assertEqual(restarted.state['attempts_today'],20)
+            self.assertEqual(restarted.step('collection_stopped',NOW+timedelta(minutes=30)),'suppressed')
+
     def test_explicit_email_channel_never_falls_back_to_retired_wechat(self):
         spec=importlib.util.spec_from_file_location('worker',
             Path(__file__).resolve().parents[1]/'deploy/collection_alert_worker.py')

@@ -1,4 +1,4 @@
-"""Private, owner-only ServerChan alerts from saved collection status.
+"""Private, owner-only email or ServerChan alerts from saved status.
 
 No account database, query credential or QR material is read. Delivery is
 reserved durably before sending; an ambiguous response is not retried in a loop.
@@ -20,12 +20,18 @@ import urllib.parse
 import urllib.request
 
 from sushiwait.credentials import _read_private_file
+from sushiwait.calendar import date_features
+from sushiwait.cadence import POLICY, next_sample_at
 
 UTC = timezone.utc
 CHINA = timezone(timedelta(hours=8))
 STATISTICS_URL = 'https://124.222.57.236/statistics'
 REMINDER_SECONDS = 6 * 3600
 DAILY_LIMIT = 5
+EMAIL_DAILY_LIMIT = 20
+START_GRACE_SECONDS = 180
+PROGRESS_GRACE_SECONDS = 120
+ALERT_POLICY = 'business-window-v2'
 
 
 def instant(value):
@@ -45,30 +51,52 @@ def read_status(path):
     return value
 
 
+def business_window(now):
+    """Independent expected window; a fresh 'closed' heartbeat cannot hide it."""
+    local = now.astimezone(CHINA)
+    features = date_features(local.isoformat(), as_of=local.isoformat())
+    early = local.weekday() >= 5 or features['date_type'] == 'holiday'
+    return (local.replace(hour=10 if early else 11, minute=30 if early else 0,
+                          second=0, microsecond=0),
+            local.replace(hour=22, minute=0, second=0, microsecond=0))
+
+
 def condition(collection, projection, now):
     """Return fixed public categories, never arbitrary diagnostic strings."""
     if now.utcoffset() is None:
         raise ValueError('alert_time_invalid')
     try:
+        start, end = business_window(now)
+        if collection['state'] == 'needs_attention':
+            return 'collection_stopped'
+        if not start <= now < end:
+            return 'closed'
         age = (now - instant(collection['at'])).total_seconds()
         if age < -60 or age > 120:
             return 'collection_heartbeat_stale'
-        if collection['state'] == 'needs_attention':
-            return 'collection_stopped'
+        startup = ('starting' if (now-start).total_seconds() <= START_GRACE_SECONDS
+                   else 'collection_not_started')
         if collection['state'] in {'closed', 'completed'}:
-            return 'closed'
+            return startup
         if collection['state'] not in {'starting', 'running'}:
             return 'collection_status_unavailable'
         if collection['state'] == 'starting':
-            return 'starting'
+            return startup
         if type(collection.get('failed_slots')) is not int or collection['failed_slots']:
             return 'collection_stopped'
         progress = collection.get('last_progress_at')
-        if progress is None:
-            return 'starting'
-        # All configured sampling intervals are <=600 seconds. Allow response
-        # and publication time before declaring a saved-observation gap.
-        if (now - instant(progress)).total_seconds() > 720:
+        if progress is None or collection.get('successful_slots') == 0:
+            return startup
+        progress = instant(progress)
+        if progress < start:
+            return startup
+        if (now-progress).total_seconds() < -60:
+            return 'collection_status_unavailable'
+        cadence = collection.get('cadence')
+        if cadence not in {None, POLICY}:
+            return 'collection_status_unavailable'
+        due = next_sample_at(progress) if cadence else progress + timedelta(seconds=600)
+        if now > due + timedelta(seconds=PROGRESS_GRACE_SECONDS):
             return 'collection_progress_stale'
         if projection.get('state') != 'running':
             return 'public_sync_stopped'
@@ -106,7 +134,8 @@ def message(kind, reason, now, recovery_link=None):
     labels = {
         'collection_stopped': '采集服务已暂停，需要检查授权或来源错误。',
         'collection_heartbeat_stale': '采集状态超过两分钟没有更新。',
-        'collection_progress_stale': '营业时间内，超过十二分钟没有保存新样本。',
+        'collection_not_started': '开店已超过三分钟，今天仍未保存首组采集数据。',
+        'collection_progress_stale': '营业时间内，超过计划采样时间两分钟仍未保存新样本。',
         'public_sync_stopped': '采集数据的网页同步需要检查。',
         'collection_status_unavailable': '暂时无法读取采集状态。',
     }
@@ -206,6 +235,7 @@ class Monitor:
         self.path = Path(state_file)
         self.config = validate_config(config)
         self.sender = sender
+        self.daily_limit = EMAIL_DAILY_LIMIT if config['provider'] == 'qq_smtp' else DAILY_LIMIT
         identity = (config['sendkey'] if config['provider']=='serverchan_turbo'
                     else config['provider']+'\0'+config['from_address']+'\0'+config['to_address'])
         self.pin = hashlib.sha256(identity.encode()).hexdigest()
@@ -217,7 +247,7 @@ class Monitor:
             if (set(value) != set(self.state) or value['schema_version'] != 1
                     or value['channel_sha256'] != self.pin
                     or type(value['attempts_today']) is not int
-                    or not 0 <= value['attempts_today'] <= DAILY_LIMIT
+                    or not 0 <= value['attempts_today'] <= self.daily_limit
                     or value['delivery'] not in {None, 'pending', 'accepted', 'unknown'}):
                 raise ValueError('alert_state_invalid')
             for field in ('incident_since', 'last_attempt_at'):
@@ -239,10 +269,15 @@ class Monitor:
         elif self.state['incident_since'] is None:
             self.state.update(incident_since=now.isoformat(), reason=status)
             kind = 'incident'
+        elif status in {'collection_stopped', 'collection_not_started'} and status != self.state['reason']:
+            # A startup/heartbeat incident must not delay a later owner-action
+            # alert (and its authorization link) for the six-hour reminder gap.
+            self.state['reason'] = status
+            kind = 'incident'
         elif self.state['last_attempt_at'] is None or (
                 now - instant(self.state['last_attempt_at'])).total_seconds() >= REMINDER_SECONDS:
             kind = 'reminder'
-        if kind is None or self.state['attempts_today'] >= DAILY_LIMIT:
+        if kind is None or self.state['attempts_today'] >= self.daily_limit:
             save_state(self.path, self.state)
             return 'suppressed'
         # Issue a link only when a message is actually due, never every minute.

@@ -32,7 +32,52 @@ class CollectionAlertTests(unittest.TestCase):
                                          self.status(), NOW), 'collection_heartbeat_stale')
 
     def test_closed_business_window_is_not_an_incident(self):
-        self.assertEqual(alerts.condition(self.status(state='closed'), {}, NOW), 'closed')
+        closed = NOW.replace(hour=14)
+        self.assertEqual(alerts.condition(self.status(state='closed'), {}, closed), 'closed')
+
+    def test_first_sample_cannot_stay_starting_forever(self):
+        at = NOW.replace(hour=3, minute=4)
+        for changes in ({'state':'starting'}, {'last_progress_at':None},
+                        {'successful_slots':0}, {'state':'closed'}, {'state':'completed'},
+                        {'last_progress_at':(at-timedelta(days=1)).isoformat()}):
+            with self.subTest(changes=changes):
+                self.assertEqual(alerts.condition(self.status(at=at.isoformat(), **changes), {}, at),
+                                 'collection_not_started')
+        grace = at.replace(minute=2)
+        self.assertEqual(alerts.condition(self.status(at=grace.isoformat(), state='starting'), {}, grace),
+                         'starting')
+
+    def test_weekend_and_holiday_opening_are_independent_of_reported_state(self):
+        for at in (datetime(2026,10,17,2,34,tzinfo=timezone.utc),
+                   datetime(2026,10,1,2,34,tzinfo=timezone.utc)):
+            self.assertEqual(alerts.condition(self.status(at=at.isoformat(),state='closed'), {}, at),
+                             'collection_not_started')
+
+    def test_peak_progress_alarm_follows_smooth_cadence(self):
+        progress=NOW.replace(hour=4,minute=0)
+        due=alerts.next_sample_at(progress)+timedelta(seconds=120)
+        current=self.status(at=due.isoformat(),last_progress_at=progress.isoformat(),cadence='meal-peaks-v1')
+        self.assertEqual(alerts.condition(current,self.status(at=due.isoformat()),due),'healthy')
+        current['at']=(due+timedelta(seconds=1)).isoformat()
+        self.assertEqual(alerts.condition(current,{},due+timedelta(seconds=1)),
+                         'collection_progress_stale')
+        self.assertEqual((due-progress).total_seconds(),300)
+
+    def test_future_progress_is_not_treated_as_healthy(self):
+        self.assertEqual(alerts.condition(self.status(last_progress_at=(NOW+timedelta(minutes=2)).isoformat()),
+                                         self.status(),NOW),'collection_status_unavailable')
+
+    def test_authorization_alert_escalates_without_waiting_six_hours(self):
+        with tempfile.TemporaryDirectory() as temp:
+            sent=[]
+            monitor=alerts.Monitor(Path(temp).resolve()/'state.json',CONFIG,
+                                   lambda *args: sent.append(args) is None)
+            monitor.step('collection_heartbeat_stale',NOW)
+            link='https://124.222.57.236/recover/#'+'A'*43
+            self.assertEqual(monitor.step('collection_stopped',NOW+timedelta(minutes=1),lambda:link),
+                             'accepted')
+            self.assertIn(link,sent[1][2])
+            self.assertEqual(monitor.step('collection_stopped',NOW+timedelta(minutes=2)), 'suppressed')
 
     def test_restart_deduplicates_and_six_hour_reminder_is_separate(self):
         with tempfile.TemporaryDirectory() as temp:

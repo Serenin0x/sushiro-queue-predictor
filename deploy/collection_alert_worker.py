@@ -87,7 +87,7 @@ def main():
                 status = 'collection_status_unavailable'
             delivery = monitor.step(status, now,
                 recovery_link=(lambda: recovery_link(root)) if status == 'collection_stopped' else None)
-            print(json.dumps({'event': 'collection_alert_check', 'condition': status,
+            print(json.dumps({'event': 'collection_alert_check', 'policy': alerts.ALERT_POLICY, 'condition': status,
                               'delivery': delivery}), flush=True)
             stopped.wait(60)
         return 0
