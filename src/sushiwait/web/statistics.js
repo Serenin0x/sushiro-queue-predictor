@@ -14,7 +14,7 @@ let index={days:{},store_names:{}},day=today(),detail=null,busy=false,detailLoad
 const engineeringPanels=referenceRoot?.dataset?.engineeringPanels==="true";
 const engineeringSections={overview:["观测总览","按日期查看已保存的观测与采集覆盖。"],analysis:["门店分析","查看号码位置、数量、展示变化与原始观测。"],prediction:["预测与记录",""],experience:["用餐记录","记录本人正常用餐的实际事件，保留本机私有草稿。"]};
 engineeringSections.tickets=["我的号码",""];
-let engineeringSection="overview",engineeringPollingSeconds=null;
+let engineeringSection="overview",engineeringPollingSeconds=null,predictionWaitOpen=false;
 const workspaceSectionScroll=new Map();
 const taskWorkspace=engineeringPanels&&referenceRoot?.dataset?.engineeringLayout==="tasks-v2";
 if(taskWorkspace){engineeringSections.overview=["采集总览","查看保存了哪些观测，选择门店继续分析。"];engineeringSections.analysis=["门店分析","原采样点、时间范围与记录详情在同一条分析路径中。"];engineeringSections.quality=["数据质量","分开检查失败、暂停、空响应和不可比较片段。"];}
@@ -36,7 +36,7 @@ function syncEngineeringSelection(){
   $("analysis-empty").hidden=Boolean(store);
   $("prediction-empty").hidden=true;
   $("prediction-content").hidden=false;
-  $("store-wait-card").hidden=!store;
+  $("store-wait-card").hidden=!store||(!predictionWaitOpen&&Boolean($("ticket-composer-form")?.dataset?.entryWorkflow));
   $("engineering-selection").textContent=`${day}，${store?(index.store_names[store]||store):taskWorkspace&&workspaceState.city!=="all"?workspaceState.city+"，全部门店":"全部门店"}，${$("queue").selectedOptions?.[0]?.textContent||"展示队列"}`;
 }
 function selectEngineeringSection(section){
@@ -57,7 +57,8 @@ function selectEngineeringSection(section){
   [$("engineering-title").textContent,$("engineering-description").textContent]=engineeringSections[section];
   syncEngineeringSelection();
   if(taskWorkspace){
-    $("workspace-filters").hidden=section==="tickets";$("engineering-selection").hidden=section==="tickets";$("archive-status").hidden=section==="tickets";
+    const hideScope=section==="tickets"||(section==="prediction"&&!predictionWaitOpen&&Boolean($("ticket-composer-form")?.dataset?.entryWorkflow));
+    $("workspace-filters").hidden=hideScope;$("engineering-selection").hidden=hideScope;$("archive-status").hidden=hideScope;
     $("filter-queue").hidden=section==="overview"||section==="experience";
     $("filter-date").hidden=["experience","tickets"].includes(section);$("date-shortcuts").hidden=["experience","tickets"].includes(section);
     $("record-source-label").hidden=section==="overview"||section==="experience"||!(detail&&index.days[day]?.[$("store").value]?.record_sources?.length>1);
@@ -528,6 +529,7 @@ async function refresh(){
 }
 $("month").value=day.slice(0,7);$("month").onchange=()=>{day=$("month").value+"-01";recordSource=null;resetTicketScope();detail=null;++detailRequestId;calendar();refresh();};$("store").onchange=()=>{recordSource=null;resetTicketScope();if(taskWorkspace){workspaceState.routeStore=null;workspaceWriteRoute({push:true});}calendar();showDay().catch(showError);};$("queue").onchange=()=>{resetTicketScope();syncEngineeringSelection();if(taskWorkspace)workspaceWriteRoute({push:true});graphs();};$("ticket-number").oninput=renderPrediction;$("ticket-issued").oninput=renderPrediction;$("ticket-arrival").oninput=renderPrediction;$("ticket-offset").oninput=renderPrediction;$("ticket-scope").onchange=()=>{ticketScopeKey=$("ticket-scope").checked?scopeKey():null;renderPrediction();};$("refresh").onclick=()=>{historyCache.clear();refresh();};window.addEventListener("resize",graphs);refresh();
 if(engineeringPanels){
+  if($("prediction-wait-toggle"))$("prediction-wait-toggle").onclick=()=>{predictionWaitOpen=!predictionWaitOpen;$("prediction-wait-toggle").setAttribute("aria-expanded",String(predictionWaitOpen));selectEngineeringSection("prediction");};
   $("header-refresh").onclick=()=>$("refresh").onclick();
   for(const section of Object.keys(engineeringSections))$("nav-"+section).onclick=()=>selectEngineeringSection(section);
   $("engineering-date").onchange=()=>{

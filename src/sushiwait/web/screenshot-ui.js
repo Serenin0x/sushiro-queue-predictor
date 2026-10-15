@@ -1,26 +1,118 @@
 "use strict";
-// PNG/JPEG files are processed by the owner's server, never a third-party model.
+// OCR only fills editable drafts; explicit submission owns all side effects.
 (function(){
- const $=id=>document.getElementById(id),rows=[];let busy=false;
- const MAX_SIZE=5*1024*1024;
- function element(tag,cls,text){const v=document.createElement(tag);if(cls)v.className=cls;if(text!==undefined)v.textContent=text;return v;}
- function settings(){return window.SushiWaitResearch.screenshotSettings();}
- function progress(){const saved=rows.filter(r=>r.done).length;$('screenshot-progress').textContent=`已提交 ${saved} 张${rows.length>saved?`，待确认 ${rows.length-saved} 张`:''}`;}
- function cityPicker(row,storeId){const cfg=settings(),cities=[...new Set(Object.keys(cfg.storeNames).map(id=>cfg.cityById[id]||'城市待核'))].sort();row.city.replaceChildren();for(const c of cities){const o=element('option','',c);o.value=c;row.city.append(o);}const selectedCity=cfg.cityById[storeId]||cities[0]||'城市待核';if(!cities.includes(selectedCity)){const o=element('option','',selectedCity);o.value=selectedCity;row.city.append(o);}row.city.value=selectedCity;populateStores(row,storeId);}
- function populateStores(row,selected=''){const cfg=settings();row.store.replaceChildren();const empty=element('option','','选择门店');empty.value='';row.store.append(empty);for(const [id,name]of Object.entries(cfg.storeNames).filter(([id])=>(cfg.cityById[id]||'城市待核')===row.city.value)){const option=element('option','',name);option.value=id;row.store.append(option);}if(selected&&!Object.hasOwn(cfg.storeNames,selected)&&row.value?.store_name){const o=element('option','',row.value.store_name);o.value=selected;row.store.append(o);}row.store.value=selected;}
- function input(label,type){const wrapper=element('label','',label),v=element('input');v.type=type;if(type==='datetime-local')v.step='1';wrapper.append(v);return [wrapper,v];}
- function createRow(file,snapshot){const wrapper=element('article','screenshot-row'),image=element('img','screenshot-thumb');image.alt=file.name;image.src=URL.createObjectURL(file);const body=element('div','screenshot-row-body'),title=element('div','screenshot-row-heading'),name=element('strong','',file.name),status=element('span','','等待识别');title.append(name,status);const fields=element('div','screenshot-fields');const [cityLabel,city]=[element('label','','城市'),element('select')];cityLabel.append(city);const [storeLabel,store]=[element('label','','门店'),element('select')];storeLabel.append(store);const [numberLabel,number]=input('号码','text');number.inputMode='numeric';number.maxLength=7;const [timeLabel,time]=input('取号时间','datetime-local');const [queueLabel,queue]=[element('label','','队列'),element('select')];queueLabel.append(queue);for(const [id,label]of [['ordinary','堂食'],['reservation','预约']]){const o=element('option','',label);o.value=id;queue.append(o);}fields.append(cityLabel,storeLabel,numberLabel,timeLabel,queueLabel);const save=element('button','button-quiet','确认并提交');save.type='button';save.hidden=true;body.append(title,fields,save);wrapper.append(image,body);$('screenshot-rows').append(wrapper);const row={wrapper,image,status,city,store,number,time,queue,save,snapshot,value:null,done:false};city.onchange=()=>populateStores(row);save.onclick=()=>submit(row,true);cityPicker(row,'');rows.push(row);return row;}
- async function submit(row,reviewed=false){if(row.done||row.save.disabled)return;const raw=row.time.value,stamp=Date.parse(raw+'+08:00');if(!row.store.value||!/^\d{1,7}$/.test(row.number.value)||Number(row.number.value)<1||!Number.isFinite(stamp)||stamp>Date.now()){row.status.textContent='请补正门店、号码和时间';row.save.hidden=false;return;}
-  row.save.disabled=true;row.status.textContent='正在提交';try{const fields={store_id:row.store.value,number:row.number.value,issued_at:new Date(stamp).toISOString(),queue_type:row.queue.value,store_name:settings().storeNames[row.store.value]||(row.store.value===row.value?.fields.store_id?row.value.store_name:row.store.value),checked_in:row.value?.fields.checked_in??null};const result=await window.SushiWaitResearch.importScreenshot(fields,{...row.snapshot,reviewed,imageSha:row.value?.image_sha256});row.done=true;row.status.textContent=result.record?'已录入系统':'已加入预测';row.wrapper.classList.add('screenshot-saved');row.save.hidden=true;for(const v of [row.city,row.store,row.number,row.time,row.queue])v.disabled=true;$('screenshot-show-tickets').hidden=false;window.SushiWaitResearch.showSuccess();progress();}catch(_){row.status.textContent='尚未提交，可补正或重试';row.save.hidden=false;}finally{row.save.disabled=false;}}
- async function upload(files){if(busy)return;const selected=[...files];if(!selected.length)return;if(selected.length>20||rows.length+selected.length>20){$('screenshot-progress').textContent='每批最多20张，已识别项仍保留';return;}if(location.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(location.hostname)){$('screenshot-progress').textContent='请使用 HTTPS 加密入口';return;}
-  busy=true;const snapshot=settings();$('screenshot-select').disabled=true;$('screenshot-clear').disabled=true;let processed=0;
-  for(const file of selected){const row=createRow(file,snapshot);$('screenshot-progress').textContent=`识别 ${++processed}/${selected.length}`;
-   if(!['image/png','image/jpeg'].includes(file.type)||file.size>MAX_SIZE){row.status.textContent='支持5MB内的PNG、JPEG';continue;}
-   row.status.textContent='正在识别';try{const r=await fetch('/api/v1/research/screenshots/recognize',{method:'POST',headers:{'Content-Type':file.type},body:file,cache:'no-store',signal:AbortSignal.timeout(40000)});if(!r.ok)throw Error('ocr_failed');row.value=await r.json();const f=row.value.fields;cityPicker(row,f.store_id||row.value.store_suggestion?.store_id);row.number.value=f.number||'';row.time.value=f.issued_at?new Date(Date.parse(f.issued_at)+28800000).toISOString().slice(0,19):'';row.queue.value=f.queue_type||'ordinary';if(row.value.auto_accept)await submit(row);else{row.status.textContent='需要确认';row.save.hidden=false;}}catch(_){row.status.textContent='未识别，请补正后提交';row.save.hidden=false;}
-  }
-  progress();busy=false;$('screenshot-select').disabled=false;$('screenshot-clear').disabled=false;$('screenshot-files').value='';
+ const $=id=>document.getElementById(id),drafts={prediction:[],record:[]};
+ let current='prediction',recognizing=false,submitting=false,sequence=0,directorySignature='';
+ const MAX_ROWS=20,MAX_SIZE=5*1024*1024,settings=()=>window.SushiWaitResearch.screenshotSettings();
+ function element(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
+ function option(select,value,text){const n=element('option','',text);n.value=value;select.append(n);}
+ function field(row,key,title,type='text',values=null){
+  const label=element('label','composer-field field-'+key),caption=element('span','',title),n=element(values?'select':'input');
+  n.id=`draft-${row.id}-${key}`;n.name=key;
+  if(values)for(const [value,text]of values)option(n,value,text);else{n.type=type;n.autocomplete='off';}
+  if(type==='time')n.step='60';
+  label.append(caption,n);row.fields[key]=n;
+  n.addEventListener(values?'change':'input',()=>{row.dirty.add(key);n.removeAttribute('aria-invalid');row.status.textContent='';if(['date','time'].includes(key))row.preciseAt=null;if(key==='city'){populateStores(row);row.dirty.add('store');}updateControls();});return label;
  }
- function attach(){if(!$('screenshot-files'))return;$('screenshot-select').onclick=()=>{$('screenshot-files').value='';$('screenshot-files').click();};$('screenshot-clear').onclick=()=>{if(busy)return;for(const row of rows)URL.revokeObjectURL(row.image.src);rows.length=0;$('screenshot-rows').replaceChildren();$('screenshot-progress').textContent='';$('screenshot-show-tickets').hidden=true;};$('screenshot-files').onchange=()=>upload($('screenshot-files').files);const drop=$('screenshot-drop');for(const event of ['dragenter','dragover'])drop.addEventListener(event,e=>{e.preventDefault();if(!busy)drop.classList.add('screenshot-dragging');});drop.addEventListener('dragleave',()=>drop.classList.remove('screenshot-dragging'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('screenshot-dragging');upload(e.dataTransfer.files);});$('screenshot-show-tickets').onclick=()=>window.SushiWaitResearch.openTickets();window.addEventListener('pagehide',()=>{for(const row of rows)URL.revokeObjectURL(row.image.src);});}
- document.addEventListener('DOMContentLoaded',attach);
- window.SushiWaitScreenshots={upload};
+ function populateStores(row,selected=''){
+  const cfg=settings(),f=row.fields;f.store.replaceChildren();option(f.store,'','选择门店');
+  for(const [id,name]of Object.entries(cfg.storeNames).filter(([id])=>(cfg.cityById[id]||'城市待核')===f.city.value).sort((a,b)=>a[1].localeCompare(b[1],'zh-CN')))option(f.store,id,name);
+  if(selected&&!Object.hasOwn(cfg.storeNames,selected)&&row.suggestedName)option(f.store,selected,row.suggestedName);
+  f.store.value=selected;f.store.disabled=!f.city.value;
+ }
+ function populateCities(row,selectedStore=''){
+  const cfg=settings(),f=row.fields,oldCity=f.city.value,cities=[...new Set(Object.keys(cfg.storeNames).map(id=>cfg.cityById[id]||'城市待核'))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+  f.city.replaceChildren();option(f.city,'','选择城市');for(const city of cities)option(f.city,city,city);
+  const city=selectedStore?(cfg.cityById[selectedStore]||'城市待核'):oldCity;if(city&&!cities.includes(city))option(f.city,city,city);
+  f.city.value=city||'';populateStores(row,selectedStore);
+ }
+ function isBlank(row){return !row.file&&!row.fields.number.value&&!row.fields.time.value;}
+ function makeRow(kind){
+  const row={id:++sequence,kind,fields:{},dirty:new Set(),preciseAt:null,file:null,imageUrl:null,imageSha:null,suggestedName:null};
+  row.el=element('section','composer-row');row.el.dataset.draftId=String(row.id);
+  const heading=element('div','composer-row-heading');row.ordinal=element('strong','composer-ordinal');row.status=element('span','composer-row-status');row.status.setAttribute('role','status');
+  row.remove=element('button','composer-remove','移除');row.remove.type='button';row.remove.onclick=()=>{if(submitting)return;removeRow(row);if(!drafts[kind].length)makeRow(kind);render();};heading.append(row.ordinal,row.status,row.remove);
+  row.preview=element('img','composer-thumbnail');row.preview.hidden=true;row.preview.alt='取号截图';
+  const grid=element('div','composer-fields');grid.append(field(row,'city','城市','text',[]),field(row,'store','门店','text',[]),field(row,'number','号码'),field(row,'date','取号日期','date'),field(row,'time','取号时间','time'),field(row,'queue','队列','text',[['ordinary','堂食'],['reservation','预约']]),field(row,'checkin','签到状态','text',[['unknown','未知'],['no','未签到'],['yes','已签到']]));
+  row.fields.number.inputMode='numeric';row.fields.number.maxLength=7;row.fields.number.placeholder='填写号码';row.fields.date.value=settings().today;row.fields.date.max=settings().today;
+  row.el.append(heading,row.preview,grid);drafts[kind].push(row);populateCities(row);return row;
+ }
+ function removeRow(row){const list=drafts[row.kind],index=list.indexOf(row);if(index>=0)list.splice(index,1);if(row.imageUrl)URL.revokeObjectURL(row.imageUrl);row.el.remove();}
+ function updateControls(){
+  const count=drafts[current].filter(r=>!isBlank(r)).length;
+  $('composer-add').disabled=submitting||drafts[current].length>=MAX_ROWS;$('screenshot-select').disabled=submitting||recognizing;$('composer-submit').disabled=submitting||recognizing;
+  $('composer-submit-label').textContent=submitting?'正在提交':current==='prediction'?count>1?`提交 ${count} 个预测`:'提交预测':count>1?`保存 ${count} 条记录`:'保存记录';
+  for(const row of drafts[current])row.remove.disabled=submitting;
+ }
+ function render(){
+  if(!drafts[current].length)makeRow(current);
+  $('composer-rows').replaceChildren(...drafts[current].map((row,i)=>{row.ordinal.textContent=drafts[current].length===1?'号码信息':`号码 ${i+1}`;return row.el;}));
+  $('composer-prediction-options').hidden=current==='record';$('composer-instruction').textContent=current==='prediction'?'填写号码，或拖入截图自动填入':'可批量上传截图，也可逐条填写';
+  $('ticket-composer-panel').setAttribute('aria-labelledby',current==='prediction'?'entry-tab-predict':'entry-tab-record');
+  for(const [id,kind]of [['entry-tab-predict','prediction'],['entry-tab-record','record']]){$(id).setAttribute('aria-selected',String(current===kind));$(id).tabIndex=current===kind?0:-1;}updateControls();
+ }
+ function switchTab(kind){if(submitting)return;current=kind;$('composer-status').textContent='';render();}
+ function directoryChanged(){
+  if(!$('ticket-composer-form')||!window.SushiWaitResearch)return;
+  const today=settings().today;for(const list of Object.values(drafts))for(const row of list){row.fields.date.max=today;if(isBlank(row)&&!row.dirty.has('date'))row.fields.date.value=today;}
+  const signature=JSON.stringify(settings().storeNames);if(signature===directorySignature)return;directorySignature=signature;
+  for(const list of Object.values(drafts))for(const row of list)populateCities(row,row.fields.store.value);
+ }
+ function markError(row,key,text){row.status.textContent=text;row.fields[key].setAttribute('aria-invalid','true');return null;}
+ function payload(row){
+  const f=row.fields,cfg=settings();if(!f.store.value)return markError(row,'store','请选择门店');
+  if(!/^\d{1,7}$/.test(f.number.value)||Number(f.number.value)<1)return markError(row,'number','请填写有效号码');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f.date.value))return markError(row,'date','请填写取号日期');
+  if(!/^\d{2}:\d{2}$/.test(f.time.value))return markError(row,'time','请填写取号时间');
+  const at=Date.parse(`${f.date.value}T${f.time.value}:00+08:00`);
+  if(!Number.isFinite(at)||new Date(at+28800000).toISOString().slice(0,16)!==`${f.date.value}T${f.time.value}`||at>Date.now())return markError(row,'time','请检查日期和时间，不能晚于现在');
+  if(row.kind==='prediction'&&f.date.value!==cfg.today)return markError(row,'date','历史号码请切换到录入记录');
+  return {store_id:f.store.value,store_name:cfg.storeNames[f.store.value]||row.suggestedName||f.store.value,number:f.number.value,issued_at:row.preciseAt||new Date(at).toISOString(),queue_type:f.queue.value,checked_in:f.checkin.value==='unknown'?null:f.checkin.value==='yes'};
+ }
+ function fill(row,response){
+  const f=response?.fields||{},set=(key,value)=>{if(value!==undefined&&value!==null&&!row.dirty.has(key))row.fields[key].value=value;};
+  row.suggestedName=response.store_name;row.imageSha=/^[0-9a-f]{64}$/.test(response.image_sha256||'')?response.image_sha256:null;
+  if(!row.dirty.has('city')&&!row.dirty.has('store'))populateCities(row,f.store_id||response.store_suggestion?.store_id||'');
+  set('number',f.number);set('queue',f.queue_type);set('checkin',f.checked_in===null?'unknown':f.checked_in===undefined?undefined:f.checked_in?'yes':'no');
+  if(Number.isFinite(Date.parse(f.issued_at))){const local=new Date(Date.parse(f.issued_at)+28800000).toISOString();set('date',local.slice(0,10));set('time',local.slice(11,16));if(!row.dirty.has('date')&&!row.dirty.has('time'))row.preciseAt=new Date(f.issued_at).toISOString();}
+  row.status.textContent=response.auto_accept?'已填入，可修改':'请核对识别结果';
+ }
+ async function upload(files){
+  if(recognizing||submitting)return;const selected=[...files];if(!selected.length)return;
+  const kind=current,list=drafts[kind],blank=list.filter(isBlank);
+  if(selected.length>MAX_ROWS||list.length-blank.length+selected.length>MAX_ROWS){$('composer-status').textContent='每批最多20条，现有填写已保留';return;}
+  if(location.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(location.hostname)){$('composer-status').textContent='请使用 HTTPS 加密入口';return;}
+  recognizing=true;$('composer-status').textContent='';
+  const queue=selected.map(file=>{const row=blank.shift()||makeRow(kind);row.file=file;row.status.textContent='等待识别';if(['image/png','image/jpeg'].includes(file.type)&&file.size<=MAX_SIZE){row.imageUrl=URL.createObjectURL(file);row.preview.src=row.imageUrl;row.preview.hidden=false;}return row;});render();
+  for(const row of queue){
+   if(!drafts[kind].includes(row))continue;
+   if(!['image/png','image/jpeg'].includes(row.file.type)||row.file.size>MAX_SIZE){row.status.textContent='请选择5MB内的PNG或JPEG，也可直接填写';continue;}
+   row.status.textContent='正在识别';
+   try{const r=await fetch('/api/v1/research/screenshots/recognize',{method:'POST',headers:{'Content-Type':row.file.type},body:row.file,cache:'no-store',signal:AbortSignal.timeout(40000)});if(!r.ok)throw Error('ocr_failed');const value=await r.json();if(drafts[kind].includes(row))fill(row,value);}
+   catch(_){if(drafts[kind].includes(row))row.status.textContent='识别失败，可直接填写';}
+  }
+  recognizing=false;$('screenshot-files').value='';updateControls();
+ }
+ async function submit(event){
+  event?.preventDefault();if(submitting||recognizing)return;const kind=current,candidates=drafts[kind].filter(r=>!isBlank(r));
+  if(!candidates.length){$('composer-status').textContent='先填写号码，或上传截图';drafts[kind][0].fields.number.focus();return;}
+  const prepared=candidates.map(row=>({row,fields:payload(row)})),invalid=prepared.find(p=>!p.fields);
+  if(invalid){$('composer-status').textContent='请补全标出的信息';Object.values(invalid.row.fields).find(n=>n.getAttribute('aria-invalid')==='true')?.focus();return;}
+  const opts={kind,mode:$('prediction-mode').value,record:kind==='record'||$('ticket-record-system').checked,follow:kind==='prediction'&&$('ticket-follow').checked};
+  submitting=true;updateControls();$('composer-status').textContent='';
+  const controls=[$('prediction-mode'),$('ticket-record-system'),$('ticket-follow'),...prepared.flatMap(p=>Object.values(p.row.fields))];controls.forEach(n=>n.disabled=true);let saved=0;
+  for(const {row,fields}of prepared){row.status.textContent='正在提交';try{await window.SushiWaitResearch.submitEntry(fields,{...opts,inputMethod:row.file?'screenshot_reviewed':'manual',reviewed:Boolean(row.file),imageSha:row.imageSha});saved++;removeRow(row);}catch(e){row.status.textContent=e.message==='https_required'?'请使用 HTTPS 加密入口':e.message==='ticket_limit'?'当前浏览器已达到号码上限':'保存失败，信息已保留，可重试';}}
+  controls.forEach(n=>n.disabled=false);submitting=false;render();$('composer-status').textContent=saved?`已${kind==='record'?'保存':'提交'} ${saved} 条${saved<prepared.length?`，${prepared.length-saved} 条需重试`:''}`:'提交未完成，信息已保留';
+  if(saved)window.SushiWaitResearch.showSuccess();if(kind==='prediction'&&saved===prepared.length)window.SushiWaitResearch.openTickets();
+ }
+ function attach(){
+  if(!$('ticket-composer-form'))return;$('ticket-composer-form').onsubmit=submit;
+  $('composer-add').onclick=()=>{if(submitting||drafts[current].length>=MAX_ROWS)return;const row=makeRow(current);render();row.fields.city.focus();};
+  $('screenshot-select').onclick=()=>{$('screenshot-files').value='';$('screenshot-files').click();};$('screenshot-files').onchange=()=>upload($('screenshot-files').files);
+  $('entry-tab-predict').onclick=()=>switchTab('prediction');$('entry-tab-record').onclick=()=>switchTab('record');
+  for(const id of ['entry-tab-predict','entry-tab-record'])$(id).onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();switchTab(['ArrowRight','End'].includes(e.key)?'record':'prediction');$(current==='record'?'entry-tab-record':'entry-tab-predict').focus();};
+  const drop=$('ticket-composer-form');for(const name of ['dragenter','dragover'])drop.addEventListener(name,e=>{e.preventDefault();if(!submitting)drop.classList.add('composer-dragging');});drop.addEventListener('dragleave',()=>drop.classList.remove('composer-dragging'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('composer-dragging');upload(e.dataTransfer.files);});
+  window.addEventListener('pagehide',()=>{for(const list of Object.values(drafts))for(const row of list)if(row.imageUrl)URL.revokeObjectURL(row.imageUrl);});render();directoryChanged();
+ }
+ document.addEventListener('DOMContentLoaded',attach);window.SushiWaitScreenshots={upload,submit,kind:()=>current,directoryChanged};
 })();

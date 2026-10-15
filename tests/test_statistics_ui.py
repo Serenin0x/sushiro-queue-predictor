@@ -2,6 +2,17 @@
 from pathlib import Path
 import shutil,subprocess,unittest
 class StatisticsUITests(unittest.TestCase):
+    def test_ticket_composer_and_submission_workflows(self):
+        node = shutil.which('node')
+        if node is None:
+            self.skipTest('Node unavailable')
+        root = Path(__file__).resolve().parents[1]
+        for name in ('screenshot-ui.test.js', 'research-ui.test.js'):
+            with self.subTest(script=name):
+                result = subprocess.run([node, str(root/'tests'/name)], cwd=root,
+                    capture_output=True, text=True, timeout=15)
+                self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+
     def test_task_workspace_interaction_and_async_selection_boundaries(self):
         node=shutil.which('node')
         if node is None:self.skipTest('Node unavailable')

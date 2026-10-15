@@ -23,6 +23,20 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  context.document.visibilityState='visible';state.section='prediction';$('entry-tab-record').onclick();assert.equal($('research-form').hidden,false);assert.equal($('ticket-predict-form').hidden,true);assert.equal($('entry-tab-record').attrs['aria-selected'],'true');
  $('research-date').value='2026-10-12';$('research-time').value='12:05';$('research-number').value='1234';$('research-checkin').value='unknown';await $('research-form').onsubmit({preventDefault(){}});await settle();assert(requests.some(r=>r.body?.ticket?.entry_mode==='retrospective'&&r.body.ticket.issued_at.startsWith('2026-10-12')),'historical entry accepted without checkboxes');
  context.location.protocol='http:';state.section='prediction';$('research-number').value='5678';const saves=requests.filter(r=>r.body?.action==='submit').length;await $('research-form').onsubmit({preventDefault(){}});assert.equal(requests.filter(r=>r.body?.action==='submit').length,saves,'private capability must not be sent over HTTP');
+ // The new composer owns its store and uses the model chosen at explicit submit.
+ context.location.protocol='https:';
+ const newFields={store_id:'3004',store_name:'合成独立门店',number:'6200',issued_at:'2026-10-14T03:30:00Z',queue_type:'ordinary',checked_in:false};
+ const result=await api.submitEntry(newFields,{kind:'prediction',mode:'thinking',record:false,follow:true,inputMethod:'manual'});
+ let stored=JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.find(i=>i.id===result.id);
+ assert.equal(stored.ticket.store_id,'3004');assert.equal(state.storeId,'3014');assert.equal(stored.mode,'thinking');assert.equal(stored.follow,true);assert.equal(stored.ticket.input_method,'manual');
+ const again=await api.submitEntry(newFields,{kind:'prediction',mode:'nonthinking',record:true,follow:false,inputMethod:'manual'});
+ assert.equal(again.id,result.id);stored=JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.find(i=>i.id===again.id);
+ assert.equal(stored.mode,'nonthinking');assert.equal(stored.follow,false);assert.equal(stored.saved,true);
+ assert(requests.some(r=>r.body?.ticket?.number==='6200'&&r.body.ticket.store_id==='3004'));
+ const beforeInsecure=JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.length;
+ context.location.protocol='http:';
+ await assert.rejects(()=>api.submitEntry({...newFields,number:'6201'},{kind:'record',mode:'algorithm',record:true}),/https_required/);
+ assert.equal(JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.length,beforeInsecure);
  assert(requests.every(r=>!r.path.includes('4045')&&!r.path.includes('1234')&&!r.path.includes(submitted.body.owner_secret)));
  console.log('explicit submission, unavailable forecast recording, manual/continuous modes, tab switching, hidden leases and HTTPS privacy passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
