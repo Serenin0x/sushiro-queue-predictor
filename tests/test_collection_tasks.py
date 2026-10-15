@@ -99,6 +99,21 @@ class CollectionTaskTests(unittest.TestCase):
     def raw(self):
         return json.loads(self.task.read_text())
 
+    def test_five_store_task_collects_and_restores_without_reset(self):
+        ids = ('900001', '900002', '900003', '900004', '900005')
+        code, _ = self.run_cli(self.args(ids=ids, samples=1))
+        self.assertEqual(code, 0)
+        self.assertEqual([store for store, _ in self.requests], list(ids))
+        self.assertEqual(task_status(self.task)['successful_slots'], 5)
+        code, _ = self.run_cli(self.args(ids=ids, samples=1, resume=True))
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.requests), 5)
+
+    def test_six_stores_are_rejected_before_any_query(self):
+        code, _ = self.run_cli(self.args(ids=tuple(str(900001+i) for i in range(6)), samples=1))
+        self.assertEqual(code, 2)
+        self.assertEqual(self.requests, [])
+
     def count(self):
         with SnapshotStore(self.db, read_only=True) as db:
             return sum(g['successful_samples'] for g in db.report()['groups'])

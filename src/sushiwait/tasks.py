@@ -88,7 +88,7 @@ def _decode(body: bytes) -> dict:
                                                   config_keys | {"cadence", "transient_failure_budget"})
                 or not isinstance(c["db"], str) or len(c["db"]) > 4096 or not Path(c["db"]).is_absolute()
                 or c["api_profile"] not in ("legacy", "miniapp_gateway")
-                or not isinstance(c["store_ids"], list) or not 1 <= len(c["store_ids"]) <= 3
+                or not isinstance(c["store_ids"], list) or not 1 <= len(c["store_ids"]) <= 5
                 or len(set(c["store_ids"])) != len(c["store_ids"])
                 or not all(isinstance(s, str) and s.isascii() and s.isdecimal() and str(int(s)) == s
                            and 0 < int(s) <= 2**63-1 for s in c["store_ids"])

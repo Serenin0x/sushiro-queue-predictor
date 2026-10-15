@@ -91,12 +91,14 @@ def _decode(body):
 
 class Ledger:
     """Immutable private checkpoints; attempt reservation survives restarts."""
+    checkpoint_limit = 128
+
     def __init__(self, root, plan):
         self.root = Path(root)
         self.digest = hashlib.sha256(encoded(plan)).hexdigest()
         self.limit = plan['renewal_limit']
         files = sorted(self.root.glob('checkpoint-*.json'))
-        if len(files) > 128 or any(p.name != f'checkpoint-{i:03}.json' for i,p in enumerate(files)):
+        if len(files) > self.checkpoint_limit or any(p.name != f'checkpoint-{i:03}.json' for i,p in enumerate(files)):
             raise TrialError('cloud_ledger_invalid')
         self.index = len(files)
         self.value = _decode(_read_private_file(files[-1])) if files else {
@@ -127,7 +129,7 @@ class Ledger:
             self.save()
 
     def save(self):
-        if self.index >= 128:
+        if self.index >= self.checkpoint_limit:
             raise TrialError('cloud_checkpoint_limit')
         result = _write_packet(encoded(self.value),self.root/f'checkpoint-{self.index:03}.json')
         if result['durability_confirmed'] is not True:

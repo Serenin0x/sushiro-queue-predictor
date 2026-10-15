@@ -494,8 +494,18 @@ function archiveReadStatus(value){
   }
   return value.unavailable_store_ids.length?`本月归档读取不完整：${value.unavailable_store_ids.length} 家，缺失资料未补零。`:`已读取 ${Object.keys(value.store_names).length} 家门店的已保存副本。`;
 }
+async function updateCollectionHealth(){
+  const element=$('collection-health');if(!element)return;
+  try{const value=await get('/api/v1/collection/health');
+    const labels={running:'采集中',starting:'采集启动中',closed:'营业外暂停',completed:'今日采集结束',needs_attention:'采集待恢复'};
+    if(value.schema_version!==1||!labels[value.state])throw Error('health unavailable');
+    element.dataset.state=value.state;element.textContent=labels[value.state];
+    element.title=value.heartbeat_stale?'采集状态已超过两分钟未更新':value.next_open_at?`下次开采 ${new Date(value.next_open_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}`:value.last_progress_at?`最近采样 ${time(value.last_progress_at)}`:'当前服务器采样状态';
+  }catch(_){element.dataset.state='unknown';element.textContent='采样状态未知';element.title='暂时无法读取服务器采样状态';}
+}
 async function refresh(){
   if(busy)return;
+  if(taskWorkspace)updateCollectionHealth();
   busy=true;$("refresh").disabled=true;if(engineeringPanels)$("header-refresh").disabled=true;
   const month=$("month").value,selected=$("store").value;
   try{

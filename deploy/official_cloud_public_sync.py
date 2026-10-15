@@ -23,13 +23,15 @@ DEADLINE=datetime.fromisoformat('2026-10-14T14:02:00+00:00')
 SCOPE={'store_ids':['3014','3004','2009'],'api_profile':'miniapp_gateway','data_origin':'live'}
 
 
-def publish_page(source,archive,outbox,after_id, *, as_of,scope):
+def publish_page(source,archive,outbox,after_id, *, as_of,scope,pending_limit=500):
     """One local select/commit/confirm attempt, including crash replay."""
     source,archive,outbox=map(Path,(source,archive,outbox))
     if source.resolve()==archive.resolve() or type(after_id) is not int or after_id<0:
         raise ValueError('cloud_public_scope_invalid')
     files=list(outbox.glob('pending-*.json'))
-    if len(files)>500 or any(re.fullmatch(r'pending-[0-9]{12}\.json',p.name) is None for p in files):
+    if type(pending_limit) is not int or not 1<=pending_limit<=5000:
+        raise ValueError('cloud_public_outbox_limit_invalid')
+    if len(files)>pending_limit or any(re.fullmatch(r'pending-[0-9]{12}\.json',p.name) is None for p in files):
         raise ValueError('cloud_public_outbox_invalid')
     pending=[p for p in files if int(p.stem[8:])>after_id]
     if len(pending)>1:

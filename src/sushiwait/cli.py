@@ -1348,9 +1348,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     if args.command == "collect":
         ids = args.store_id
-        if not 1 <= len(ids) <= 3 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= (240 if args.cadence else 120):
+        if not 1 <= len(ids) <= 5 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= (240 if args.cadence else 120):
             emit({"ok": False, "error_code": "invalid_sampling_bounds",
-                  "detail": "验证阶段限1–3店、30–3600秒周期；固定周期1–120轮，平滑策略1–240轮"})
+                  "detail": "单任务限1–5店、30–3600秒周期；固定周期1–120轮，平滑策略1–240轮"})
             return 2
         if (not 0 <= args.wait_for_credentials <= 600
                 or args.wait_for_credentials and args.credentials_file is None):

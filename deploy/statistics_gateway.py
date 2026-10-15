@@ -52,7 +52,8 @@ class JoinedOfficialViews:
 class StatisticsGateway:
     def __init__(self, hub, *, official_view=None, calendar_source='crm_remote_v1_1',
                  refresh_seconds=30, refresh_policy_file=None, model_advice_file=None,
-                 research_file=None, public_origin='https://124.222.57.236', ocr_enabled=False):
+                 research_file=None, public_origin='https://124.222.57.236', ocr_enabled=False,
+                 collection_status_file=None):
         if (calendar_source not in {'crm_remote_v1_1', 'sapi_miniapp_gateway'}
                 or calendar_source == 'sapi_miniapp_gateway' and official_view is None):
             raise ValueError('calendar_source_requires_configured_view')
@@ -63,6 +64,7 @@ class StatisticsGateway:
         self.public_origin = public_origin
         self.research_clients = OrderedDict()
         self.ocr_enabled = ocr_enabled
+        self.collection_status_file = collection_status_file
         self.ocr_clients = OrderedDict()
         self.ocr_lock = asyncio.Lock()
         self.research_lock = asyncio.Lock()
@@ -76,6 +78,8 @@ class StatisticsGateway:
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
 
     def allowed(self, path):
+        if path == '/api/v1/collection/health':
+            return self.collection_status_file is not None
         if path == '/wait-reference.json':
             return self.research_file is not None
         if path in {'/research-ui.js','/screenshot-ui.js'}:
@@ -119,6 +123,32 @@ class StatisticsGateway:
 
     def polling_seconds(self):
         return self.polling_settings()['poll_seconds']
+
+    def collection_health(self):
+        from sushiwait.credentials import _read_private_file
+        value = json.loads(_read_private_file(self.collection_status_file))
+        state = value['state']
+        if state not in {'starting', 'running', 'closed', 'completed', 'needs_attention'}:
+            raise ValueError('invalid_collection_health')
+        at = datetime.fromisoformat(value['at'])
+        if at.utcoffset() is None:
+            raise ValueError('invalid_collection_health')
+        age = max(0, (datetime.now(timezone.utc)-at).total_seconds())
+        result = {'schema_version': 1, 'state': state if age<=120 else 'needs_attention',
+                  'updated_at': at.isoformat(), 'heartbeat_stale': age>120}
+        for key in ('opened_at', 'closes_at', 'next_open_at', 'last_progress_at'):
+            if value.get(key) is not None:
+                instant = datetime.fromisoformat(value[key])
+                if instant.utcoffset() is None:
+                    raise ValueError('invalid_collection_health')
+                result[key] = instant.isoformat()
+        for key in ('successful_slots', 'failed_slots'):
+            if key in value:
+                if type(value[key]) is not int or not 0<=value[key]<=10000:
+                    raise ValueError('invalid_collection_health')
+                result[key] = value[key]
+        # Explicit projection: never expose paths, supplier errors or credentials.
+        return result
 
     async def research_request(self, scope, receive):
         if (scope['path']=='/api/v1/research/tickets' and self.public_origin.startswith('https:') and scope.get('scheme')!='https'):
@@ -290,7 +320,13 @@ class StatisticsGateway:
                 if saved and time.monotonic() - saved[0] < 5:
                     _, status, body, mime = saved
                 else:
-                    if path == '/wait-reference.json' and self.research_file:
+                    if path == '/api/v1/collection/health':
+                        try:
+                            body = json.dumps(self.collection_health()).encode()
+                            status, mime = 200, 'application/json'
+                        except Exception:
+                            status, body, mime = 503, b'{"state":"unavailable"}', 'application/json'
+                    elif path == '/wait-reference.json' and self.research_file:
                         try:
                             from sushiwait.ticketresearch import TicketResearch
                             research = TicketResearch(self.research_file)
@@ -363,7 +399,8 @@ async def serve(args):
         official = JoinedOfficialViews(official, read_official_config(args.extra_official_view_file))
     app = StatisticsGateway(hub, official_view=official, calendar_source=args.calendar_source,
         refresh_seconds=args.refresh_seconds, refresh_policy_file=args.refresh_policy_file, model_advice_file=args.model_advice_file,
-        research_file=args.research_file, public_origin=args.public_origin, ocr_enabled=args.ocr_enabled)
+        research_file=args.research_file, public_origin=args.public_origin, ocr_enabled=args.ocr_enabled,
+        collection_status_file=args.collection_status_file)
     remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds() if app.deadline is not None else None
     if remaining is not None and remaining <= 0:
         raise ValueError('original_trial_deadline_reached')
@@ -388,6 +425,7 @@ async def serve(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config-file', required=True)
+    parser.add_argument('--collection-status-file', help='Optional bounded public sampling health projection')
     parser.add_argument('--model-advice-file', help='Optional validated public Flash advice copy; never a key file')
     parser.add_argument('--ocr-enabled', action='store_true', help='Optional private on-server screenshot OCR')
     parser.add_argument('--public-origin', default='https://124.222.57.236', help='Exact HTTPS origin for private forms')
