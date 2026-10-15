@@ -16,7 +16,7 @@ function curve(date="2026-10-11",labels=["100","101","102"]) {
     first_label_is_confirmed_call:false,call_reference_semantics:"user_assumed_first_displayed_label",graph_truncated:false,
     points:[-1800000,-900000,0].map((offset,i)=>({request_started_at:iso(at+offset-200),
       queue_received_at:iso(at+offset),count_received_at:null,count_raw:null,pair_ok:true,scheduled_pause:false,
-      success_semantics:single,error_codes:{},comparison_state:"packet_continuity_unknown",
+      success_semantics:single,error_codes:{},comparison_state:"packet_continuity_unknown",queue_field_presence:{mixedQueue:"present",reservationQueue:"present"},
       queues:{mixedQueue:i===2?labels:[String(90+i*4)],reservationQueue:[]}}))};
 }
 function setup(binding=source) {
@@ -29,7 +29,7 @@ function setup(binding=source) {
   for(const date of ["2026-10-11","2026-10-10","2026-10-09"])index.days[date]={900001:summary};
   const ctx={console,Intl,Date:Clock,Math,Number,String,Object,Array,RegExp,JSON,Promise,Set,Map,AbortSignal,setInterval(){},
     window:{devicePixelRatio:1,addEventListener(){}},document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);},createElement:tag=>new Element(tag)}};
-  ctx.fetch=async path=>{reads.push(path);if(path.includes("/months/"))return {ok:true,json:async()=>path.endsWith("2026-10")?index:{days:{}}};
+  ctx.fetch=async path=>{reads.push(path);if(path==="/model-advice.json")return {ok:true,json:async()=>({schema_version:1,policy:"public_display_scenarios_v1",stores:{}})};if(path.includes("/months/"))return {ok:true,json:async()=>path.endsWith("2026-10")?index:{days:{}}};
     return {ok:true,json:async()=>curve(path.split("/").at(-1))};};
   vm.createContext(ctx);vm.runInContext(scripts[1],ctx);vm.runInContext(scripts[2],ctx);
   ctx.window.SushiWaitReference=ctx.SushiWaitReference;ctx.window.SushiWaitReferenceAlerts=ctx.SushiWaitReferenceAlerts;
@@ -49,8 +49,8 @@ async function select(t) {
   assert(t.reads.includes("/api/v1/official/stores/900001/days/2026-10-11"));
   assert(t.reads.includes("/api/v1/official/stores/900001/days/2026-10-10"));
   assert(t.reads.includes("/api/v1/official/months/2026-09"));
-  assert(t.nodes.get("prediction").textContent.includes("连续性尚未确认"));
-  assert(!t.nodes.get("prediction").textContent.includes("参考位置预计"));
+  assert.equal(t.run("latestReferenceResult.available"),false);
+  assert.equal(t.run("latestReferenceResult.reason"),"median_upper_unknown");
   const count=t.reads.length;t.nodes.get("ticket-number").value="201";t.nodes.get("ticket-number").oninput();
   assert.equal(t.reads.length,count);
   t.ctx.visible=curve("2026-10-11",["100","201","202"]);
@@ -58,17 +58,21 @@ async function select(t) {
   t.ctx.visible.points.at(-1).request_started_at=iso(base+59800);
   t.ctx.visible.points.at(-1).queue_received_at=iso(base+60000);
   t.clock.at=base+60000;t.run("detail=visible;renderPrediction()");
-  assert(t.nodes.get("ticket-precaution").textContent.includes("原号码出现在最新展示"));
-  assert(t.nodes.get("prediction").textContent.includes("等待时间参考已暂停"));
-  t.clock.at=base+150001;t.run("renderPrediction()");
-  assert(t.nodes.get("ticket-precaution").textContent.includes("超过90秒"));
-  assert(!t.nodes.get("ticket-precaution").textContent.includes("出现在最新展示"));
-  assert(t.reads.every(path=>/^\/api\/v1\/official\/(?:months\/2026-\d\d|stores\/900001\/days\/2026-10-\d\d)$/.test(path)));
+  assert(t.nodes.get("ticket-precaution").textContent.includes("进入前两位"));
+  assert.equal(t.nodes.get("ticket-tracking-state").textContent,"已到号");
+  // Arrival is saved historical evidence. Staleness suspends an unarrived
+  // ticket's forecast, rather than erasing a previously observed arrival.
+  t.clock.at=base+720001;t.run("renderPrediction()");
+  assert.equal(t.nodes.get("ticket-tracking-state").textContent,"已到号");
+  t.nodes.get("ticket-number").value="300";t.nodes.get("ticket-number").oninput();
+  assert.equal(t.run("latestReferenceResult.reason"),"stale_sample");
+  assert(t.nodes.get("ticket-precaution").hidden);
+  assert(t.reads.every(path=>path==="/model-advice.json"||/^\/api\/v1\/official\/(?:months\/2026-\d\d|stores\/900001\/days\/2026-10-\d\d)$/.test(path)));
   assert(!t.reads.some(path=>path.includes("ticket")||path.includes("18:00")||path.includes("?")||path.includes("201")));
 
   const failed=setup();await settle();failed.ctx.fetch=async path=>{failed.reads.push(path);return {ok:false,status:404};};
   await failed.run("refresh()");assert(failed.nodes.get("status").textContent.includes("暂时不可用"));
-  assert(failed.reads.every(path=>path.startsWith("/api/v1/official/"))); // No fallback to the old provider.
+  assert(failed.reads.every(path=>path.startsWith("/api/v1/official/")||path==="/model-advice.json")); // No fallback to the old provider.
   const invalid=setup("other");await settle();assert.equal(invalid.reads.length,0);
   assert(invalid.nodes.get("status").textContent.includes("暂时不可用"));
   const wrongMonth=setup();await settle();wrongMonth.ctx.fetch=async path=>({ok:true,json:async()=>({source:"crm_remote_v1_1"})});
@@ -79,6 +83,6 @@ async function select(t) {
   assert(!wrongDay.nodes.get("prediction").textContent.includes("参考位置预计"));
   const mixed=setup();await select(mixed);mixed.ctx.wrong={...curve(),source:"crm_remote_v1_1"};
   mixed.run("detail=wrong;renderPrediction()");assert(mixed.nodes.get("prediction").textContent.includes("语义不匹配"));
-  assert(!mixed.nodes.get("ticket-precaution").textContent.includes("出现在最新展示"));
-  console.log("official month, current and history routes; private inputs; exact membership; stale retraction; no old-source fallback passed");
+  assert(mixed.nodes.get("ticket-precaution").hidden);
+  console.log("official routes, private inputs, sparse boundaries, arrival evidence, cadence freshness and no source fallback passed");
 })().catch(error=>{console.error(error);process.exitCode=1;});

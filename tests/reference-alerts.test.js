@@ -143,7 +143,7 @@ let clock=base;
 class Clock extends Date {constructor(...args){super(...(args.length?args:[clock]));}static now(){return clock;}}
 const context={console,Intl,Date:Clock,Math,Number,String,Object,Array,RegExp,JSON,Promise,AbortSignal,Map,Set,setInterval:()=>0,
   window:{devicePixelRatio:1,addEventListener(){}},document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);},createElement:tag=>new Element(tag)}};
-context.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>({days:{},store_names:{900001:"合成门店"},unavailable_store_ids:[]})};};
+context.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>path==="/model-advice.json"?{schema_version:1,policy:"public_display_scenarios_v1",stores:{}}:{days:{},store_names:{900001:"合成门店"},unavailable_store_ids:[]}};};
 vm.createContext(context);
 for(const name of [process.argv[4],process.argv[2]])vm.runInContext(fs.readFileSync(name,"utf8"),context);
 context.window.SushiWaitReference=context.SushiWaitReference;context.window.SushiWaitReferenceAlerts=context.SushiWaitReferenceAlerts;
@@ -152,17 +152,20 @@ vm.runInContext(fs.readFileSync(process.argv[3],"utf8"),context);
   await new Promise(resolve=>setImmediate(resolve));
   nodes.get("store").value="900001";nodes.get("queue").value="mixedQueue";nodes.get("ticket-number").value="200";
   nodes.get("ticket-issued").value="11:00";nodes.get("ticket-offset").value="0";nodes.get("ticket-scope").checked=true;
-  context.testDetail=detail(sample(["100","200"]));
+  // The current page uses the arrival model; its public projection requires
+  // explicit successful-response and truncation metadata.
+  context.testDetail={...detail(sample(["100","200"],base,{pair_ok:true})),graph_truncated:false};
   vm.runInContext('detail=testDetail;ticketScopeKey=scopeKey();renderPrediction();',context);
-  assert(nodes.get("ticket-precaution").textContent.includes("出现在最新展示"));
-  assert(nodes.get("prediction").textContent.includes("等待时间参考已暂停"));
+  assert(nodes.get("ticket-precaution").textContent.includes("进入前两位"));
+  assert.equal(nodes.get("ticket-tracking-state").textContent,"已到号");
+  assert(nodes.get("prediction").textContent.includes("首次检测"));
   assert(!nodes.get("ticket-precaution").hidden);
   const before=reads.length;nodes.get("ticket-arrival").value="12:00";nodes.get("ticket-arrival").oninput();
   nodes.get("ticket-offset").value="10";nodes.get("ticket-offset").oninput();assert.equal(reads.length,before);
   vm.runInContext('showError()',context);assert(nodes.get("ticket-precaution").textContent.includes("暂时暂停"));
-  assert(!nodes.get("ticket-precaution").textContent.includes("出现在最新展示"));
+  assert(!nodes.get("ticket-precaution").textContent.includes("进入前两位"));
   nodes.get("queue").value="reservationQueue";nodes.get("queue").onchange();assert(nodes.get("ticket-precaution").hidden);
-  assert(reads.every(p=>p.startsWith("/api/v1/")));assert(!reads.some(p=>p.includes("ticket")||p.includes("200")||p.includes("12:00")||p.includes("?")));
+  assert(reads.every(p=>p.startsWith("/api/v1/")||p==="/model-advice.json"));assert(!reads.some(p=>p.includes("ticket")||p.includes("200")||p.includes("12:00")||p.includes("?")));
   cases++;
   console.log(`${cases} precaution scenarios including actual page integration passed`);
 })().catch(error=>{console.error(error);process.exitCode=1;});

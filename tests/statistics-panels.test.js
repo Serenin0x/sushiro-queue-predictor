@@ -14,18 +14,18 @@ const row={store_id:"900001",observations:1,successful_pairs:1,failed_pairs:0,sc
 const month={days:{"2026-10-09":{"900001":row}},store_names:{900001:"合成门店"},unavailable_store_ids:[]};
 const ctx={console,Intl,Date:Clock,Math,Number,String,Object,Array,RegExp,JSON,Promise,Set,Map,AbortSignal,setInterval:()=>0,
 window:{devicePixelRatio:1,addEventListener(){}},document:{getElementById:$,createElement:tag=>new Element(tag)}};
-ctx.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>path.includes("/stores/")?{source:"crm_remote_v1_1",requested_store_id:"900001",local_date:path.split("/").at(-1),points:[],graph_truncated:false}:month};};
+ctx.fetch=async path=>{reads.push(path);return {ok:true,json:async()=>path==="/model-advice.json"?{schema_version:1,policy:"public_display_scenarios_v1",stores:{}}:path.includes("/stores/")?{source:"crm_remote_v1_1",requested_store_id:"900001",local_date:path.split("/").at(-1),points:[],graph_truncated:false}:month};};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(process.argv[2],"utf8"),ctx);
 const run=code=>vm.runInContext(code,ctx),settle=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  await settle();
- const visible=()=>["overview","analysis","prediction","experience"].filter(k=>!$("view-"+k).hidden);
+ const visible=()=>["overview","analysis","prediction","experience","tickets"].filter(k=>!$("view-"+k).hidden);
  assert.deepEqual(visible(),["overview"]);
  $("nav-analysis").onclick();assert.deepEqual(visible(),["analysis"]);assert.equal($("analysis-empty").hidden,false);
  $("ticket-number").value="4045";$("ticket-issued").value="11:12";$("experience-party").value="2";
  const privateInputs=[$("ticket-number"),$("ticket-issued"),$("experience-party")];
  const initialReads=reads.length;
- for(const k of ["prediction","experience","overview","analysis"]){$("nav-"+k).onclick();assert.deepEqual(visible(),[k]);assert.equal($("nav-"+k).attributes["aria-current"],"page");}
+ for(const k of ["prediction","tickets","experience","overview","analysis"]){$("nav-"+k).onclick();assert.deepEqual(visible(),[k]);assert.equal($("nav-"+k).attributes["aria-current"],"page");}
  assert.equal(reads.length,initialReads);assert.equal($("ticket-number").value,"4045");assert.equal($("experience-party").value,"2");
  assert.deepEqual(privateInputs,[$("ticket-number"),$("ticket-issued"),$("experience-party")]);
  $("engineering-date").value="2026-10-09";$("engineering-date").onchange();await settle();
@@ -43,7 +43,12 @@ const run=code=>vm.runInContext(code,ctx),settle=()=>new Promise(r=>setImmediate
  assert.equal($("month").value,"2026-09");assert.equal(run("day"),"2026-09-07");assert(reads.includes("/api/v1/months/2026-09"));
  const beforeInvalid=reads.length;$("engineering-date").value="2026-02-31";$("engineering-date").onchange();
  assert.equal(run("day"),"2026-09-07");assert.equal(reads.length,beforeInvalid);
- $("store").value="";$("store").onchange();await settle();assert.equal($("prediction-content").hidden,true);
- assert(reads.every(p=>p.startsWith("/api/v1/")&&!p.includes("4045")&&!p.includes("11:12")));
+ $("store").value="";$("store").onchange();await settle();
+ // Screenshot import must remain reachable before a store is selected.
+ assert.equal($("prediction-content").hidden,false);
+ assert.equal($("prediction-empty").hidden,true);
+ assert.equal($("store-wait-card").hidden,true);
+ assert.equal($("ticket-number").value,"4045");
+ assert(reads.every(p=>(p.startsWith("/api/v1/")||p==="/model-advice.json")&&!p.includes("4045")&&!p.includes("11:12")));
  console.log("one visible engineering section; shared dates; mounted private inputs; navigation makes no reads passed");
 })().catch(e=>{console.error(e);process.exitCode=1;});
