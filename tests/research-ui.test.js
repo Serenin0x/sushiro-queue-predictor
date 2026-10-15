@@ -5,9 +5,9 @@ class Clock extends Date{constructor(...args){super(...(args.length?args:[now]))
 class Node{constructor(){this.value='';this.checked=false;this.textContent='';this.children=[];this.hidden=false;this.disabled=false;this.attrs={};this.classList={add(){},remove(){},toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=[...v];}setAttribute(k,v){this.attrs[k]=v;}focus(){}}
 const $=name=>{if(!elements.has(name))elements.set(name,new Node());return elements.get(name);};
 const state={section:'prediction',source:'sapi_miniapp_gateway',day:'2026-10-14',storeId:'3014',storeName:'大融城',storeNames:{'3014':'大融城'},queueType:'ordinary',mode:'auto',number:'4045',issued:'11:01',checkedIn:'no',confirmed:true,detail:null,samplingSeconds:180};
-let forecastCalls=0,forecast={available:false,reason:'insufficient_sparse_trend'};
+let waitStores={},forecastCalls=0,forecast={available:false,reason:'insufficient_sparse_trend'};
 const context={window:{addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{arrival:()=>({available:false,state:'waiting'}),trackedForecast:()=>{forecastCalls++;return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
- fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});return {ok:true,json:async()=>path==='/wait-reference.json'?{stores:{}}:body?.action==='list'?{records:[]}:body?{saved:true}:{local_date:state.day,points:[]}};}};
+ fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});return {ok:true,json:async()=>path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:[]}:body?{saved:true}:{local_date:state.day,points:[]}};}};
 vm.createContext(context);vm.runInContext(fs.readFileSync('src/sushiwait/web/research-ui.js','utf8'),context);
 const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImmediate(r));
 (async()=>{
@@ -37,6 +37,13 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  context.location.protocol='http:';
  await assert.rejects(()=>api.submitEntry({...newFields,number:'6201'},{kind:'record',mode:'algorithm',record:true}),/https_required/);
  assert.equal(JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.length,beforeInsecure);
+ // Collapsed no-ticket reference must not keep a model lease alive.
+ context.location.protocol='https:';state.section='prediction';state.mode='thinking';
+ const ids=new Set(JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.map(i=>i.id));
+ const waitRequests=()=>requests.filter(r=>r.path==='/api/v1/prediction/presence'&&!ids.has(r.body?.client_id));
+ waitStores={'3014':{ordinary:{sample_count:5}}};$('store-wait-card').hidden=true;now+=60000;api.notify();await settle();assert.equal(waitRequests().length,0);
+ $('store-wait-card').hidden=false;api.notify();await settle();api.notify();await settle();assert(waitRequests().some(r=>r.body.visible===true));
+ $('store-wait-card').hidden=true;api.notify();await settle();assert.equal(waitRequests().at(-1).body.visible,false);
  assert(requests.every(r=>!r.path.includes('4045')&&!r.path.includes('1234')&&!r.path.includes(submitted.body.owner_secret)));
  console.log('explicit submission, unavailable forecast recording, manual/continuous modes, tab switching, hidden leases and HTTPS privacy passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

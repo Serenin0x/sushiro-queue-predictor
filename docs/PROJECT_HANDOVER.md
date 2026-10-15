@@ -1105,7 +1105,7 @@ research-ui统一提交入口支持明确门店和manual／screenshot_reviewed�
 
 本机完整2206项44.709秒通过（4项环境可选跳过），补充跨日日期后相关7项再通过。真实Chrome本机合成预览完成选店／分钟／思考模式提交、结果页刷新与跟踪、两条历史记录批量保存及清空；浏览器文件选择器因扩展文件网址权限关闭未成功，未改变安全设置，OCR新流程用合成响应和竞态测试证明，不能冒称新增真实图片准确率验收。
 
-本人完成腾讯云MFA后，五静态文件通过原管理终端部署到原包web目录，先核对前版本摘要、保存备份，再原子替换，错误会回滚。服务器回执deployed=true、static_files=5、collector_pids_unchanged=true、no_services_restarted=true；私有备份及回执在/home/ubuntu/sushiwait-composer-e0527-20261016。原HTTPS四JS/CSS与本地摘要全一致，HTML含drafts-v2及原官方来源绑定，线上北京城市和各门店可选、无浏览器错误，390px页面无横向溢出。00:52健康closed／心跳新鲜／下次开采10-16 11:00。未提交合成号码到生产，也没有替用户新取号。公开提交／CI结果随后追加；正式0.2版本不改。
+本人完成腾讯云MFA后，五静态文件通过原管理终端部署到原包web目录，先核对前版本摘要、保存备份，再原子替换，错误会回滚。服务器回执deployed=true、static_files=5、collector_pids_unchanged=true、no_services_restarted=true；私有备份及回执在/home/ubuntu/sushiwait-composer-e0527-20261016。原HTTPS四JS/CSS与本地摘要全一致，HTML含drafts-v2及原官方来源绑定，线上北京城市和各门店可选、无浏览器错误，390px页面无横向溢出。00:52健康closed／心跳新鲜／下次开采10-16 11:00。未提交合成号码到生产，也没有替用户新取号。首批代码提交4fc9f26已推送，Actions38773016545已启动。部署后补充收起门店等待参考时停止读取并释放该模块模型租约，相关7项再次通过、单文件备份替换，未重启后台；最终CI结果随后追加。正式0.2版本不改。
 
 ## E0526 2026-10-15 修复反复失败的GitHub页面检查
 
