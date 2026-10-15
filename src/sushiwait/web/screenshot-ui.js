@@ -83,7 +83,7 @@
   if(selected.length>MAX_ROWS||list.length-blank.length+selected.length>MAX_ROWS){$('composer-status').textContent='每批最多20条，现有填写已保留';return;}
   if(location.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(location.hostname)){$('composer-status').textContent='请使用 HTTPS 加密入口';return;}
   recognizing=true;$('composer-status').textContent='';
-  const queue=selected.map(file=>{const row=blank.shift()||makeRow(kind);row.file=file;row.status.textContent='等待识别';if(['image/png','image/jpeg'].includes(file.type)&&file.size<=MAX_SIZE){row.imageUrl=URL.createObjectURL(file);row.preview.src=row.imageUrl;row.preview.hidden=false;}return row;});render();
+  const queue=selected.map(file=>{const row=blank.shift()||makeRow(kind);row.dirty.clear();row.file=file;row.status.textContent='等待识别';if(['image/png','image/jpeg'].includes(file.type)&&file.size<=MAX_SIZE){row.imageUrl=URL.createObjectURL(file);row.preview.src=row.imageUrl;row.preview.hidden=false;}return row;});render();
   for(const row of queue){
    if(!drafts[kind].includes(row))continue;
    if(!['image/png','image/jpeg'].includes(row.file.type)||row.file.size>MAX_SIZE){row.status.textContent='请选择5MB内的PNG或JPEG，也可直接填写';continue;}

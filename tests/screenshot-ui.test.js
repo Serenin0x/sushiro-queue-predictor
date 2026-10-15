@@ -29,6 +29,7 @@ function manual(row,number='456'){const f=fields(row);edit(f.city,'测试乙市'
  assert.equal(submissions[0].fields.store_id,'900002');assert.equal(submissions[0].fields.issued_at,'2026-10-15T04:30:00.000Z');assert.equal(submissions[0].opts.inputMethod,'manual');assert.equal(opened,1);
  assert.equal(fields(rows()[0]).number.value,'','successful manual entry clears its draft');
 
+ edit(fields(rows()[0]).city,'测试乙市');edit(fields(rows()[0]).store,'900002');
  await api.upload([file('predict.png')]);assert.equal(submissions.length,1,'even confident OCR only fills a draft');
  let p=fields(rows()[0]);assert.equal(p.number.value,'0321');assert.equal(p.store.value,'900001');assert.equal(p.time.value,'12:45');
  $('prediction-mode').value='thinking';$('ticket-follow').checked=false;edit(p.number,'0322');await submit();
