@@ -45,5 +45,31 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  $('store-wait-card').hidden=false;api.notify();await settle();api.notify();await settle();assert(waitRequests().some(r=>r.body.visible===true));
  $('store-wait-card').hidden=true;api.notify();await settle();assert.equal(waitRequests().at(-1).body.visible,false);
  assert(requests.every(r=>!r.path.includes('4045')&&!r.path.includes('1234')&&!r.path.includes(submitted.body.owner_secret)));
+ // Database filters use issuance date and the row's own store, not global selection.
+ state.section='tickets';
+ $('tickets-store').value='3004';$('tickets-store').onchange();
+ assert(api.filterRecords().every(i=>i.ticket.store_id==='3004'));
+ $('tickets-from').value='2026-10-13';$('tickets-from').onchange();
+ $('tickets-to').value='2026-10-13';$('tickets-to').onchange();
+ assert.equal(api.filterRecords().length,0);
+ $('tickets-period').value='all';$('tickets-period').onchange();
+ assert(api.filterRecords().length>0);
+ $('tickets-store').value='';$('tickets-store').onchange();
+ $('tickets-kind').value='record';$('tickets-kind').onchange();
+ assert(api.filterRecords().every(i=>i.kind==='record'));
+ $('tickets-kind').value='all';$('tickets-kind').onchange();
+ $('tickets-search').value='6200';$('tickets-search').oninput();
+ assert.equal(api.filterRecords().length,1);
+ $('tickets-search').value='';$('tickets-search').oninput();
+ assert.equal($('tickets-prev').disabled,true);
+ // A multi-page list renders only its page; filters reset pagination.
+ for(let n=0;n<22;n++)await api.submitEntry({...newFields,number:String(6500+n)},{kind:'record',mode:'algorithm',record:false,inputMethod:'manual'});
+ assert.equal($('my-tickets').children[0].children[1].children.length,10);
+ assert.equal($('tickets-next').disabled,false);
+ $('tickets-next').onclick();assert.equal($('tickets-prev').disabled,false);
+ assert($('tickets-page-note').textContent.startsWith('第 2 /'));
+ $('tickets-size').value='50';$('tickets-size').onchange();
+ assert.equal($('tickets-prev').disabled,true);assert.equal($('tickets-next').disabled,true);
+ assert.equal($('my-tickets').children[0].children[1].children.length,api.filterRecords().length);
  console.log('explicit submission, unavailable forecast recording, manual/continuous modes, tab switching, hidden leases and HTTPS privacy passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

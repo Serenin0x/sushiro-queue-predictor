@@ -174,6 +174,11 @@ def main():
         except Exception:
             value=cache.get('projection',{'schema_version':1,'policy':POLICY,'model':'deepseek-flash','stores':{}})
             value.update(status='waiting_for_observation',updated_at=datetime.now(timezone.utc).isoformat());write(output,value)
+        try:
+            from sushiwait.analyticsai import tick as analytics_tick
+            analytics_tick(root,prepare_budget,business_window,job_file=Path(args.research_file).parent/'analytics-job.json')
+        except Exception:
+            pass  # Analytics never stops collection labels or prediction advice.
         time.sleep(15)
 
 if __name__=='__main__': main()

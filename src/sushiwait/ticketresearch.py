@@ -113,10 +113,36 @@ class TicketResearch:
         return {'record_id': record_id, 'saved': True, 'duplicate': False}
 
     def own_records(self, secret):
-        rows = self.db.execute('SELECT record_id,reported,result,received_at FROM tickets WHERE owner_hash=? '
-                               'ORDER BY received_at DESC LIMIT 100', [owner_hash(secret)]).fetchall()
-        return [{'record_id': r[0], 'reported': json.loads(r[1]), 'result': json.loads(r[2]) if r[2] else None,
-                 'received_at': r[3]} for r in rows]
+        return self.query_records(secret)['records']
+
+    def query_records(self, secret, *, page=1, page_size=100, filters=None):
+        """Owner-bound database paging. Dates refer to issuance in Shanghai."""
+        filters = {} if filters is None else filters
+        if (type(page) is not int or not 1 <= page <= 5000 or type(page_size) is not int
+                or not 1 <= page_size <= 500 or type(filters) is not dict
+                or set(filters) - {'store_id', 'from', 'to'}):
+            raise ValueError('invalid_research_page')
+        clauses, values = ['owner_hash=?'], [owner_hash(secret)]
+        if filters.get('store_id'):
+            if type(filters['store_id']) is not str or not re.fullmatch('[1-9][0-9]{0,9}', filters['store_id']):
+                raise ValueError('invalid_research_filter')
+            clauses.append("json_extract(reported,'$.store_id')=?"); values.append(filters['store_id'])
+        for key, operator in (('from', '>='), ('to', '<=')):
+            value = filters.get(key)
+            if value:
+                if type(value) is not str or not re.fullmatch('20[0-9]{2}-[0-9]{2}-[0-9]{2}', value):
+                    raise ValueError('invalid_research_filter')
+                datetime.strptime(value, '%Y-%m-%d')
+                clauses.append("json_extract(reported,'$.local_date')" + operator + '?'); values.append(value)
+        if filters.get('from') and filters.get('to') and filters['from'] > filters['to']:
+            raise ValueError('invalid_research_filter')
+        where = ' AND '.join(clauses)
+        total = self.db.execute('SELECT count(*) FROM tickets WHERE '+where, values).fetchone()[0]
+        rows = self.db.execute('SELECT record_id,reported,result,received_at FROM tickets WHERE '+where+
+            ' ORDER BY received_at DESC,record_id DESC LIMIT ? OFFSET ?', values+[page_size,(page-1)*page_size]).fetchall()
+        return {'records':[{'record_id':r[0], 'reported':json.loads(r[1]),
+                    'result':json.loads(r[2]) if r[2] else None, 'received_at':r[3]} for r in rows],
+                'total':total, 'page':page, 'page_size':page_size, 'has_more':page*page_size<total}
 
     def presence(self, value, *, now=None):
         now = now or clock()

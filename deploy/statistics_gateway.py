@@ -68,6 +68,8 @@ class StatisticsGateway:
         self.ocr_clients = OrderedDict()
         self.ocr_lock = asyncio.Lock()
         self.research_lock = asyncio.Lock()
+        self.analysis_cache = OrderedDict()
+        self.analysis_lock = asyncio.Lock()
         self.calendar_source = calendar_source
         if type(refresh_seconds) is not int or not 30 <= refresh_seconds <= 3600:
             raise ValueError('statistics_refresh_interval_invalid')
@@ -82,7 +84,7 @@ class StatisticsGateway:
             return self.collection_status_file is not None
         if path == '/wait-reference.json':
             return self.research_file is not None
-        if path in {'/research-ui.js','/screenshot-ui.js'}:
+        if path in {'/research-ui.js','/screenshot-ui.js','/analytics-ui.js','/analytics.css','/analytics-advice.json'}:
             return True
         if path == '/model-advice.json':
             return True
@@ -151,7 +153,7 @@ class StatisticsGateway:
         return result
 
     async def research_request(self, scope, receive):
-        if (scope['path']=='/api/v1/research/tickets' and self.public_origin.startswith('https:') and scope.get('scheme')!='https'):
+        if (scope['path'] in {'/api/v1/research/tickets','/api/v1/analytics'} and self.public_origin.startswith('https:') and scope.get('scheme')!='https'):
             return 400, b'{"error_code":"https_required"}', 'application/json'
         if (scope.get('query_string') or scope.get('raw_path', scope['path'].encode()) != scope['path'].encode()
                 or dict(scope.get('headers',[])).get(b'origin',b'').decode() not in
@@ -185,6 +187,8 @@ class StatisticsGateway:
         value = json.loads(raw, object_pairs_hook=_unique_object)
         if type(value) is not dict or type(value.get('schema_version')) is not int or value['schema_version'] != 1:
             raise ValueError('invalid_research_request')
+        if scope['path']=='/api/v1/analytics':
+            return await self.analysis_request(value)
         from sushiwait.ticketresearch import TicketResearch
         def process():
             research = TicketResearch(self.research_file)
@@ -202,14 +206,54 @@ class StatisticsGateway:
                         return json.loads(body)
                     research.update_labels(read_day, record_id=value['record_id'])
                     return saved
-                if value.get('action')=='list' and set(value)=={'schema_version','action','owner_secret'}:
-                    return {'records':research.own_records(value['owner_secret'])}
+                if value.get('action')=='list' and {'schema_version','action','owner_secret'}<=set(value) and not set(value)-{'schema_version','action','owner_secret','page','page_size','filters'}:
+                    return research.query_records(value['owner_secret'],page=value.get('page',1),page_size=value.get('page_size',100),filters=value.get('filters'))
                 raise ValueError('invalid_research_action')
             finally:
                 research.close()
         async with self.research_lock:
             result = await asyncio.to_thread(process)
         return 200, json.dumps(result,ensure_ascii=False,allow_nan=False).encode(), 'application/json'
+
+    async def analysis_request(self, value):
+        from pathlib import Path
+        from datetime import timedelta
+        from sushiwait.analytics import selection, build_report, ai_context
+        from sushiwait.analyticsai import write_state, read_state
+        action=value.get('action')
+        if action not in {'report','explain'} or set(value) != ({'schema_version','action','selection'} if action=='report' else {'schema_version','action','selection','report_id','visible'}):
+            raise ValueError('invalid_analysis_request')
+        selected=selection(value['selection']); key=json.dumps(selected,sort_keys=True)
+        reader=self.official_view if selected['source']=='sapi_miniapp_gateway' else self.hub
+        if reader is None:raise ValueError('analysis_source_unavailable')
+        if action=='report':
+            async with self.analysis_lock:
+                saved=self.analysis_cache.get(key)
+                if saved and time.monotonic()-saved[0]<90:report=saved[1]
+                else:
+                    def read(route):
+                        status,body,_=reader.dispatch(route)
+                        if status!=200:raise ValueError('archive_unavailable')
+                        return json.loads(body)
+                    report=await asyncio.to_thread(build_report,read,reader.names,selected)
+                    self.analysis_cache[key]=(time.monotonic(),report)
+                    self.analysis_cache.move_to_end(key)
+                    while len(self.analysis_cache)>8:self.analysis_cache.popitem(last=False)
+                result=report
+        else:
+            if not self.model_advice_file or type(value['visible']) is not bool:raise ValueError('analysis_ai_not_configured')
+            saved=self.analysis_cache.get(key)
+            if not saved or saved[1]['report_id']!=value['report_id']:raise ValueError('analysis_report_changed')
+            report=saved[1];context=ai_context(report)
+            root=Path(self.research_file).parent;job=root/'analytics-job.json'
+            now=datetime.now(timezone.utc)
+            old=read_state(job) if job.exists() else {}
+            if old.get('report_id')!=report['report_id'] and old.get('expires_at') and datetime.fromisoformat(old['expires_at'])>now:
+                result={'state':'busy'}
+            else:
+                write_state(job,{'report_id':report['report_id'],'context':context,'expires_at':(now+timedelta(seconds=120 if value['visible'] else 0)).isoformat()})
+                result={'state':'queued' if value['visible'] else 'released'}
+        return 200,json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),'application/json'
 
     @staticmethod
     def supports_query(path, query):
@@ -229,7 +273,7 @@ class StatisticsGateway:
                 return False
             for key, value in pairs:
                 if key == 'section':
-                    valid = value in {'overview', 'analysis', 'quality', 'prediction', 'experience', 'tickets'}
+                    valid = value in {'overview', 'analysis', 'quality', 'prediction', 'experience', 'tickets', 'intelligence'}
                 elif key == 'date':
                     valid = bool(re.fullmatch(r'20[0-9]{2}-[0-9]{2}-[0-9]{2}', value))
                     if valid:
@@ -296,11 +340,11 @@ class StatisticsGateway:
             except Exception:
                 status,body,mime=400,b'{"error_code":"screenshot_not_recognized"}','application/json'
         elif (scope['method']=='POST' and self.research_file is not None
-                and path in {'/api/v1/research/tickets','/api/v1/prediction/presence'}):
+                and path in {'/api/v1/research/tickets','/api/v1/prediction/presence','/api/v1/analytics'}):
             try:
                 if self.deadline is not None and datetime.now(timezone.utc)>=self.deadline:
                     raise ValueError('trial_deadline_reached')
-                status,body,mime = await asyncio.wait_for(self.research_request(scope,receive),timeout=3)
+                status,body,mime = await asyncio.wait_for(self.research_request(scope,receive),timeout=35 if path=='/api/v1/analytics' else 3)
             except Exception:
                 status,body,mime = 400,b'{"error_code":"research_request_not_saved"}','application/json'
         elif scope['method'] != 'GET':
@@ -320,7 +364,16 @@ class StatisticsGateway:
                 if saved and time.monotonic() - saved[0] < 5:
                     _, status, body, mime = saved
                 else:
-                    if path == '/api/v1/collection/health':
+                    if path == '/analytics-advice.json':
+                        try:
+                            from pathlib import Path
+                            from sushiwait.analyticsai import read_state
+                            value=read_state(Path(self.model_advice_file).parent/'analytics-result.json')
+                            body=json.dumps({k:value.get(k) for k in ('report_id','updated_at','state','advice')},ensure_ascii=False).encode()
+                            status,mime=200,'application/json'
+                        except Exception:
+                            status,body,mime=200,b'{"state":"not_requested"}', 'application/json'
+                    elif path == '/api/v1/collection/health':
                         try:
                             body = json.dumps(self.collection_health()).encode()
                             status, mime = 200, 'application/json'

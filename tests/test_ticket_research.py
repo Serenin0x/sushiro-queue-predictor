@@ -80,3 +80,22 @@ class TicketResearchTests(unittest.TestCase):
         summary=self.store.public_wait_summary(now=self.now)
         self.assertEqual(summary['stores']['3014']['ordinary']['sample_count'],6)
         for private in ('issued_at','number','owner_hash',self.secret):self.assertNotIn(private,json.dumps(summary))
+
+class TicketPagingTests(unittest.TestCase):
+    setUp = TicketResearchTests.setUp
+    def test_pages_filter_exact_shanghai_day_and_owner_isolation(self):
+        for i in range(121):
+            self.store.submit(f'{i:032x}',self.secret,{**self.ticket,'number':str(i+1),'store_id':'3014' if i%2 else '3004'},now=self.now+timedelta(seconds=i))
+        first=self.store.query_records(self.secret,page_size=50)
+        second=self.store.query_records(self.secret,page=2,page_size=50)
+        third=self.store.query_records(self.secret,page=3,page_size=50)
+        self.assertEqual((first['total'],len(third['records']),third['has_more']),(121,21,False))
+        ids=[r['record_id'] for p in (first,second,third) for r in p['records']]
+        self.assertEqual(len(set(ids)),121)
+        filtered=self.store.query_records(self.secret,filters={'store_id':'3014','from':'2026-10-13','to':'2026-10-13'},page_size=500)
+        self.assertEqual(filtered['total'],60)
+        self.assertEqual(self.store.query_records('b'*64)['total'],0)
+        self.assertEqual(self.store.query_records(self.secret,filters={'from':'2026-10-14'})['total'],0)
+    def test_invalid_query_cannot_inject_sql_or_bypass_paging(self):
+        for kwargs in ({'page':0},{'page':True},{'page_size':501},{'filters':{'store_id':"1' OR 1=1"}},{'filters':{'from':'2026-10-14','to':'2026-10-13'}},{'filters':{'owner_hash':'x'}}):
+            with self.subTest(kwargs=kwargs),self.assertRaises(ValueError):self.store.query_records(self.secret,**kwargs)

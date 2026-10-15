@@ -14,6 +14,7 @@ let index={days:{},store_names:{}},day=today(),detail=null,busy=false,detailLoad
 const engineeringPanels=referenceRoot?.dataset?.engineeringPanels==="true";
 const engineeringSections={overview:["观测总览","按日期查看已保存的观测与采集覆盖。"],analysis:["门店分析","查看号码位置、数量、展示变化与原始观测。"],prediction:["预测与记录",""],experience:["用餐记录","记录本人正常用餐的实际事件，保留本机私有草稿。"]};
 engineeringSections.tickets=["我的号码",""];
+engineeringSections.intelligence=["智慧分析",""];
 let engineeringSection="overview",engineeringPollingSeconds=null,predictionWaitOpen=false;
 const workspaceSectionScroll=new Map();
 const taskWorkspace=engineeringPanels&&referenceRoot?.dataset?.engineeringLayout==="tasks-v2";
@@ -57,8 +58,8 @@ function selectEngineeringSection(section){
   [$("engineering-title").textContent,$("engineering-description").textContent]=engineeringSections[section];
   syncEngineeringSelection();
   if(taskWorkspace){
-    const hideScope=section==="tickets"||(section==="prediction"&&!predictionWaitOpen&&Boolean($("ticket-composer-form")?.dataset?.entryWorkflow));
-    $("workspace-filters").hidden=hideScope;$("engineering-selection").hidden=hideScope;$("archive-status").hidden=hideScope;
+    const hideScope=["tickets","intelligence"].includes(section)||(section==="prediction"&&!predictionWaitOpen&&Boolean($("ticket-composer-form")?.dataset?.entryWorkflow));
+    $("workspace-filters").hidden=hideScope;$("workspace-meta").hidden=hideScope;$("engineering-selection").hidden=hideScope;$("archive-status").hidden=hideScope;
     $("filter-queue").hidden=section==="overview"||section==="experience";
     $("filter-date").hidden=["experience","tickets"].includes(section);$("date-shortcuts").hidden=["experience","tickets"].includes(section);
     $("record-source-label").hidden=section==="overview"||section==="experience"||!(detail&&index.days[day]?.[$("store").value]?.record_sources?.length>1);
@@ -68,6 +69,7 @@ function selectEngineeringSection(section){
   }
   if(section==="prediction"&&taskWorkspace&&detail)loadHistory($("store").value,day);
   window.SushiWaitResearch?.notify();
+  window.SushiWaitAnalytics?.notify();
   if(section==="analysis")graphs();
   if(taskWorkspace&&changed&&typeof window.requestAnimationFrame==='function')window.requestAnimationFrame(()=>{
     if(engineeringSection===section)window.scrollTo({top:workspaceSectionScroll.get(section)||0,behavior:'instant'});
@@ -557,3 +559,5 @@ $('ticket-clear').onclick=()=>{try{window.localStorage?.removeItem(trackingStora
 setInterval(renderPrediction,15000);
 
 window.SushiWaitResearch?.attach({getState:()=>({section:engineeringSection,source:referenceSource,day,storeId:$("store").value,storeName:index.store_names[$("store").value]||$("store").value,storeNames:index.store_names,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value],mode:$("prediction-mode").value,number:$("ticket-number").value,issued:$("ticket-issued").value,checkedIn:$("ticket-checkin").value,confirmed:$("ticket-scope").checked&&ticketScopeKey===scopeKey(),detail,samplingSeconds:engineeringPollingSeconds,result:latestReferenceResult,advice:selectedAdvice({storeId:$("store").value,queueType:{mixedQueue:"ordinary",reservationQueue:"reservation"}[$("queue").value]})}),today,render:renderPrediction,navigate:selectEngineeringSection,history:()=>historyCache.get(`${referenceSource}|${$("store").value}|${day}`)?.days||[],index:()=>index,cityById:workspaceCityById});
+
+window.SushiWaitAnalytics?.attach({today,section:()=>engineeringSection,cityById:workspaceCityById,navigateStore:(store,date,source)=>{day=date;recordSource=source;workspaceState.city=workspaceCityById[store]||"城市待核";workspacePopulatePickers(store);$("month").value=date.slice(0,7);workspaceState.routeStore=store;selectEngineeringSection("analysis");refresh();}});
