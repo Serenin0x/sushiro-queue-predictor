@@ -1,0 +1,204 @@
+"""Private, owner-only ServerChan alerts from saved collection status.
+
+No account database, query credential or QR material is read. Delivery is
+reserved durably before sending; an ambiguous response is not retried in a loop.
+The monitor never restarts a failed collector or alters its journals.
+"""
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import ssl
+import urllib.error
+import urllib.parse
+import urllib.request
+
+from sushiwait.credentials import _read_private_file
+
+UTC = timezone.utc
+CHINA = timezone(timedelta(hours=8))
+STATISTICS_URL = 'https://124.222.57.236/statistics'
+REMINDER_SECONDS = 6 * 3600
+DAILY_LIMIT = 5
+
+
+def instant(value):
+    at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if at.utcoffset() is None:
+        raise ValueError('alert_time_invalid')
+    return at.astimezone(UTC)
+
+
+def read_status(path):
+    raw = _read_private_file(path)
+    if len(raw) > 8192:
+        raise ValueError('alert_status_invalid')
+    value = json.loads(raw)
+    if type(value) is not dict:
+        raise ValueError('alert_status_invalid')
+    return value
+
+
+def condition(collection, projection, now):
+    """Return fixed public categories, never arbitrary diagnostic strings."""
+    if now.utcoffset() is None:
+        raise ValueError('alert_time_invalid')
+    try:
+        age = (now - instant(collection['at'])).total_seconds()
+        if age < -60 or age > 120:
+            return 'collection_heartbeat_stale'
+        if collection['state'] == 'needs_attention':
+            return 'collection_stopped'
+        if collection['state'] in {'closed', 'completed'}:
+            return 'closed'
+        if collection['state'] not in {'starting', 'running'}:
+            return 'collection_status_unavailable'
+        if collection['state'] == 'starting':
+            return 'starting'
+        if type(collection.get('failed_slots')) is not int or collection['failed_slots']:
+            return 'collection_stopped'
+        progress = collection.get('last_progress_at')
+        if progress is None:
+            return 'starting'
+        # All configured sampling intervals are <=600 seconds. Allow response
+        # and publication time before declaring a saved-observation gap.
+        if (now - instant(progress)).total_seconds() > 720:
+            return 'collection_progress_stale'
+        if projection.get('state') != 'running':
+            return 'public_sync_stopped'
+        sync_age = (now - instant(projection['at'])).total_seconds()
+        if sync_age < -60 or sync_age > 120:
+            return 'public_sync_stopped'
+        return 'healthy'
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return 'collection_status_unavailable'
+
+
+def validate_config(value):
+    if (type(value) is not dict
+            or set(value) != {'schema_version', 'provider', 'sendkey', 'statistics_url'}
+            or value['schema_version'] != 1 or value['provider'] != 'serverchan_turbo'
+            or value['statistics_url'] != STATISTICS_URL
+            or type(value['sendkey']) is not str
+            or not re.fullmatch(r'SCT[A-Za-z0-9_-]{16,252}', value['sendkey'])):
+        raise ValueError('alert_config_invalid')
+    return value
+
+
+def message(kind, reason, now):
+    labels = {
+        'collection_stopped': '采集服务已暂停，需要检查授权或来源错误。',
+        'collection_heartbeat_stale': '采集状态超过两分钟没有更新。',
+        'collection_progress_stale': '营业时间内，超过十二分钟没有保存新样本。',
+        'public_sync_stopped': '采集数据的网页同步需要检查。',
+        'collection_status_unavailable': '暂时无法读取采集状态。',
+    }
+    if kind == 'recovered':
+        title, description = 'SUSHIWAIT 采集已恢复', '新样本已保存，公共同步正在运行。'
+    else:
+        title = 'SUSHIWAIT 采集需要处理' if kind == 'incident' else 'SUSHIWAIT 采集仍待处理'
+        description = labels[reason]
+    stamp = now.astimezone(CHINA).strftime('%Y-%m-%d %H:%M:%S')
+    body = f'{description}\n\n北京时间：{stamp}\n\n[查看统计与采样状态]({STATISTICS_URL})'
+    return title, body
+
+
+def serverchan_send(config, title, body):
+    """Only the owner's bound channel; never a recipient or group parameter."""
+    data = urllib.parse.urlencode({'title': title, 'desp': body}).encode()
+    request = urllib.request.Request(
+        'https://sctapi.ftqq.com/' + config['sendkey'] + '.send', data=data,
+        headers={'Content-Type': 'application/x-www-form-urlencoded'}, method='POST')
+    # Disable redirects so an unexpected Location cannot carry the private key
+    # or message to another service. TLS validation always remains enabled.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *_args, **_kwargs):
+            return None
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
+    with opener.open(request, timeout=15) as response:
+        raw = response.read(65537)
+    if len(raw) > 65536:
+        raise ValueError('alert_delivery_unknown')
+    value = json.loads(raw)
+    if type(value) is not dict or type(value.get('code')) is not int or value['code'] != 0:
+        raise ValueError('alert_delivery_not_accepted')
+    return True
+
+
+def save_state(path, value):
+    pending = path.with_suffix('.pending')
+    fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(json.dumps(value, sort_keys=True).encode())
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(pending, path)
+    fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+class Monitor:
+    """Call under one exclusive worker lock. No account access is needed."""
+    def __init__(self, state_file, config, sender=serverchan_send):
+        self.path = Path(state_file)
+        self.config = validate_config(config)
+        self.sender = sender
+        self.pin = hashlib.sha256(config['sendkey'].encode()).hexdigest()
+        self.state = {'schema_version': 1, 'channel_sha256': self.pin,
+                      'incident_since': None, 'reason': None, 'last_attempt_at': None,
+                      'day': None, 'attempts_today': 0, 'delivery': None}
+        if self.path.exists():
+            value = read_status(self.path)
+            if (set(value) != set(self.state) or value['schema_version'] != 1
+                    or value['channel_sha256'] != self.pin
+                    or type(value['attempts_today']) is not int
+                    or not 0 <= value['attempts_today'] <= DAILY_LIMIT
+                    or value['delivery'] not in {None, 'pending', 'accepted', 'unknown'}):
+                raise ValueError('alert_state_invalid')
+            for field in ('incident_since', 'last_attempt_at'):
+                if value[field] is not None:
+                    instant(value[field])
+            self.state = value
+
+    def step(self, status, now):
+        day = now.astimezone(CHINA).date().isoformat()
+        if self.state['day'] != day:
+            self.state.update(day=day, attempts_today=0)
+        if status in {'starting', 'closed'}:
+            save_state(self.path, self.state)
+            return 'idle'
+        kind = None
+        if status == 'healthy':
+            if self.state['incident_since'] is not None:
+                kind = 'recovered'
+        elif self.state['incident_since'] is None:
+            self.state.update(incident_since=now.isoformat(), reason=status)
+            kind = 'incident'
+        elif self.state['last_attempt_at'] is None or (
+                now - instant(self.state['last_attempt_at'])).total_seconds() >= REMINDER_SECONDS:
+            kind = 'reminder'
+        if kind is None or self.state['attempts_today'] >= DAILY_LIMIT:
+            save_state(self.path, self.state)
+            return 'suppressed'
+        title, body = message(kind, status, now)
+        # Persist reservation first: process death or a timeout must not cause
+        # a duplicate send every minute after restart.
+        self.state.update(last_attempt_at=now.isoformat(), delivery='pending')
+        self.state['attempts_today'] += 1
+        if kind == 'recovered':
+            self.state.update(incident_since=None, reason=None)
+        save_state(self.path, self.state)
+        try:
+            if self.sender(self.config, title, body) is not True:
+                raise ValueError('alert_delivery_unknown')
+            self.state['delivery'] = 'accepted'
+        except Exception:
+            self.state['delivery'] = 'unknown'
+        save_state(self.path, self.state)
+        return self.state['delivery']
