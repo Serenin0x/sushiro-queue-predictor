@@ -2,7 +2,9 @@
 
 本文件是当前工作入口。需求、每次改动和历史证据完整保存在 `docs/PROJECT_HANDOVER.md` 的四个一级板块。先读其顶部当前状态、第二板块需求原则及最新相关编辑记录；需要旧背景时再按编号查阅。已公开的旧版 AGENTS 已逐字保存在 `docs/history/AGENTS_PUBLISHED_d5baf0f.md`，只供追溯；其中旧日期的“当前”“暂停”“待验”不能覆盖较新的实际证据或用户指令。
 
-## 当前工作位置（2026-10-15 E0523）
+## 当前工作位置（2026-10-15 E0524）
+
+- E0524：本人选定字内像素SVG作为文字型网页Logo，主日历、授权页及旧监测页共用/brand-wordmark.svg；canonical assets/sushiwait-wordmark.svg与原附件逐字节一致。尺寸按追加意见微调为日历144×24、授权180×30。Engineering Workspace资产、字体与题注保持。生产静态接线已完成，Nginx语法和HTTPS实际资源通过，五服务PID不变，19:29健康250成功／0失败；最终尺寸浏览器核对见交接。独立设计WIP继续保留，不一并提交。
 
 - E0523：本人明确要求需要授权／到营业时间未采集及时邮件。business-window-v2已部署：每分钟检查，首组开店3分钟保护，独立日历识别错误closed/completed/永久starting，中断按同平滑节奏+2分钟报警，授权升级立即通知不等6小时。QQ邮件20次／日、去重和6小时提醒，旧微信5次保持。22项检查通过，17:55新策略healthy、90成功／0失败；只重启通知，来源及同步PID不变。整机离线需外部监控，不能声称同机服务能对自身断网发信。
 
@@ -60,6 +62,7 @@
 
 - README保留项目介绍、详细但符合实际的产品功能、简写技术、版本和更新，以及交接路径。主线能力变化同步事实文案；视觉任务不能擅改已认可的文字结构和列表数量。
 - 正式品牌资产为 `assets/sushiwait-logo-light.svg` 和 `assets/sushiwait-logo-dark.svg`，Unbounded Regular400、红色像素刷痕、柔和字内渐变／边缘渐隐，无描边；许可证和归属见 `assets/NOTICE.md`、`assets/Unbounded-OFL.txt`。工程页使用现有浅色矢量资产并保持比例。Tabler参考采用免费开源部分，保留图标许可，不冒造账号／通知入口。
+- 文字型网页入口使用本人2026-10-15选定的 `assets/sushiwait-wordmark.svg`，网页副本为 `web/brand-wordmark.svg`；主日历、授权和旧监测页共用，保持字形／颜色／透明背景和比例。Engineering Workspace现有Logo及字体不替换，正式README组合图沿原批准保留；详见BRAND_DESIGN.md。
 - README原生文字结构及浅深色强调SVG按 `docs/BRAND_DESIGN.md` 保持；改强调词时同步alt并运行 `scripts/render_readme_labels.py`，不能把全文改成一张图。当前产品和工程页先功能优先、简单浅色。
 - 每个实质工作包、编辑、研究或验证在 `docs/PROJECT_HANDOVER.md` 第四板块追加日期、执行者、编号、动机、操作／文件、实际结果、限制和下一步；纠错解释原结论与新证据。四个H1固定为项目背景／项目要求原则／项目版本迭代信息／项目编辑更改历史。
 - 当前事实入口保持简短；完整旧记录追加到交接／历史资料，不再向AGENTS反复堆叠整段“当前”摘要。维护版本、包、CI、实测与部署的区别，结束前核对实际状态并给仓库／交接链接。目标状态以工具／当前系统事实为准；不能从旧paused／blocked文字推断现在状态，不能提前complete。

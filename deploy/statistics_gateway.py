@@ -90,7 +90,7 @@ class StatisticsGateway:
             return True
         if path.startswith('/api/v1/official/'):
             return bool(self.official_view is not None and self.official_view.allowed(path))
-        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/statistics-legacy', '/calendar.css', '/calendar.mjs', '/calendar-data.mjs', '/calendar-directory.mjs', '/calendar-icons.mjs', '/statistics-client.mjs', '/saved-statistics.mjs', '/engineering-logo.svg', '/api/v1/days'}:
+        if path in {'/statistics', '/statistics.js', '/statistics.css', '/reference-model.js', '/reference-alerts.js', '/experience-model.js', '/experience-ui.js', '/statistics-legacy', '/calendar.css', '/calendar.mjs', '/calendar-data.mjs', '/calendar-directory.mjs', '/calendar-icons.mjs', '/statistics-client.mjs', '/saved-statistics.mjs', '/engineering-logo.svg','/brand-wordmark.svg', '/api/v1/days'}:
             return True
         if re.fullmatch(r'/api/v1/months/20[0-9]{2}-(?:0[1-9]|1[0-2])',path):
             return True

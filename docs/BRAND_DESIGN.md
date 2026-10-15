@@ -1,5 +1,13 @@
 # SUSHIWAIT Logo
 
+## 当前网页文字标识
+
+2026-10-15用户选定[字内像素词标](../assets/sushiwait-wordmark.svg)，用于主日历左上角、恢复采集授权页，以及旧监测页的文字品牌入口。沿用原SVG的Unbounded400字形与像素填色，不修改图形；同一透明文件适配浅深背景。按用户随后要求稍缩小：日历及旧监测页144×24px，授权页180×30px，窄屏保留比例和最大宽度。替代文字保留SUSHIWAIT。
+
+运行时统一请求/brand-wordmark.svg；源码资源src/sushiwait/web/brand-wordmark.svg与品牌副本逐字节一致。Nginx只公开这一固定静态文件，本次静态更新无需重启采集、统计、授权或提醒服务。Engineering Workspace现有标志与题注字体不在本次替换范围；README原组合图继续保留原审批记录。
+
+## 原组合标志
+
 2026-10-03，用户确认采用三款候选中的最后一款 **Unbounded Regular 400 浅色版**，并明确要求将白色 Logo 推送到 GitHub。正式矢量文件为 [sushiwait-logo-light.svg](../assets/sushiwait-logo-light.svg)，用户随后追加要求 GitHub 深色模式显示同一字体的深色版本；配套 [sushiwait-logo-dark.svg](../assets/sushiwait-logo-dark.svg) 同步发布，README 用 picture 按主题自动切换。两版已随 main [43a2e5f](https://github.com/Serenin0x/sushiro-queue-predictor/commit/43a2e5f0d01f9886c8599ff687d1865bc45d2f88) 发布，浅色 SVG 已在 GitHub 实际显示并核对。
 
 ![SUSHIWAIT 红色像素刷痕 Logo](../assets/sushiwait-logo-light.svg)

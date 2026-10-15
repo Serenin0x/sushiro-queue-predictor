@@ -1,5 +1,9 @@
 # SUSHIWAIT Logo 与字体来源
 
+## 2026-10-15 文字词标
+
+用户选定字内像素方案用于主日历、重新授权页及文字型监测页入口。正式使用副本为[sushiwait-wordmark.svg](sushiwait-wordmark.svg)，与用户提供的sushiwait-pixel-fill.svg逐字节一致：Unbounded Regular400轮廓、2,112个原生矢量色块、透明背景，外缘光滑，无字体、位图、脚本或外部资源。字体来源及SIL OFL1.1许可沿用下文与[原文](Unbounded-OFL.txt)。网页共用同一资源，按位置等比例缩放；Engineering Workspace的现有标志、字体和题注保留。原独立试稿和预览不随本次产品改动一并发布。
+
 ## 当前选定 Logo：Unbounded 浅/深色版
 
 用户于 2026-10-03 确认最后一款 Unbounded 的白色背景方案并授权推送 GitHub。用户随后要求 GitHub 深色模式显示同字体深色方案。正式文件为 [浅色 SVG](sushiwait-logo-light.svg) 与 [深色 SVG](sushiwait-logo-dark.svg)，设计说明见 [BRAND_DESIGN.md](../docs/BRAND_DESIGN.md)。

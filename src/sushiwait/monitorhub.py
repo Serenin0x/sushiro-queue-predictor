@@ -155,6 +155,7 @@ class MonitorHub:
             '/statistics-client.mjs':('statistics-client.mjs','text/javascript; charset=utf-8'),
             '/saved-statistics.mjs':('saved-statistics.mjs','text/javascript; charset=utf-8'),
             '/engineering-logo.svg':('engineering-logo.svg','image/svg+xml; charset=utf-8'),
+            '/brand-wordmark.svg':('brand-wordmark.svg','image/svg+xml; charset=utf-8'),
             '/statistics.js':('statistics.js','text/javascript; charset=utf-8'),
             '/research-ui.js':('research-ui.js','text/javascript; charset=utf-8'),
             '/screenshot-ui.js':('screenshot-ui.js','text/javascript; charset=utf-8'),
@@ -263,7 +264,7 @@ class MonitorHub:
         if self.config['schema_version']==1 and clock >= _time(self.config['deadline_at']):
             return self._error(503, 'monitor_hub_deadline_reached')
         try:
-            if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css','/reference-model.js','/research-ui.js','/screenshot-ui.js','/model-advice.json','/reference-alerts.js','/experience-model.js','/experience-ui.js','/statistics-legacy','/calendar.css','/calendar.mjs','/calendar-data.mjs','/calendar-directory.mjs','/calendar-icons.mjs','/statistics-client.mjs','/saved-statistics.mjs','/engineering-logo.svg'}:
+            if parsed.path in {'/monitor','/monitor.js','/monitor.css','/statistics','/statistics.js','/statistics.css','/reference-model.js','/research-ui.js','/screenshot-ui.js','/model-advice.json','/reference-alerts.js','/experience-model.js','/experience-ui.js','/statistics-legacy','/calendar.css','/calendar.mjs','/calendar-data.mjs','/calendar-directory.mjs','/calendar-icons.mjs','/statistics-client.mjs','/saved-statistics.mjs','/engineering-logo.svg','/brand-wordmark.svg'}:
                 raw, mime = self.asset(parsed.path)
                 return 200, raw, mime
             if parsed.path == '/api/v1/status':

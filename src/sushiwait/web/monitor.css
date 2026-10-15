@@ -3,6 +3,7 @@
 body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"PingFang SC",sans-serif; }
 main { max-width:1120px; padding:36px 24px; margin:auto; }
 .brand { color:var(--red); letter-spacing:.18em; font-weight:650; font-size:14px; }
+.brand img { display:block; width:144px; max-width:100%; height:auto; }
 h1 { font-size:clamp(26px,4vw,38px); margin:14px 0; }
 h2 { font-size:16px; margin:0 0 12px; }
 p, small, footer { line-height:1.6; }

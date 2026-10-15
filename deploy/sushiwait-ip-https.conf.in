@@ -25,6 +25,12 @@ server {
     ssl_session_tickets off;
     client_max_body_size 4k;
     access_log off;
+    location = /brand-wordmark.svg {
+        alias /var/www/sushiwait-assets/brand-wordmark.svg;
+        default_type image/svg+xml;
+        add_header Cache-Control "public, max-age=3600";
+        add_header X-Content-Type-Options nosniff always;
+    }
     location ^~ /recover/ {
         proxy_pass http://127.0.0.1:18910;
         proxy_set_header Host $host;

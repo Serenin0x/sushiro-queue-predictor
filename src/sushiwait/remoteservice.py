@@ -31,7 +31,8 @@ def _utc():
 MONITOR_POINTS = 360
 _MONITOR_FILES = {'/monitor': ('monitor.html', b'text/html; charset=utf-8'),
     '/monitor.js': ('monitor.js', b'text/javascript; charset=utf-8'),
-    '/monitor.css': ('monitor.css', b'text/css; charset=utf-8')}
+    '/monitor.css': ('monitor.css', b'text/css; charset=utf-8'),
+    '/brand-wordmark.svg': ('brand-wordmark.svg', b'image/svg+xml; charset=utf-8')}
 _MONITOR_FILES.update({'/statistics':('statistics.html',b'text/html; charset=utf-8'),
     '/statistics.js':('statistics.js',b'text/javascript; charset=utf-8'),
     '/reference-model.js':('reference-model.js',b'text/javascript; charset=utf-8'),

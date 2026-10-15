@@ -39,7 +39,8 @@ html, body { margin: 0; min-height: 100%; }
     #sushiwait-month-calendar .sw-theme { margin-top: auto; }
     #sushiwait-month-calendar .sw-main { padding: 20px 28px 28px; min-width: 0; }
     #sushiwait-month-calendar .sw-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-right: 88px; margin-bottom: 36px; }
-    #sushiwait-month-calendar .sw-brand { font: 500 16px/1.4 "Avenir Next", -apple-system, sans-serif; letter-spacing: 1.1px; margin: 0 12px 0 0; }
+    #sushiwait-month-calendar .sw-brand { flex-shrink: 0; line-height: 0; margin: 0 12px 0 0; }
+    #sushiwait-month-calendar .sw-brand img { display: block; width: 144px; max-width: 100%; height: auto; }
     #sushiwait-month-calendar .sw-pickers { display: flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; }
     #sushiwait-month-calendar .sw-picker { position: relative; min-width: 0; }
     #sushiwait-month-calendar .sw-picker-store { min-width: 0; }
