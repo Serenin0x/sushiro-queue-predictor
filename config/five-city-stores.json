@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "scope_id": "five-cities-v1",
+  "approved_cities": [
+    "北京",
+    "成都",
+    "上海",
+    "广州",
+    "深圳"
+  ],
+  "directory_observed_at": "2026-10-03T20:32:51+08:00",
+  "current_directory_verified": false,
+  "stores": [
+    {
+      "store_id": "1",
+      "name": "东方宝泰店",
+      "city": "广州"
+    },
+    {
+      "store_id": "2",
+      "name": "正佳广场店",
+      "city": "广州"
+    },
+    {
+      "store_id": "3",
+      "name": "万菱汇店",
+      "city": "广州"
+    },
+    {
+      "store_id": "4",
+      "name": "悦汇城店",
+      "city": "广州"
+    },
+    {
+      "store_id": "5",
+      "name": "富力海珠城店",
+      "city": "广州"
+    },
+    {
+      "store_id": "6",
+      "name": "丽影广场店",
+      "city": "广州"
+    },
+    {
+      "store_id": "7",
+      "name": "凯德云尚店",
+      "city": "广州"
+    },
+    {
+      "store_id": "8",
+      "name": "番禺永旺店",
+      "city": "广州"
+    },
+    {
+      "store_id": "10",
+      "name": "北京路粤潮楼店",
+      "city": "广州"
+    },
+    {
+      "store_id": "12",
+      "name": "美林天地店",
+      "city": "广州"
+    },
+    {
+      "store_id": "13",
+      "name": "乐峰广场店",
+      "city": "广州"
+    },
+    {
+      "store_id": "15",
+      "name": "花城汇南区店",
+      "city": "广州"
+    },
+    {
+      "store_id": "18",
+      "name": "江燕路万科里店",
+      "city": "广州"
+    },
+    {
+      "store_id": "25",
+      "name": "陈家祠扬韬店",
+      "city": "广州"
+    },
+    {
+      "store_id": "27",
+      "name": "中华广场店",
+      "city": "广州"
+    },
+    {
+      "store_id": "28",
+      "name": "番禺天河城店",
+      "city": "广州"
+    },
+    {
+      "store_id": "29",
+      "name": "荔湾领展店",
+      "city": "广州"
+    },
+    {
+      "store_id": "30",
+      "name": "番禺万达广场店",
+      "city": "广州"
+    },
+    {
+      "store_id": "32",
+      "name": "萝岗万达店",
+      "city": "广州"
+    },
+    {
+      "store_id": "37",
+      "name": "汉溪K11店",
+      "city": "广州"
+    },
+    {
+      "store_id": "38",
+      "name": "新塘永旺店",
+      "city": "广州"
+    },
+    {
+      "store_id": "40",
+      "name": "君超中心店",
+      "city": "广州"
+    },
+    {
+      "store_id": "45",
+      "name": "增城万达店",
+      "city": "广州"
+    },
+    {
+      "store_id": "1001",
+      "name": "卓悦中心店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1002",
+      "name": "壹方天地店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1003",
+      "name": "海雅缤纷城店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1004",
+      "name": "皇庭广场店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1005",
+      "name": "KK ONE店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1006",
+      "name": "卓悦汇店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1007",
+      "name": "海岸城店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1008",
+      "name": "天虹龙华店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1009",
+      "name": "CCP雅宝店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1010",
+      "name": "iN城市广场店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1011",
+      "name": "福田卓悦Intown店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1012",
+      "name": "南山天利名城店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1013",
+      "name": "深圳万象城店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1014",
+      "name": "深圳来福士广场店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1015",
+      "name": "壹方城店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1016",
+      "name": "万象前海店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1017",
+      "name": "罗湖益田假日广场店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1018",
+      "name": "宝安大仟里店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "1019",
+      "name": "深圳大运天地店",
+      "city": "深圳"
+    },
+    {
+      "store_id": "2001",
+      "name": "IFS店",
+      "city": "成都"
+    },
+    {
+      "store_id": "2003",
+      "name": "来福士广场店",
+      "city": "成都"
+    },
+    {
+      "store_id": "2004",
+      "name": "成都万象城店",
+      "city": "成都"
+    },
+    {
+      "store_id": "2008",
+      "name": "凯德天府店",
+      "city": "成都"
+    },
+    {
+      "store_id": "2009",
+      "name": "世豪广场店",
+      "city": "成都"
+    },
+    {
+      "store_id": "2011",
+      "name": "凯德广场金牛店",
+      "city": "成都"
+    },
+    {
+      "store_id": "3004",
+      "name": "西单大悦城店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3005",
+      "name": "长楹天街店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3006",
+      "name": "太阳宫凯德店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3009",
+      "name": "朝阳大悦城店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3012",
+      "name": "北京世纪金源店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3013",
+      "name": "北京荟聚店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3014",
+      "name": "中关村大融城店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3015",
+      "name": "西直门凯德店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3016",
+      "name": "亦庄天街店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3019",
+      "name": "石景山喜隆多店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3023",
+      "name": "丽泽天街店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3025",
+      "name": "上海环球港店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3026",
+      "name": "中山公园龙之梦店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3029",
+      "name": "朝阳合生汇店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3030",
+      "name": "熙悦天街店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3031",
+      "name": "通州万达店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3032",
+      "name": "陆家嘴中心店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3033",
+      "name": "南翔印象城MEGA店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3034",
+      "name": "瑞虹新天地月亮湾店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3035",
+      "name": "门头沟长安天街店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3036",
+      "name": "虹桥新天地店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3038",
+      "name": "通州万象汇店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3040",
+      "name": "LCM置汇旭辉店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3041",
+      "name": "凯德虹口店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3042",
+      "name": "祥云小镇･南区店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3045",
+      "name": "西北旺万象汇店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3050",
+      "name": "国贸商城･北区店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3051",
+      "name": "上海啦啦宝都店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3053",
+      "name": "华熙LIVE・五棵松店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3060",
+      "name": "海淀大悦城店",
+      "city": "北京"
+    },
+    {
+      "store_id": "3066",
+      "name": "上海来福士店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3070",
+      "name": "长泰广场店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3072",
+      "name": "上海晶耀虹桥店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3073",
+      "name": "上海五角场万达店",
+      "city": "上海"
+    },
+    {
+      "store_id": "3074",
+      "name": "魏公芳华里店",
+      "city": "北京"
+    }
+  ]
+}

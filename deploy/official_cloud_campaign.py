@@ -6,6 +6,7 @@ stores, budgets and supplier access. Importing does not read plans or account
 material and does not query any endpoint.
 """
 from datetime import datetime, timezone, timedelta
+from sushiwait.cityscope import validate_scope
 import fcntl
 import importlib.util
 import json
@@ -32,8 +33,8 @@ def validate_plan(value):
     keys = {'schema_version', 'plan_id', 'app_id', 'source_version', 'package_sha256',
             'store_ids', 'windows', 'renewal_limit', 'interval_seconds', 'ordinary_query_limit'}
     try:
-        if (type(value) is not dict or set(value) not in (keys, keys | {'cadence'})
-                or type(value['schema_version']) is not int or value['schema_version'] != (3 if 'cadence' in value else 2)
+        if (type(value) is not dict or set(value) not in (keys, keys | {'cadence'}, keys | {'cadence','fleet_scope'})
+                or type(value['schema_version']) is not int or value['schema_version'] != (4 if 'fleet_scope' in value else 3 if 'cadence' in value else 2)
                 or 'cadence' in value and value['cadence'] != 'meal-peaks-v1'
                 or type(value['plan_id']) is not str
                 or not re.fullmatch('[a-z][a-z0-9-]{3,63}', value['plan_id'])
@@ -42,8 +43,8 @@ def validate_plan(value):
                 or type(value['source_version']) is not int or value['source_version'] != 181
                 or type(value['package_sha256']) is not str
                 or not re.fullmatch('[0-9a-f]{64}', value['package_sha256'])
-                or type(value['store_ids']) is not list or not 1 <= len(value['store_ids']) <= (5 if 'cadence' in value else 3)
-                or not all(type(s) is str and s in (STORES if 'cadence' in value else legacy.STORES) for s in value['store_ids'])
+                or type(value['store_ids']) is not list or not 1 <= len(value['store_ids']) <= (128 if 'fleet_scope' in value else 5 if 'cadence' in value else 3)
+                or not (validate_scope(value['fleet_scope'], value['store_ids']) if 'fleet_scope' in value else all(type(s) is str and s in (STORES if 'cadence' in value else legacy.STORES) for s in value['store_ids']))
                 or len(set(value['store_ids'])) != len(value['store_ids'])
                 or type(value['interval_seconds']) is not int or value['interval_seconds'] != 600
                 or type(value['windows']) is not list or not 1 <= len(value['windows']) <= 7

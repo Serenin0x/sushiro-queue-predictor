@@ -6,13 +6,19 @@ generating an HTTP failure or fabricating a source observation.
 """
 from datetime import datetime,timezone,timedelta
 import sys
+import time
 
 from sushiwait import cli
 
 
 def guard_fetch(original,start,end, *, clock=None):
     clock=(lambda:datetime.now(timezone.utc)) if clock is None else clock
+    last_started = None
     def fetch(client,store_id):
+        nonlocal last_started
+        if last_started is not None and '--fleet-scope' in sys.argv:
+            time.sleep(max(0, 0.5 - (time.monotonic()-last_started)))
+        last_started = time.monotonic()
         now=clock()
         if now<start:
             raise SystemExit(2)

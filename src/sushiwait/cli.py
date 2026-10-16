@@ -344,6 +344,8 @@ def _persistent_collect(args: argparse.Namespace) -> int:
               "wait_for_credentials": args.wait_for_credentials}
     if getattr(args, 'cadence', None):
         config['cadence'] = args.cadence
+    if getattr(args, 'fleet_scope', None):
+        config['fleet_scope'] = args.fleet_scope
     if args.transient_failure_budget:
         config["transient_failure_budget"] = args.transient_failure_budget
     with CollectionTask(args.task_file, config=config, resume=args.resume_task, now=_utc_clock()) as task:
@@ -717,6 +719,7 @@ def build_parser() -> argparse.ArgumentParser:
     collect = commands.add_parser("collect", help="少量门店有界采样；默认首错停止，可显式容忍有限5xx")
     collect.add_argument("--api-profile", choices=API_PROFILES, default="legacy")
     collect.add_argument("--store-id", action="append", required=True)
+    collect.add_argument("--fleet-scope", choices=("five-cities-v1",), help="Explicit approved five-city scope")
     collect.add_argument("--interval", type=int, default=60)
     collect.add_argument('--cadence', choices=('meal-peaks-v1',),
                          help='平滑午晚高峰3分钟、其它10分钟；须使用持久任务及600秒基础周期')
@@ -1348,7 +1351,10 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     if args.command == "collect":
         ids = args.store_id
-        if not 1 <= len(ids) <= 5 or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= (240 if args.cadence else 120):
+        from .cityscope import validate_scope
+        fleet = getattr(args, "fleet_scope", None)
+        scope_ok = validate_scope(fleet, ids) and args.cadence == "meal-peaks-v1" and args.api_profile == "miniapp_gateway" if fleet else 1 <= len(ids) <= 5
+        if not scope_ok or not 30 <= args.interval <= 3600 or not 1 <= args.samples <= (240 if args.cadence else 120):
             emit({"ok": False, "error_code": "invalid_sampling_bounds",
                   "detail": "单任务限1–5店、30–3600秒周期；固定周期1–120轮，平滑策略1–240轮"})
             return 2

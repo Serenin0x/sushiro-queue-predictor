@@ -47,21 +47,36 @@ def window_for(at):
     return start, end
 
 
+def configured_stores(config):
+    return [s for g in config['archive_groups'] for s in g['store_ids']]
+
+
 def read_config(root):
     value = campaign.legacy._decode(_read_private_file(root / 'daily-config.json'))
-    if (set(value) != {'schema_version', 'first_day', 'source', 'supplier_root', 'archive_groups'}
-            or value['schema_version'] != 1 or value['first_day'] != '2026-10-15'
-            or set(value['source']) != {'app_id', 'source_version', 'package_sha256'}
+    if (set(value) != {'schema_version','first_day','source','supplier_root','archive_groups'}
+            or value['schema_version'] not in (1,2)
+            or value['first_day'] != ('2026-10-15' if value['schema_version']==1 else '2026-10-16')
+            or set(value['source']) != {'app_id','source_version','package_sha256'}
             or value['supplier_root'] != '/home/ubuntu/sushiwait-official-cloud-e0462-20261012'
-            or type(value['archive_groups']) is not list or len(value['archive_groups']) != 2):
+            or type(value['archive_groups']) is not list):
         raise ValueError('daily_config_invalid')
-    groups = value['archive_groups']
-    if ([g.get('store_ids') for g in groups] != [STORES[:3], STORES[3:]]
-            or [g.get('name') for g in groups] != ['primary', 'extra']
-            or any(set(g) != {'name', 'store_ids', 'archive'}
-                   or not Path(g['archive']).is_absolute() for g in groups)):
+    groups=value['archive_groups']
+    if value['schema_version']==1:
+        if ([g.get('store_ids') for g in groups] != [STORES[:3],STORES[3:]]
+                or [g.get('name') for g in groups] != ['primary','extra']):
+            raise ValueError('daily_archive_scope_invalid')
+    else:
+        from sushiwait.cityscope import STORES as allowed, SCOPE_ID, validate_scope
+        stores=configured_stores(value)
+        if (not 1<=len(groups)<=64 or not validate_scope(SCOPE_ID,stores)
+                or set(stores)!=set(allowed) or len({g.get('name') for g in groups})!=len(groups)
+                or len({g.get('archive') for g in groups})!=len(groups)):
+            raise ValueError('daily_archive_scope_invalid')
+    import re
+    if any(set(g)!={'name','store_ids','archive'} or not re.fullmatch('[a-z]+',g['name'])
+           or not 1<=len(g['store_ids'])<=3 or not Path(g['archive']).is_absolute() for g in groups):
         raise ValueError('daily_archive_scope_invalid')
-    make_plan(value, datetime.fromisoformat('2026-10-15T11:00:00+08:00'))
+    make_plan(value,datetime.fromisoformat(value['first_day']+'T11:00:00+08:00'))
     return value
 
 
@@ -69,12 +84,15 @@ def make_plan(config, at):
     start, end = window_for(at)
     if start.date().isoformat() < config['first_day']:
         raise ValueError('daily_start_not_reached')
+    stores=configured_stores(config)
+    expanded=config['schema_version']==2
     rounds = campaign.legacy.planned_rounds(start, end, 'meal-peaks-v1')
-    plan = {**config['source'], 'schema_version': 3,
-            'plan_id': 'five-stores-' + start.strftime('%Y%m%d'),
-            'store_ids': STORES[:], 'interval_seconds': 600, 'cadence': 'meal-peaks-v1',
+    plan = {**config['source'], 'schema_version': 4 if expanded else 3,
+            'plan_id': ('five-cities-' if expanded else 'five-stores-') + start.strftime('%Y%m%d'),
+            'store_ids': stores, 'interval_seconds': 600, 'cadence': 'meal-peaks-v1',
             'windows': [{'start': start.isoformat(), 'end': end.isoformat()}],
-            'ordinary_query_limit': rounds * len(STORES), 'renewal_limit': 14}
+            'ordinary_query_limit': rounds * len(stores), 'renewal_limit': 14}
+    if expanded: plan['fleet_scope']='five-cities-v1'
     campaign.validate_plan(plan)
     return plan
 
@@ -182,19 +200,19 @@ def run_collection(root, config, stopped):
             except Exception:
                 print('{"event":"daily_owner_reauthorization_not_accepted"}', flush=True)
             publish_status(root, 'collection', {'state': 'needs_attention', 'day': day_text,
-                           'error_code': 'collection_latched', 'store_ids': STORES})
+                           'error_code': 'collection_latched', 'store_ids': configured_stores(config)})
             stopped.wait(10)
             continue
         deferred = reauthorization.resume_not_before(root)
         if deferred and now < deferred:
             publish_status(root, 'collection', {'state': 'closed', 'day': day_text,
-                           'next_open_at': deferred.isoformat(), 'store_ids': STORES})
+                           'next_open_at': deferred.isoformat(), 'store_ids': configured_stores(config)})
             stopped.wait(min(60, max(1, (deferred-now).total_seconds())))
             continue
         if not start <= now < end:
             next_at = start if now < start else window_for(now + timedelta(days=1))[0]
             publish_status(root, 'collection', {'state': 'closed', 'day': day_text,
-                           'next_open_at': next_at.isoformat(), 'store_ids': STORES})
+                           'next_open_at': next_at.isoformat(), 'store_ids': configured_stores(config)})
             stopped.wait(min(60, max(1, (next_at - now).total_seconds())))
             continue
         try:
@@ -204,12 +222,12 @@ def run_collection(root, config, stopped):
             ledger = campaign.CampaignLedger(state, plan)
             if ledger.value['finished_windows']:
                 publish_status(root, 'collection', {'state': 'completed', 'day': day_text,
-                               'store_ids': STORES})
+                               'store_ids': configured_stores(config)})
                 stopped.wait(min(60, max(1, (end - now).total_seconds())))
                 continue
             publish_status(root, 'collection', {'state': 'starting', 'day': day_text,
                            'opened_at': start.isoformat(), 'closes_at': end.isoformat(),
-                           'cadence': plan['cadence'], 'store_ids': STORES})
+                           'cadence': plan['cadence'], 'store_ids': configured_stores(config)})
             last_pulse = None
             def pulse():
                 nonlocal last_pulse
@@ -219,7 +237,7 @@ def run_collection(root, config, stopped):
                     status = campaign.legacy.task_status(task) if task.exists() else None
                     publish_status(root, 'collection', {'state': 'running' if status else 'starting',
                         'day': day_text, 'opened_at': start.isoformat(), 'closes_at': end.isoformat(),
-                        'cadence': plan['cadence'], 'store_ids': STORES,
+                        'cadence': plan['cadence'], 'store_ids': configured_stores(config),
                         'successful_slots': status['successful_slots'] if status else 0,
                         'failed_slots': status['failed_slots'] if status else 0,
                         'last_progress_at': status['updated_at'] if status else None})
@@ -237,7 +255,7 @@ def run_collection(root, config, stopped):
             # A new date never grants a fresh retry of yesterday's failed session.
             latch(root, code, day_text)
             publish_status(root, 'collection', {'state': 'needs_attention', 'day': day_text,
-                           'error_code': code, 'store_ids': STORES})
+                           'error_code': code, 'store_ids': configured_stores(config)})
             print(json.dumps({'event': 'daily_collection_needs_attention', 'error_code': code}), flush=True)
 
 
@@ -274,7 +292,7 @@ def run_projection(root, config, stopped):
                     print(json.dumps({'event': 'daily_public_saved', 'after_id': result['after_id'],
                                       'inserted_records': result['inserted_records']}), flush=True)
             publish_status(root, 'projection', {'state': 'running', 'day': now.astimezone(CHINA).date().isoformat(),
-                           'store_ids': STORES, 'cursors': [p.after for p in projections]})
+                           'store_ids': configured_stores(config), 'cursors': [p.after for p in projections]})
             stopped.wait(10)
     finally:
         for item in projections:

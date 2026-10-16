@@ -103,7 +103,9 @@ def requires_scan(root, block):
     if not block or block['value']['error_code'] != 'cloud_refresh_failed':
         return False
     day = block['value']['day'].replace('-', '')
-    directory = Path(root) / ('five-stores-' + day) / 'refresh-diagnostics'
+    config_path=Path(root)/'daily-config.json'
+    expanded=config_path.exists() and read(config_path).get('schema_version')==2
+    directory = Path(root) / (('five-cities-' if expanded else 'five-stores-') + day) / 'refresh-diagnostics'
     if not directory.exists():
         return False
     paths = sorted(directory.glob('attempt-*.json'))

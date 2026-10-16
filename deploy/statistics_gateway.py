@@ -19,7 +19,7 @@ from sushiwait.monitorhub import MonitorHub, read_config
 class JoinedOfficialViews:
     """Join disjoint saved archives without widening any packet's scope."""
     def __init__(self, primary, extra):
-        if set(primary.names) & set(extra.names) or len(primary.names) + len(extra.names) > 5:
+        if set(primary.names) & set(extra.names) or len(primary.names) + len(extra.names) > 128:
             raise ValueError('official_view_join_scope_invalid')
         self.views = (primary, extra)
         self.names = {**primary.names, **extra.names}
@@ -147,7 +147,7 @@ class StatisticsGateway:
                 result[key] = instant.isoformat()
         for key in ('successful_slots', 'failed_slots'):
             if key in value:
-                if type(value[key]) is not int or not 0<=value[key]<=10000:
+                if type(value[key]) is not int or not 0<=value[key]<=100000:
                     raise ValueError('invalid_collection_health')
                 result[key] = value[key]
         allowed={'collection_latched','cloud_reader_failed','cloud_refresh_failed','cloud_refresh_limit',
@@ -478,6 +478,9 @@ async def serve(args):
         if official is None:
             raise ValueError('primary_official_view_required')
         official = JoinedOfficialViews(official, read_official_config(args.extra_official_view_file))
+    for path in getattr(args,'additional_official_view_file',[]) or []:
+        if official is None: raise ValueError('primary_official_view_required')
+        official = JoinedOfficialViews(official,read_official_config(path))
     app = StatisticsGateway(hub, official_view=official, calendar_source=args.calendar_source,
         refresh_seconds=args.refresh_seconds, refresh_policy_file=args.refresh_policy_file, model_advice_file=args.model_advice_file,
         research_file=args.research_file, public_origin=args.public_origin, ocr_enabled=args.ocr_enabled,
@@ -513,6 +516,7 @@ if __name__ == '__main__':
     parser.add_argument('--research-file', help='Optional private owner-scoped test database and viewing leases')
     parser.add_argument('--official-view-file', help='Optional private official public-field archive configuration; no credentials')
     parser.add_argument('--extra-official-view-file', help='Optional disjoint two-store saved archive; no extra upstream access')
+    parser.add_argument('--additional-official-view-file', action='append', default=[], help='Additional disjoint saved archive')
     parser.add_argument('--calendar-source', choices=['crm_remote_v1_1', 'sapi_miniapp_gateway'],
         default='crm_remote_v1_1', help='Explicit source for the calendar; official mode requires its view file')
     parser.add_argument('--refresh-seconds', type=int, default=30, help='Saved-statistics refresh cadence, 30–3600 seconds')

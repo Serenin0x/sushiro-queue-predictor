@@ -23,6 +23,7 @@ from .credentials import (
     CredentialError, QueryCredentials, _identity, _private_file, _read_private_file,
 )
 from .storage import _report_payload, _report_snapshot, _safe_error
+from .cityscope import validate_scope
 
 
 _MAX_BYTES = 16 * 1024
@@ -85,10 +86,11 @@ def _decode(body: bytes) -> dict:
         config_keys = {"db", "api_profile", "store_ids", "interval", "samples", "wait_for_credentials"}
         if (not isinstance(c, dict) or set(c) not in (config_keys, config_keys | {"transient_failure_budget"},
                                                   config_keys | {"cadence"},
-                                                  config_keys | {"cadence", "transient_failure_budget"})
+                                                  config_keys | {"cadence", "transient_failure_budget"},
+                                                  config_keys | {"cadence", "fleet_scope"})
                 or not isinstance(c["db"], str) or len(c["db"]) > 4096 or not Path(c["db"]).is_absolute()
                 or c["api_profile"] not in ("legacy", "miniapp_gateway")
-                or not isinstance(c["store_ids"], list) or not 1 <= len(c["store_ids"]) <= 5
+                or not isinstance(c["store_ids"], list) or not (validate_scope(c["fleet_scope"], c["store_ids"]) and c["api_profile"] == "miniapp_gateway" if "fleet_scope" in c else 1 <= len(c["store_ids"]) <= 5)
                 or len(set(c["store_ids"])) != len(c["store_ids"])
                 or not all(isinstance(s, str) and s.isascii() and s.isdecimal() and str(int(s)) == s
                            and 0 < int(s) <= 2**63-1 for s in c["store_ids"])
