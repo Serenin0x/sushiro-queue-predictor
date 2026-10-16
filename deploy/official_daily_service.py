@@ -18,7 +18,7 @@ import threading
 
 from sushiwait.calendar import date_features
 from sushiwait.credentials import _read_private_file
-from sushiwait.packets import _write_packet, encoded
+from sushiwait.packets import PacketError, _write_packet, encoded
 
 
 def sibling(name):
@@ -267,7 +267,7 @@ def run_collection(root, config, stopped):
 
 def run_projection(root, config, stopped):
     """Project both groups into existing archives, keeping all historic days."""
-    active_day, projections = None, []
+    active_day, projections, deferred_counts = None, [], {}
     try:
         while not stopped.is_set():
             now = datetime.now(UTC)
@@ -278,6 +278,7 @@ def run_projection(root, config, stopped):
                     item.close()
                 projections = []
                 active_day = day
+                deferred_counts = {}
             if not (day / 'observations.sqlite').exists():
                 publish_status(root, 'projection', {'state': 'waiting', 'day': now.astimezone(CHINA).date().isoformat()})
                 stopped.wait(10)
@@ -292,12 +293,33 @@ def run_projection(root, config, stopped):
                               'ordinary_query_limit': rounds * len(group['store_ids'])}
                     projections.append(projection.Projection(day, group['archive'], scoped,
                                             namespace='public-outbox-' + group['name']))
-            for item in projections:
-                result = item.step(now)
+            deferred = []
+            for group, item in zip(config['archive_groups'], projections):
+                name=group['name']
+                try:
+                    # The collector can commit between groups. A timestamp from
+                    # the beginning of this 28-group pass is already stale.
+                    result = item.step(datetime.now(UTC))
+                except PacketError as error:
+                    if error.error_code != 'packet_future_record':
+                        raise
+                    # A row committed just after our read clock is safe to
+                    # defer. Keep the cursor and packet validation unchanged.
+                    deferred_counts[name]=deferred_counts.get(name,0)+1
+                    deferred.append(name)
+                    print(json.dumps({'event':'daily_public_deferred', 'group':name,
+                        'error_code':'packet_future_record','cursor_advanced':False,
+                        'consecutive_checks':deferred_counts[name]}),flush=True)
+                    continue
+                deferred_counts[name]=0
                 if result:
                     print(json.dumps({'event': 'daily_public_saved', 'after_id': result['after_id'],
                                       'inserted_records': result['inserted_records']}), flush=True)
-            publish_status(root, 'projection', {'state': 'running', 'day': now.astimezone(CHINA).date().isoformat(),
+            persistent=any(deferred_counts[name]>=3 for name in deferred)
+            publish_status(root, 'projection', {'state': 'needs_attention' if persistent else 'running',
+                           'day': now.astimezone(CHINA).date().isoformat(),
+                           'error_code':'packet_future_record' if persistent else None,
+                           'deferred_groups':deferred,
                            'store_ids': configured_stores(config), 'cursors': [p.after for p in projections]})
             stopped.wait(10)
     finally:
@@ -321,9 +343,15 @@ def main():
         config = read_config(root)
         (run_collection if mode == 'collect' else run_projection)(root, config, stopped)
         return 0
-    except Exception:
-        publish_status(root, mode, {'state': 'needs_attention', 'error_code': 'daily_service_failed'})
-        print('{"event":"daily_service_failed","sensitive_details_omitted":true}', flush=True)
+    except Exception as error:
+        code=getattr(error,'error_code',str(error))
+        allowed={'packet_future_record','packet_database_changed','packet_database_error',
+                 'cloud_public_checkpoint_limit','cloud_public_checkpoint_invalid',
+                 'cloud_public_checkpoint_changed','cloud_public_pending_unconfirmed',
+                 'cloud_public_commit_unconfirmed','cloud_public_delivery_ambiguous'}
+        code=code if code in allowed else 'daily_service_failed'
+        publish_status(root, mode, {'state': 'needs_attention', 'error_code': code})
+        print(json.dumps({'event':'daily_service_failed','error_code':code,'sensitive_details_omitted':True}),flush=True)
         return 1
     finally:
         os.close(lock)
