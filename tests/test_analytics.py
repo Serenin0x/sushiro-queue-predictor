@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 import unittest
 from sushiwait.analytics import selection, summarize_day, build_report, ai_context
-from sushiwait.analyticsai import explain, tick, write_state
+from sushiwait.analyticsai import explain, tick, write_state, validate_answer, PROMPT
 from sushiwait.deepseek import _Ledger, DeepSeekError
 from test_display_replay import archive
 from test_model_advice_worker import worker
@@ -93,6 +93,26 @@ class AnalyticsModelTests(unittest.TestCase):
         self.assertEqual(a['state'],'fallback')
         b=explain(self.context,budget_file=self.budget,key_file=self.key,now=self.now,transport=lambda *_:self.fail())
         self.assertEqual(b['state'],'previous_attempt_unknown')
+    def test_freshness_evidence_and_safe_failure_diagnostics(self):
+        response=json.loads(self.response());answer=json.loads(response['choices'][0]['message']['content'])
+        answer['stores'][0]['evidence_fields']=['generated_at','observations']
+        context={**self.context,'generated_at':self.now.isoformat()}
+        self.assertEqual(validate_answer(answer,context),answer)
+        with self.assertRaisesRegex(ValueError,'analysis_evidence_fields'):validate_answer(answer,self.context)
+        answer['stores'][0]['evidence_fields']=['invented_sensitive_content']
+        response['choices'][0]['message']['content']=json.dumps(answer)
+        result=explain(context,budget_file=self.budget,key_file=self.key,now=self.now,transport=lambda *_:json.dumps(response).encode())
+        self.assertEqual(result['state'],'fallback')
+        stored=json.loads(next(self.budget.parent.glob('analytics-diagnostic-*.json')).read_text())
+        self.assertEqual(stored['validation_error'],'analysis_evidence_fields')
+        self.assertNotIn('invented_sensitive_content',json.dumps(stored))
+        self.assertIn('generated_at',PROMPT)
+    def test_output_requires_all_stores_and_bounded_text(self):
+        response=json.loads(self.response());answer=json.loads(response['choices'][0]['message']['content'])
+        answer['stores'][0]['recommendation']='字'*201
+        with self.assertRaisesRegex(ValueError,'analysis_text_length'):validate_answer(answer,self.context)
+        answer['stores']=[]
+        with self.assertRaisesRegex(ValueError,'analysis_store_count'):validate_answer(answer,self.context)
     def test_explicit_closed_hours_analysis_and_idempotent_request(self):
         job=self.root/'analytics-job.json';now=self.now.replace(hour=0);calls=[]
         def suggest(*a,**k):calls.append(k);return {'state':'ready','advice':None}

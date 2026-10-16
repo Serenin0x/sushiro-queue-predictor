@@ -16,8 +16,9 @@ from .outcomes import _json
 PROMPT = '''你是门店排队数据分析员。输入只有已保存的公共统计摘要。只用这些事实，以自然简洁中文分析门店排队趋势与下一步收集建议。向普通用户叙述，不使用英文术语、门店编号、UTC时间、字段名或固定免责声明。门店使用store_name。摘要不超过130字，每店发现与建议各尽量控制在100字内；不要逐个堆砌输入指标。
 readiness_score 是数据准备度启发式评分，不是预测准确率；展示号码不是人数、桌数或真实入座数；采集空白不等于无客流；peak_hours 是已有连续可比号码推进的高峰参考，不是发号高峰。hourly_summary每行为[小时,观测组数,有号占比百分比,号码推进速度每分钟,有观测天数]；daily_summary每行为[日期,观测组数,覆盖15分钟格数,已到时段格数]，最多最近14个已有日期。empty是成功响应但没有展示号码，missing是响应缺字段，failed是失败，sampling_gaps才是采样长间隔。必须区分这四者；有号占比低或成功空响应多，绝不能据此推断漏采。缺口只由覆盖与采样长间隔判断。营业时间周一至周五11:00–22:00，周末及节假日10:30–22:00，不建议在营业外补采；历史天数不足时建议覆盖两周，不自创5天等验收门槛。latest_day给出最近有观测日期的分小时[小时,观测数,有号数,空响应数,失败数,连续推进速度]。结合generated_at与last_sample_at判断新鲜度，闭店后的历史曲线不能说成此刻仍在排队。优先分析午晚高峰变化、低速与空白是否来自缺数据，以及下一步最值得补充的等待样本。不得编造等待时间、实际客流、准确率或新数据。
 输出严格JSON，字段仅 summary 和 stores。summary为不超过240字的总结。stores是数组，每项仅store_id、finding、recommendation、evidence_fields。finding和recommendation各不超过200字，evidence_fields为用到的输入数值字段名数组。每个门店ID必须来自输入。给出可执行且按数据缺口排序的收集建议，不能建议批量真实取号。不要输出Markdown、推理过程或外部链接。'''
-FIELDS = {'observations','successful','empty','failed','missing','coverage_percent','days_observed','comparable_intervals','readiness_score','peak_hours','sampling_gaps','hourly_summary','daily_summary','last_sample_at','latest_day'}
+FIELDS = {'observations','successful','empty','failed','missing','coverage_percent','days_observed','comparable_intervals','readiness_score','peak_hours','sampling_gaps','hourly_summary','daily_summary','last_sample_at','latest_day','generated_at'}
 
+PROMPT += ' evidence_fields只能从以下字段名中选择：' + '、'.join(sorted(FIELDS)) + '。不得使用子字段路径或新造名称；generated_at仅在输入存在时使用。stores必须逐一覆盖输入全部门店，每家恰好一项，store_id保持输入的字符串类型。'
 
 def write_state(path, value):
     path=Path(path); raw=json.dumps(value,ensure_ascii=False,allow_nan=False).encode()
@@ -39,17 +40,25 @@ def read_state(path):
 
 def validate_answer(value, context):
     ids={r['store_id'] for r in context['stores']}
-    if type(value) is not dict or set(value)!={'summary','stores'} or type(value['summary']) is not str or not 1<=len(value['summary'])<=240:
-        raise ValueError('invalid_analysis_answer')
-    if type(value['stores']) is not list or len(value['stores'])!=len(ids): raise ValueError('invalid_analysis_answer')
+    if type(value) is not dict or set(value)!={'summary','stores'}:
+        raise ValueError('analysis_shape')
+    if type(value['summary']) is not str or not 1<=len(value['summary'])<=240:
+        raise ValueError('analysis_summary_length')
+    if type(value['stores']) is not list or len(value['stores'])!=len(ids):
+        raise ValueError('analysis_store_count')
     seen=set()
     for row in value['stores']:
-        if (type(row) is not dict or set(row)!={'store_id','finding','recommendation','evidence_fields'}
-                or row['store_id'] not in ids or row['store_id'] in seen
-                or any(type(row[k]) is not str or not 1<=len(row[k])<=200 for k in ('finding','recommendation'))
-                or type(row['evidence_fields']) is not list or not row['evidence_fields']
-                or any(type(k) is not str or k not in FIELDS for k in row['evidence_fields'])):
-            raise ValueError('invalid_analysis_answer')
+        if type(row) is not dict or set(row)!={'store_id','finding','recommendation','evidence_fields'}:
+            raise ValueError('analysis_row_shape')
+        if type(row['store_id']) is not str or row['store_id'] not in ids or row['store_id'] in seen:
+            raise ValueError('analysis_store_scope')
+        if any(type(row[k]) is not str or not 1<=len(row[k])<=200 for k in ('finding','recommendation')):
+            raise ValueError('analysis_text_length')
+        fields=row['evidence_fields']
+        if (type(fields) is not list or not fields
+                or any(type(k) is not str or k not in FIELDS for k in fields)
+                or ('generated_at' in fields and 'generated_at' not in context)):
+            raise ValueError('analysis_evidence_fields')
         seen.add(row['store_id'])
     return value
 
@@ -57,7 +66,7 @@ def validate_answer(value, context):
 def explain(context, *, budget_file, key_file, now=None, transport=None, request_id=None):
     if context.get('policy')!=POLICY or context.get('scope')!='public_aggregates_only': raise ValueError('invalid_analysis_context')
     now=now or datetime.now(timezone.utc)
-    digest=hashlib.sha256(_canonical({'prompt_version':'analytics-2','context':context,'request_id':request_id}).encode()).hexdigest()
+    digest=hashlib.sha256(_canonical({'prompt_version':'analytics-3','context':context,'request_id':request_id}).encode()).hexdigest()
     ledger=_Ledger(budget_file,now)
     try:
         for call,result in ledger.calls:
@@ -74,7 +83,7 @@ def explain(context, *, budget_file, key_file, now=None, transport=None, request
         ledger.publish('public-input-'+digest+'.json',context)
         ledger.reserve({'public_input_sha256':digest},digest,now)
         began=time.monotonic();response=_json((transport or _https_post)(body,key,ledger.budget['timeout_seconds']))
-        usage=_usage(response);advice=None
+        usage=_usage(response);advice=None;validation_error=None
         overrun=usage['prompt_tokens']>ledger.budget['max_prompt_tokens'] or usage['completion_tokens']>ledger.budget['max_output_tokens']
         ended=datetime.now(timezone.utc) if transport is None else now
         try:
@@ -84,9 +93,14 @@ def explain(context, *, budget_file, key_file, now=None, transport=None, request
             if choice['index']!=0 or choice['finish_reason']!='stop' or message['role']!='assistant' or message.get('tool_calls'):raise ValueError('invalid_choice')
             answer=validate_answer(_json(message['content']),context);ledger.check_budget(ended)
             advice={'policy':POLICY,'model':MODEL,'mode':mode,'report_id':context['report_id'],'generated_at':ended.isoformat(),'answer':answer}
-        except Exception:pass
+        except Exception as error:
+            code=str(error)
+            allowed={'invalid_usage','invalid_model','invalid_choice','analysis_shape','analysis_summary_length','analysis_store_count','analysis_row_shape','analysis_store_scope','analysis_text_length','analysis_evidence_fields'}
+            validation_error=code if code in allowed else 'analysis_parse_failed'
         ledger.publish(f'deepseek-result-{len(ledger.calls)}.json',{'public_input_sha256':digest,
             'transport_basis':'official_https' if transport is None else 'injected_transport','usage':usage,'advice':advice,'overrun':overrun})
+        if validation_error:
+            ledger.publish('analytics-diagnostic-'+digest+'.json',{'validation_error':validation_error})
         return {'state':'ready' if advice else 'fallback','advice':advice,'network_performed':transport is None,
             'estimated_cost_microunits':_cost(usage['prompt_tokens'],usage['completion_tokens'],ledger.budget)}
     finally:ledger.close()
