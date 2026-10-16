@@ -29,6 +29,21 @@ class CollectionAlertTests(unittest.TestCase):
         self.assertEqual(alerts.condition(status,self.status(),NOW),'collection_rate_limited')
         self.assertIn('无需重新扫码',alerts.message('incident','collection_rate_limited',NOW)[1])
 
+    def test_sync_incident_is_not_delayed_by_existing_partial_store_incident(self):
+        with tempfile.TemporaryDirectory() as temp:
+            sent=[]
+            monitor=alerts.Monitor(Path(temp).resolve()/'state.json',CONFIG,lambda *args:sent.append(args) is None)
+            monitor.step('collection_partial_failure',NOW)
+            self.assertEqual(monitor.step('public_sync_stopped',NOW+timedelta(minutes=1)),'accepted')
+            self.assertEqual(monitor.step('public_sync_stopped',NOW+timedelta(minutes=2)),'suppressed')
+            self.assertEqual(monitor.step('healthy',NOW+timedelta(minutes=3)),'accepted')
+            self.assertEqual(len(sent),3)
+            self.assertIn('网页同步',sent[1][2])
+
+    def test_invalid_projection_timestamp_is_reported_as_sync_failure(self):
+        for projection in ({'state':'running'},self.status(at='invalid'),self.status(at=None)):
+            self.assertEqual(alerts.condition(self.status(),projection,NOW),'public_sync_stopped')
+
     def test_fresh_heartbeat_with_missing_progress_is_detected(self):
         status = self.status(last_progress_at=(NOW - timedelta(minutes=13)).isoformat())
         self.assertEqual(alerts.condition(status, self.status(), NOW), 'collection_progress_stale')

@@ -35,6 +35,8 @@ ALERT_POLICY = 'business-window-v2'
 
 
 def instant(value):
+    if type(value) is not str:
+        raise ValueError('alert_time_invalid')
     at = datetime.fromisoformat(value.replace('Z', '+00:00'))
     if at.utcoffset() is None:
         raise ValueError('alert_time_invalid')
@@ -101,7 +103,10 @@ def condition(collection, projection, now):
             return 'collection_progress_stale'
         if projection.get('state') != 'running':
             return 'public_sync_stopped'
-        sync_age = (now - instant(projection['at'])).total_seconds()
+        try:
+            sync_age = (now - instant(projection['at'])).total_seconds()
+        except (KeyError,TypeError,ValueError,OverflowError):
+            return 'public_sync_stopped'
         if sync_age < -60 or sync_age > 120:
             return 'public_sync_stopped'
         if isolated and collection.get('unavailable_store_ids'):
@@ -274,7 +279,7 @@ class Monitor:
         elif self.state['incident_since'] is None:
             self.state.update(incident_since=now.isoformat(), reason=status)
             kind = 'incident'
-        elif status in {'collection_stopped', 'collection_not_started', 'collection_partial_failure', 'collection_rate_limited'} and status != self.state['reason']:
+        elif status in {'collection_stopped', 'collection_not_started', 'collection_partial_failure', 'collection_rate_limited', 'public_sync_stopped'} and status != self.state['reason']:
             # A startup/heartbeat incident must not delay a later owner-action
             # alert (and its authorization link) for the six-hour reminder gap.
             self.state['reason'] = status

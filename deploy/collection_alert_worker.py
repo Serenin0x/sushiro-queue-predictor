@@ -62,6 +62,19 @@ def recovery_link(root):
         return None
 
 
+def current_condition(collection_root, now):
+    """A broken sync status must not be misreported as a collector failure."""
+    try:
+        collection=read_status(collection_root/'collection-status.json')
+    except Exception:
+        return 'collection_status_unavailable'
+    try:
+        projection=read_status(collection_root/'projection-status.json')
+    except Exception:
+        projection={'state':'unavailable'}
+    return condition(collection,projection,now)
+
+
 def main():
     if len(sys.argv) != 3:
         return 2
@@ -80,11 +93,7 @@ def main():
         monitor = Monitor(state_file, config)
         while not stopped.is_set():
             now = datetime.now(timezone.utc)
-            try:
-                status = condition(read_status(collection_root / 'collection-status.json'),
-                                   read_status(collection_root / 'projection-status.json'), now)
-            except Exception:
-                status = 'collection_status_unavailable'
+            status = current_condition(collection_root, now)
             delivery = monitor.step(status, now,
                 recovery_link=(lambda: recovery_link(root)) if status == 'collection_stopped' else None)
             print(json.dumps({'event': 'collection_alert_check', 'policy': alerts.ALERT_POLICY, 'condition': status,
