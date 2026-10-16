@@ -93,12 +93,34 @@ class AnalyticsModelTests(unittest.TestCase):
         self.assertEqual(a['state'],'fallback')
         b=explain(self.context,budget_file=self.budget,key_file=self.key,now=self.now,transport=lambda *_:self.fail())
         self.assertEqual(b['state'],'previous_attempt_unknown')
-    def test_closed_or_expired_viewer_does_not_call_model(self):
-        job=self.root/'analytics-job.json';now=self.now.replace(hour=0)
-        write_state(job,{'report_id':'b'*64,'context':self.context,'expires_at':(now+timedelta(seconds=90)).isoformat()})
-        tick(self.root,worker.prepare_budget,worker.business_window,now=now,suggest=lambda *_a,**_k:self.fail())
-        self.assertEqual(json.loads((self.root/'analytics-result.json').read_text())['state'],'waiting_for_open')
-        tick(self.root,worker.prepare_budget,worker.business_window,now=self.now,suggest=lambda *_a,**_k:self.fail())
+    def test_explicit_closed_hours_analysis_and_idempotent_request(self):
+        job=self.root/'analytics-job.json';now=self.now.replace(hour=0);calls=[]
+        def suggest(*a,**k):calls.append(k);return {'state':'ready','advice':None}
+        write_state(job,{'report_id':'b'*64,'request_id':'1'*32,'context':self.context,'expires_at':(now+timedelta(seconds=90)).isoformat()})
+        tick(self.root,worker.prepare_analysis_budget,worker.business_window,now=now,suggest=suggest)
+        tick(self.root,worker.prepare_analysis_budget,worker.business_window,now=now,suggest=suggest)
+        self.assertEqual(len(calls),1)
+        self.assertEqual(json.loads((self.root/'analytics-result.json').read_text())['state'],'ready')
+        write_state(job,{'report_id':'b'*64,'request_id':'2'*32,'context':self.context,'expires_at':(now+timedelta(seconds=90)).isoformat()})
+        tick(self.root,worker.prepare_analysis_budget,worker.business_window,now=now,suggest=suggest)
+        self.assertEqual(len(calls),2)
+        tick(self.root,worker.prepare_analysis_budget,worker.business_window,now=self.now,suggest=lambda *_a,**_k:self.fail())
+    def test_explicit_repeat_calls_model_and_retry_same_intent_does_not(self):
+        calls=[]
+        def transport(*_):calls.append(1);return self.response()
+        for request_id in ('1'*32,'1'*32,'2'*32):
+            explain(self.context,budget_file=self.budget,key_file=self.key,now=self.now,transport=transport,request_id=request_id)
+        self.assertEqual(len(calls),2)
+    def test_late_manual_analysis_retains_day_charges_and_cap(self):
+        ledger=_Ledger(self.budget,self.now);ledger.reserve({'public_input_sha256':'a'*64},'a'*64,self.now)
+        charged=ledger.calls[0][0]['reserved_cost_microunits'];ledger.close()
+        late=self.now.replace(hour=15)
+        path=worker.prepare_analysis_budget(self.root,'thinking',late)
+        self.assertEqual(json.loads(path.read_text())['max_reserved_cost_microunits']+charged,8000000)
+        self.assertEqual(worker.prepare_analysis_budget(self.root,'thinking',late),path)
+        result=explain(self.context,budget_file=path,key_file=self.key,now=late,transport=lambda *_:self.response())
+        self.assertEqual(result['state'],'ready')
+        self.assertTrue(self.budget.exists())
     def test_exhausted_shared_budget_cannot_be_reset_for_analytics(self):
         value=json.loads(self.budget.read_text());value['max_calls']=1;self.budget.write_text(json.dumps(value))
         explain(self.context,budget_file=self.budget,key_file=self.key,now=self.now,transport=lambda *_:self.response())

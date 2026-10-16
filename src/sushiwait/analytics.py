@@ -194,15 +194,18 @@ def ai_context(report):
     rows=[]
     for row in report['stores']:
         if not row['observations']: continue
-        rows.append({k:row[k] for k in ('store_id','city','observations','successful','empty','failed','missing',
+        rows.append({k:row[k] for k in ('store_id','store_name','city','observations','successful','empty','failed','missing',
             'coverage_percent','days_observed','comparable_intervals','readiness_score','peak_hours','sampling_gaps')})
         rows[-1]['hourly_summary']=[[h['hour'],h['observations'],h['active_ratio'],h['rate'],h['days']] for h in row['hourly']]
         rows[-1]['daily_summary']=[[d['date'],d['observations'],d['covered_slots'],d['expected_slots']] for d in row['daily'][-14:]]
+        rows[-1]['last_sample_at']=row['last_sample_at']
+        latest=next((d for d in reversed(row['daily']) if d['observations']),None)
+        rows[-1]['latest_day']={'date':latest['date'],'hours':[[h['hour'],h['observations'],h['visible'],h['empty'],h['failed'],round(h['advance']/h['compared_minutes'],2) if h['compared_minutes'] else None] for h in latest['hours']]} if latest else None
     if not rows: raise ValueError('analysis_no_observations')
     # Larger historical fleets use the lowest coverage stores as explicit focus;
     # all stores remain available in the statistical dashboard.
     rows=sorted(rows,key=lambda r:(r['readiness_score'],r['store_id']))[:24]
     while len(rows)>1 and len(json.dumps(rows,ensure_ascii=False).encode())>8500:rows.pop()
-    return {'policy':POLICY,'report_id':report['report_id'],'selection':report['selection'],'stores':rows,
+    return {'policy':POLICY,'report_id':report['report_id'],'generated_at':report['generated_at'],'selection':report['selection'],'stores':rows,
         'represented_stores':len(rows),'total_stores_with_observations':sum(r['observations']>0 for r in report['stores']),
         'scope':'public_aggregates_only','prediction_accuracy_known':False,'actual_customer_counts_known':False}

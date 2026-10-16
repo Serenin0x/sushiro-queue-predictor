@@ -126,7 +126,7 @@ class StatisticsGateway:
     def polling_seconds(self):
         return self.polling_settings()['poll_seconds']
 
-    def collection_health(self):
+    def collection_health(self, now=None):
         from sushiwait.credentials import _read_private_file
         value = json.loads(_read_private_file(self.collection_status_file))
         state = value['state']
@@ -135,7 +135,8 @@ class StatisticsGateway:
         at = datetime.fromisoformat(value['at'])
         if at.utcoffset() is None:
             raise ValueError('invalid_collection_health')
-        age = max(0, (datetime.now(timezone.utc)-at).total_seconds())
+        now=now or datetime.now(timezone.utc)
+        age = max(0, (now-at).total_seconds())
         result = {'schema_version': 1, 'state': state if age<=120 else 'needs_attention',
                   'updated_at': at.isoformat(), 'heartbeat_stale': age>120}
         for key in ('opened_at', 'closes_at', 'next_open_at', 'last_progress_at'):
@@ -149,7 +150,25 @@ class StatisticsGateway:
                 if type(value[key]) is not int or not 0<=value[key]<=10000:
                     raise ValueError('invalid_collection_health')
                 result[key] = value[key]
-        # Explicit projection: never expose paths, supplier errors or credentials.
+        allowed={'collection_latched','cloud_reader_failed','cloud_refresh_failed','cloud_refresh_limit',
+                 'cloud_refresh_outcome_unknown','cloud_trial_halted','cloud_ledger_invalid',
+                 'daily_collection_failed','daily_service_failed'}
+        result['reason_code']='heartbeat_stale' if age>120 else value.get('error_code') if value.get('error_code') in allowed else None
+        from datetime import timedelta
+        from sushiwait.cadence import CHINA, next_sample_at
+        from sushiwait.calendar import date_features
+        local=now.astimezone(CHINA)
+        early=local.weekday()>=5 or date_features(local.isoformat(),as_of=local.isoformat())['date_type']=='holiday'
+        opened=local.replace(hour=10 if early else 11,minute=30 if early else 0,second=0,microsecond=0)
+        closes=local.replace(hour=22,minute=0,second=0,microsecond=0)
+        if result['state']!='needs_attention' and opened<=now<closes and now>opened+timedelta(minutes=3):
+            reason=None
+            if state in {'closed','completed','starting'}:reason='collection_not_started'
+            elif value.get('failed_slots',0):reason='collection_failed_samples'
+            elif not value.get('last_progress_at') or value.get('successful_slots')==0:reason='collection_not_started'
+            elif now>next_sample_at(datetime.fromisoformat(value['last_progress_at']))+timedelta(minutes=2):reason='collection_progress_stale'
+            if reason:result.update(state='needs_attention',reason_code=reason)
+        # Fixed diagnostic codes only; never arbitrary supplier messages.
         return result
 
     async def research_request(self, scope, receive):
@@ -221,7 +240,11 @@ class StatisticsGateway:
         from sushiwait.analytics import selection, build_report, ai_context
         from sushiwait.analyticsai import write_state, read_state
         action=value.get('action')
-        if action not in {'report','explain'} or set(value) != ({'schema_version','action','selection'} if action=='report' else {'schema_version','action','selection','report_id','visible'}):
+        required={'schema_version','action','selection'} if action=='report' else {'schema_version','action','selection','report_id','visible','request_id'}
+        if action not in {'report','explain'} or not required<=set(value) or set(value)-required-({'fresh'} if action=='report' else set()):
+            raise ValueError('invalid_analysis_request')
+        if 'fresh' in value and type(value['fresh']) is not bool:raise ValueError('invalid_analysis_request')
+        if action=='explain' and (not isinstance(value['request_id'],str) or not re.fullmatch('[0-9a-f]{32}',value['request_id'])):
             raise ValueError('invalid_analysis_request')
         selected=selection(value['selection']); key=json.dumps(selected,sort_keys=True)
         reader=self.official_view if selected['source']=='sapi_miniapp_gateway' else self.hub
@@ -229,7 +252,7 @@ class StatisticsGateway:
         if action=='report':
             async with self.analysis_lock:
                 saved=self.analysis_cache.get(key)
-                if saved and time.monotonic()-saved[0]<90:report=saved[1]
+                if saved and not value.get('fresh') and time.monotonic()-saved[0]<90:report=saved[1]
                 else:
                     def read(route):
                         status,body,_=reader.dispatch(route)
@@ -247,12 +270,17 @@ class StatisticsGateway:
             report=saved[1];context=ai_context(report)
             root=Path(self.research_file).parent;job=root/'analytics-job.json'
             now=datetime.now(timezone.utc)
-            old=read_state(job) if job.exists() else {}
-            if old.get('report_id')!=report['report_id'] and old.get('expires_at') and datetime.fromisoformat(old['expires_at'])>now:
-                result={'state':'busy'}
-            else:
-                write_state(job,{'report_id':report['report_id'],'context':context,'expires_at':(now+timedelta(seconds=120 if value['visible'] else 0)).isoformat()})
-                result={'state':'queued' if value['visible'] else 'released'}
+            async with self.analysis_lock:
+                old=read_state(job) if job.exists() else {}
+                output=Path(self.model_advice_file).parent/'analytics-result.json'
+                finished=read_state(output) if output.exists() else {}
+                active=(old.get('expires_at') and datetime.fromisoformat(old['expires_at'])>now
+                        and not (finished.get('request_id')==old.get('request_id') and finished.get('state')!='running'))
+                if old.get('request_id')!=value['request_id'] and (active or not value['visible']):
+                    result={'state':'busy' if value['visible'] else 'released'}
+                else:
+                    write_state(job,{'report_id':report['report_id'],'request_id':value['request_id'],'context':context,'expires_at':(now+timedelta(seconds=120 if value['visible'] else 0)).isoformat()})
+                    result={'state':'queued' if value['visible'] else 'released','request_id':value['request_id']}
         return 200,json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),'application/json'
 
     @staticmethod
@@ -369,7 +397,7 @@ class StatisticsGateway:
                             from pathlib import Path
                             from sushiwait.analyticsai import read_state
                             value=read_state(Path(self.model_advice_file).parent/'analytics-result.json')
-                            body=json.dumps({k:value.get(k) for k in ('report_id','updated_at','state','advice')},ensure_ascii=False).encode()
+                            body=json.dumps({k:value.get(k) for k in ('report_id','request_id','updated_at','state','advice')},ensure_ascii=False).encode()
                             status,mime=200,'application/json'
                         except Exception:
                             status,body,mime=200,b'{"state":"not_requested"}', 'application/json'

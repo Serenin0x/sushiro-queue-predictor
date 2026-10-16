@@ -71,5 +71,14 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  $('tickets-size').value='50';$('tickets-size').onchange();
  assert.equal($('tickets-prev').disabled,true);assert.equal($('tickets-next').disabled,true);
  assert.equal($('my-tickets').children[0].children[1].children.length,api.filterRecords().length);
+ // Private sample planning excludes ambiguous, unsaved and other-queue rows.
+ const sample=api.filterRecords().find(i=>i.saved&&i.ticket.store_id==='3004');
+ sample.serverResult={result_available:true,state:'inferred_arrived',quality_flags:[]};
+ const summary=api.recordSummary('2026-10-01','2026-10-31','ordinary');
+ assert(summary['3004'].completed>=1);assert(summary['3004'].inferred>=1);
+ assert.equal(Object.keys(api.recordSummary('2026-10-01','2026-10-31','reservation')).length,0);
+ sample.serverResult.quality_flags=['number_reversal'];
+ assert.equal(api.recordSummary('2026-10-01','2026-10-31','ordinary')['3004'].completed,summary['3004'].completed-1);
+ assert(!JSON.stringify(summary).includes('issued_at'));
  console.log('explicit submission, unavailable forecast recording, manual/continuous modes, tab switching, hidden leases and HTTPS privacy passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

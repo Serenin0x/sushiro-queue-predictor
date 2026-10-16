@@ -45,6 +45,14 @@ def business_window(now):
             local.replace(hour=22, minute=0, second=0, microsecond=0))
 
 
+def reserved_cost(path, now):
+    """Read-only accounting of a retired ledger at its last valid instant."""
+    deadline=datetime.fromisoformat(json.loads(path.read_text())['deadline_at'])
+    ledger=_Ledger(path,min(now,deadline-timedelta(microseconds=1)))
+    try:return sum(call['reserved_cost_microunits'] for call,_ in ledger.calls)
+    finally:ledger.close()
+
+
 def prepare_budget(root, mode, now):
     """Immutable per-day ledgers: 8 CNY thinking + 2 CNY nonthinking, total 10."""
     local = now.astimezone(CHINA)
@@ -54,9 +62,7 @@ def prepare_budget(root, mode, now):
     previous = day_root / mode / 'budget.json'
     charged = 0
     if previous.exists():
-        old = _Ledger(previous, now)
-        try: charged = sum(call['reserved_cost_microunits'] for call, _ in old.calls)
-        finally: old.close()
+        charged = reserved_cost(previous,now)
     remaining = (8_000_000 if mode=='thinking' else 2_000_000)-charged
     if remaining <= 0: raise DeepSeekError('deepseek_budget_exhausted')
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -78,6 +84,27 @@ def prepare_budget(root, mode, now):
         with path.open('x') as stream:
             json.dump(value, stream); stream.flush(); os.fsync(stream.fileno())
         path.chmod(0o600)
+    return path
+
+
+def prepare_analysis_budget(root, mode, now):
+    """Explicit analysis is available all day; retain every earlier reservation."""
+    base=prepare_budget(root,mode,now)
+    if now < business_window(now)[1]:return base
+    directory=base.parent.parent/(mode+'-afterhours')
+    original=json.loads(base.read_text())
+    charged=reserved_cost(base,now)
+    remaining=original['max_reserved_cost_microunits']-charged
+    if remaining<=0:raise DeepSeekError('deepseek_budget_exhausted')
+    local=now.astimezone(CHINA)
+    value={**original,'max_reserved_cost_microunits':remaining,
+           'deadline_at':(local+timedelta(days=1)).replace(hour=0,minute=0,second=0,microsecond=0).astimezone(timezone.utc).isoformat()}
+    directory.mkdir(mode=0o700,exist_ok=True)
+    if directory.is_symlink() or directory.stat().st_mode&0o777!=0o700:raise ValueError('model_budget_directory_unsafe')
+    path=directory/'budget.json'
+    if path.exists():
+        if json.loads(path.read_text())!=value:raise ValueError('existing_model_budget_changed')
+    else:write(path,value);path.chmod(0o600)
     return path
 
 
@@ -176,7 +203,7 @@ def main():
             value.update(status='waiting_for_observation',updated_at=datetime.now(timezone.utc).isoformat());write(output,value)
         try:
             from sushiwait.analyticsai import tick as analytics_tick
-            analytics_tick(root,prepare_budget,business_window,job_file=Path(args.research_file).parent/'analytics-job.json')
+            analytics_tick(root,prepare_analysis_budget,business_window,job_file=Path(args.research_file).parent/'analytics-job.json')
         except Exception:
             pass  # Analytics never stops collection labels or prediction advice.
         time.sleep(15)
