@@ -68,7 +68,7 @@ def condition(collection, projection, now):
     try:
         start, end = business_window(now)
         if collection['state'] == 'needs_attention':
-            return 'collection_stopped'
+            return 'collection_rate_limited' if collection.get('error_code')=='cloud_rate_limited' else 'collection_stopped'
         if not start <= now < end:
             return 'closed'
         age = (now - instant(collection['at'])).total_seconds()
@@ -82,7 +82,8 @@ def condition(collection, projection, now):
             return 'collection_status_unavailable'
         if collection['state'] == 'starting':
             return startup
-        if type(collection.get('failed_slots')) is not int or collection['failed_slots']:
+        isolated=collection.get('isolation_policy')=='store-isolation-v1'
+        if type(collection.get('failed_slots')) is not int or (collection['failed_slots'] and not isolated):
             return 'collection_stopped'
         progress = collection.get('last_progress_at')
         if progress is None or collection.get('successful_slots') == 0:
@@ -103,6 +104,8 @@ def condition(collection, projection, now):
         sync_age = (now - instant(projection['at'])).total_seconds()
         if sync_age < -60 or sync_age > 120:
             return 'public_sync_stopped'
+        if isolated and collection.get('unavailable_store_ids'):
+            return 'collection_partial_failure'
         return 'healthy'
     except (KeyError, TypeError, ValueError, OverflowError):
         return 'collection_status_unavailable'
@@ -132,6 +135,8 @@ def validate_config(value):
 
 def message(kind, reason, now, recovery_link=None):
     labels = {
+        'collection_rate_limited': '来源返回429限流，采集正在自动退避；等待结束后自动恢复，无需重新扫码。',
+        'collection_partial_failure': '部分门店查询超时，已单独隔离并延迟复查，其他门店继续采集。',
         'collection_stopped': '采集服务已暂停，需要检查授权或来源错误。',
         'collection_heartbeat_stale': '采集状态超过两分钟没有更新。',
         'collection_not_started': '开店已超过三分钟，今天仍未保存首组采集数据。',
@@ -269,7 +274,7 @@ class Monitor:
         elif self.state['incident_since'] is None:
             self.state.update(incident_since=now.isoformat(), reason=status)
             kind = 'incident'
-        elif status in {'collection_stopped', 'collection_not_started'} and status != self.state['reason']:
+        elif status in {'collection_stopped', 'collection_not_started', 'collection_partial_failure', 'collection_rate_limited'} and status != self.state['reason']:
             # A startup/heartbeat incident must not delay a later owner-action
             # alert (and its authorization link) for the six-hour reminder gap.
             self.state['reason'] = status

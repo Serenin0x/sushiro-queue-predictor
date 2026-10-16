@@ -150,7 +150,7 @@ class StatisticsGateway:
                 if type(value[key]) is not int or not 0<=value[key]<=100000:
                     raise ValueError('invalid_collection_health')
                 result[key] = value[key]
-        allowed={'collection_latched','cloud_reader_failed','cloud_refresh_failed','cloud_refresh_limit',
+        allowed={'cloud_rate_limited','collection_latched','cloud_reader_failed','cloud_refresh_failed','cloud_refresh_limit',
                  'cloud_refresh_outcome_unknown','cloud_trial_halted','cloud_ledger_invalid',
                  'daily_collection_failed','daily_service_failed'}
         result['reason_code']='heartbeat_stale' if age>120 else value.get('error_code') if value.get('error_code') in allowed else None
@@ -164,10 +164,16 @@ class StatisticsGateway:
         if result['state']!='needs_attention' and opened<=now<closes and now>opened+timedelta(minutes=3):
             reason=None
             if state in {'closed','completed','starting'}:reason='collection_not_started'
-            elif value.get('failed_slots',0):reason='collection_failed_samples'
+            elif value.get('failed_slots',0) and value.get('isolation_policy')!='store-isolation-v1':reason='collection_failed_samples'
             elif not value.get('last_progress_at') or value.get('successful_slots')==0:reason='collection_not_started'
             elif now>next_sample_at(datetime.fromisoformat(value['last_progress_at']))+timedelta(minutes=2):reason='collection_progress_stale'
             if reason:result.update(state='needs_attention',reason_code=reason)
+        if value.get('isolation_policy')=='store-isolation-v1':
+            ids=value.get('unavailable_store_ids',[])
+            if type(ids) is not list or any(type(i) is not str or not i.isdigit() for i in ids) or len(ids)>83:
+                raise ValueError('invalid_collection_health')
+            result['unavailable_store_ids']=ids
+            result['active_store_count']=len(value.get('store_ids',[]))-len(ids)
         # Fixed diagnostic codes only; never arbitrary supplier messages.
         return result
 

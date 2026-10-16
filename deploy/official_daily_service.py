@@ -228,6 +228,12 @@ def run_collection(root, config, stopped):
             publish_status(root, 'collection', {'state': 'starting', 'day': day_text,
                            'opened_at': start.isoformat(), 'closes_at': end.isoformat(),
                            'cadence': plan['cadence'], 'store_ids': configured_stores(config)})
+            if config['schema_version']==2 and (root/'fleet-policy.json').exists():
+                policy=reauthorization.read(root/'fleet-policy.json')
+                if policy != {'schema_version':1,'policy':'store-isolation-v1'}:
+                    raise ValueError('fleet_policy_invalid')
+                sibling('official_fleet_collect').run(__import__('types').SimpleNamespace(campaign=campaign, reauthorization=reauthorization, publish_status=publish_status, CHINA=CHINA), root, day, plan, ledger, stopped)
+                continue
             last_pulse = None
             def pulse():
                 nonlocal last_pulse

@@ -66,6 +66,8 @@ def active_block(root):
     block = latest_block(root)
     if block is None:
         return None
+    if isolation_clearance(root, block):
+        return None
     clearance = Path(root) / 'recovery-clearances' / (block['sha256'] + '.json')
     if not os.path.lexists(clearance):
         return block
@@ -76,11 +78,43 @@ def active_block(root):
         raise ValueError('recovery_clearance_invalid')
     selection = Path(root) / value['selection_file']
     if (selection.parent.parent != Path(root)
-            or not re.fullmatch(r'five-stores-20\d{6}', selection.parent.name)
+            or not re.fullmatch(r'five-(?:stores|cities)-20\d{6}', selection.parent.name)
             or not re.fullmatch(r'recovery-\d{3}\.json', selection.name)
             or hashlib.sha256(_read_private_file(selection)).hexdigest() != value['selection_sha256']):
         raise ValueError('recovery_clearance_changed')
     return None
+
+
+def isolation_clearance(root, block):
+    """Operator-approved isolation is bound to one known terminal 5xx task."""
+    path = Path(root)/'isolation-clearances'/(block['sha256']+'.json')
+    if not path.exists(): return False
+    v=read(path)
+    if (set(v)!={'schema_version','block_sha256','task_file','task_sha256','policy','failure_id'}
+            or v['schema_version']!=1 or v['block_sha256']!=block['sha256']
+            or v['policy']!='store-isolation-v1' or block['value']['error_code']!='cloud_reader_failed'):
+        raise ValueError('isolation_clearance_invalid')
+    task=Path(root)/v['task_file']
+    if (task.parent.parent!=Path(root) or not re.fullmatch(r'five-cities-20\d{6}',task.parent.name)
+            or task.name!='collection-'+block['value']['day']+'-smooth.json'
+            or task.parent.name!='five-cities-'+block['value']['day'].replace('-','')
+            or hashlib.sha256(_read_private_file(task)).hexdigest()!=v['task_sha256']):
+        raise ValueError('isolation_clearance_changed')
+    status=campaign.legacy.task_status(task)
+    if status['pending_attempt'] or status['uncertain_slots'] or status['failed_slots']!=1:
+        raise ValueError('isolation_clearance_unknown')
+    if type(v['failure_id']) is not int or v['failure_id']<1:
+        raise ValueError('isolation_clearance_invalid')
+    from sushiwait.storage import SnapshotStore
+    with SnapshotStore(task.parent/'observations.sqlite',read_only=True) as db:
+        rows=db.db.execute("SELECT payload_json FROM samples WHERE ok=0 AND id=?",(v['failure_id'],)).fetchall()
+    if len(rows)!=1:
+        raise ValueError('isolation_clearance_failure_invalid')
+    failure=json.loads(rows[0][0])
+    if (failure.get('failure_phase')!='request' or failure.get('error_code')!='http_error'
+            or failure.get('http_status') not in (429,502,503,504)):
+        raise ValueError('isolation_clearance_not_transient')
+    return True
 
 
 def latch(root, code, day, now):
@@ -168,6 +202,8 @@ def resume_not_before(root):
     block = latest_block(root)
     if block is None or active_block(root) is not None:
         return None
+    if isolation_clearance(root, block):
+        return None
     clearance = read(Path(root) / 'recovery-clearances' / (block['sha256'] + '.json'))
     day = (Path(root) / clearance['selection_file']).parent
     plan = read(day / 'campaign-plan.json')
@@ -175,7 +211,7 @@ def resume_not_before(root):
     return campaign.validate_plan(plan)[0][0]
 
 
-def task_usage(day, plan):
+def task_usage(day, plan, *, include_fleet=True):
     """Include every terminal, pending and active task in the same day budget."""
     paths = [campaign.task_path(day, campaign.validate_plan(plan)[0][0], plan.get('cadence'))]
     for selection in selections(day):
@@ -192,6 +228,12 @@ def task_usage(day, plan):
             raise ValueError('recovery_task_scope_invalid')
         used += status['completed_slots'] + int(status['pending_attempt'])
         states[path] = status
+    fleet=Path(day)/'fleet-state.json'
+    if include_fleet and fleet.exists():
+        v=read(fleet)
+        if v.get('plan_sha256')!=hashlib.sha256(encoded(plan)).hexdigest() or type(v.get('issued')) is not int:
+            raise ValueError('recovery_fleet_usage_invalid')
+        used=max(used,v['issued'])
     if used > plan['ordinary_query_limit']:
         raise ValueError('recovery_budget_exhausted')
     return used, states

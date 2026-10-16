@@ -20,6 +20,15 @@ class CollectionAlertTests(unittest.TestCase):
         return {'at': NOW.isoformat(), 'state': 'running', 'failed_slots': 0,
                 'last_progress_at': NOW.isoformat(), **changes}
 
+    def test_store_isolation_and_global_rate_backoff_have_distinct_alerts(self):
+        status=self.status(failed_slots=1,isolation_policy='store-isolation-v1',unavailable_store_ids=['3025'])
+        self.assertEqual(alerts.condition(status,self.status(),NOW),'collection_partial_failure')
+        status['unavailable_store_ids']=[]
+        self.assertEqual(alerts.condition(status,self.status(),NOW),'healthy')
+        status.update(state='needs_attention',error_code='cloud_rate_limited')
+        self.assertEqual(alerts.condition(status,self.status(),NOW),'collection_rate_limited')
+        self.assertIn('无需重新扫码',alerts.message('incident','collection_rate_limited',NOW)[1])
+
     def test_fresh_heartbeat_with_missing_progress_is_detected(self):
         status = self.status(last_progress_at=(NOW - timedelta(minutes=13)).isoformat())
         self.assertEqual(alerts.condition(status, self.status(), NOW), 'collection_progress_stale')
