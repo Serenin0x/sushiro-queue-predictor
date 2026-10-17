@@ -33,6 +33,30 @@ class WorkerTests(unittest.TestCase):
     def test_no_viewer_no_provider_call_and_no_source_query(self):
         self.tick();self.assertEqual(self.calls,[])
         self.assertEqual(self.requests,['/api/v1/collection/health'])
+        self.assertEqual(len(json.loads(self.output.read_text())['supported_store_ids']),83)
+
+    def test_expanded_store_thinking_is_published_as_computing_then_ready(self):
+        self.now=self.now.replace(hour=3,minute=36)
+        research=TicketResearch(self.research)
+        research.presence({'client_id':'b'*32,'store_id':'3006','queue_type':'ordinary',
+                           'mode':'thinking','visible':True},now=self.now)
+        research.close()
+        def reader(path):
+            if path=='/api/v1/collection/health':return {'state':'running','heartbeat_stale':False}
+            if path.endswith('2026-10-13'):
+                detail=self.reader('/api/v1/official/stores/3014/days/2026-10-13')
+                detail['requested_store_id']='3006';return detail
+            raise ValueError('no historical record')
+        def suggest(context,**kwargs):
+            projected=json.loads(self.output.read_text())
+            self.assertEqual(projected['stores']['3006']['ordinary']['thinking']['state'],'computing')
+            self.assertEqual(context['store_id'],'3006')
+            self.assertEqual(kwargs['budget_file'].parent.name,'thinking-v2')
+            self.assertNotIn('issued_at',json.dumps(context))
+            return {'state':'ready','advice':None}
+        worker.tick(self.root,self.output,self.research,self.cache,self.history,
+                    now=self.now,reader=reader,suggest=suggest)
+        self.assertEqual(json.loads(self.output.read_text())['stores']['3006']['ordinary']['thinking']['state'],'ready')
     def test_day_budget_shared_total_and_never_reset(self):
         paths=[worker.prepare_budget(self.root,m,self.now) for m in ('thinking','nonthinking')]
         self.assertEqual(sum(json.loads(p.read_text())['max_reserved_cost_microunits'] for p in paths),10000000)

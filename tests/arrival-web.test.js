@@ -60,3 +60,21 @@ const direct=JSON.parse(JSON.stringify(d));direct.points.at(-1).queues.mixedQueu
 assert.equal(model.arrival(direct,o).state,'arrived','an actual later appearance remains direct evidence');
 d=detail('2026-10-14',[100,104],3);r=model.trackedForecast(d,options(d,'120'));
 assert.equal(r.available,true);assert.equal(r.provisional,true);assert(Date.parse(r.scenario_latest)-Date.parse(r.scenario_earliest)>360000);
+
+// Long waits are estimates, not missing data. Keep sparse/flat/unsafe cases distinct.
+d=detail('2026-10-14',[100,110,120,130,140,150,160],10);o=options(d,'340');
+r=model.trackedForecast(d,o);
+assert(r.available,'a three-hour positive trend must not be discarded by the old two-hour cutoff');
+assert.equal(r.provisional,true);assert.equal(r.forecast_horizon_minutes,360);
+assert(Math.abs((Date.parse(r.reference_time)-Date.parse(d.points.at(-1).queue_received_at))/60000-180)<1);
+assert(Date.parse(r.scenario_latest)-Date.parse(r.scenario_earliest)>=100*60000);
+const longAdvice={...advice,local_date:d.local_date,sample_at:d.points.at(-1).queue_received_at,generated_at:d.generated_at,expires_at:new Date(o.now+600000).toISOString()};
+assert(model.trackedForecast(d,o,[],longAdvice).ai_participated,'thinking advice participates in long-wait estimates');
+assert.equal(model.trackedForecast(d,options(d,'2000')).reason,'beyond_supported_horizon');
+assert.equal(model.trackedForecast(detail('2026-10-14',[100,100,100,100]),options(detail('2026-10-14',[100,100,100,100]),'200')).reason,'insufficient_sparse_trend');
+// Censored histories cannot veto a usable recent trend, and are not presented as completed waits.
+const censored=detail('2026-10-13',[100,101,102,103,104,105,106],10);
+r=model.trackedForecast(d,{...options(d,'200'),issuedAt:d.points.at(-1).queue_received_at},[censored]);
+assert(r.available);assert(r.history_censored_fallback);assert.equal(r.weights.history,0);assert.equal(r.mode,'recent_only');
+const late=JSON.parse(JSON.stringify(d));for(const point of late.points)for(const k of ['request_started_at','queue_received_at'])point[k]=new Date(Date.parse(point[k])+9*3600000).toISOString();late.generated_at=new Date(Date.parse(late.generated_at)+9*3600000).toISOString();
+r=model.trackedForecast(late,{...options(late,'340'),issuedAt:late.points[0].queue_received_at});assert(r.available);assert(r.beyond_business_hours,'late extrapolations must show a closing-time caveat');

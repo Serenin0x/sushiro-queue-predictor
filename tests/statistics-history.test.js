@@ -29,7 +29,7 @@ async function select(t){await settle();t.nodes.get("store").value="900001";t.no
   // Freshness follows the configured collection interval (600s + 60s grace).
   t.clock.value=base+2*60000+660001;t.run("renderPrediction()");assert.equal(t.run("latestReferenceResult.reason"),"stale_sample");assert(!t.nodes.get("prediction-note").textContent.includes("暂以连续实时趋势"));
 
-  const censored=setup();const fetch=censored.ctx.fetch;censored.ctx.fetch=async path=>path.includes("/days/2026-10-0")&&!path.endsWith("2026-10-09")?{ok:true,json:async()=>curve(path.split("/").at(-1),61)}:fetch(path);
+  const censored=setup();const fetch=censored.ctx.fetch;censored.ctx.fetch=async path=>path.includes("/days/2026-10-0")&&!path.endsWith("2026-10-09")?{ok:true,json:async()=>curve(path.split("/").at(-1),71)}:fetch(path);
   await select(censored);assert(censored.nodes.get("prediction").textContent.includes("较晚端尚不确定"));assert(!censored.nodes.get("prediction").textContent.includes("08:00"));
 
   const failure=setup();const read=failure.ctx.fetch;let fail=true;failure.ctx.fetch=async path=>{if(fail&&path.endsWith("2026-10-07")){failure.reads.push(path);throw Error("history offline");}return read(path);};

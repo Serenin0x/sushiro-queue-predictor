@@ -430,8 +430,8 @@ class StatisticsGateway:
                     elif path == '/model-advice.json' and self.model_advice_file:
                         try:
                             from sushiwait.credentials import _read_private_file
-                            from sushiwait.modeladvice import public_projection
-                            value = json.loads(_read_private_file(self.model_advice_file))
+                            from sushiwait.modeladvice import public_projection, MAX_PROJECTION_BYTES
+                            value = json.loads(_read_private_file(self.model_advice_file, max_bytes=MAX_PROJECTION_BYTES))
                             body = json.dumps(public_projection(value)).encode()
                             status, mime = 200, 'application/json'
                         except Exception:

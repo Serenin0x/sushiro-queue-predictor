@@ -50,7 +50,7 @@ async function select(t) {
   assert(t.reads.includes("/api/v1/official/stores/900001/days/2026-10-10"));
   assert(t.reads.includes("/api/v1/official/months/2026-09"));
   assert.equal(t.run("latestReferenceResult.available"),false);
-  assert.equal(t.run("latestReferenceResult.reason"),"median_upper_unknown");
+  assert.equal(t.run("latestReferenceResult.reason"),"insufficient_sparse_trend"); // Disconnected zero-exposure origins are not usable history.
   const count=t.reads.length;t.nodes.get("ticket-number").value="201";t.nodes.get("ticket-number").oninput();
   assert.equal(t.reads.length,count);
   t.ctx.visible=curve("2026-10-11",["100","201","202"]);

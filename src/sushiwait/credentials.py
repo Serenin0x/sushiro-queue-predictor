@@ -83,7 +83,11 @@ def _identity(info: os.stat_result) -> tuple:
             info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
-def _read_private_file(path: str | Path) -> bytes:
+def _read_private_file(path: str | Path, *, max_bytes: int = MAX_CREDENTIAL_FILE_BYTES) -> bytes:
+    # Credentials retain the 16 KiB default. Explicit callers may read a
+    # larger bounded public projection with the same path/owner/race checks.
+    if type(max_bytes) is not int or not 1 <= max_bytes <= 1024 * 1024:
+        raise CredentialError('credentials_file_invalid')
     if os.name != "posix" or not all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY", "geteuid")):
         raise CredentialError("credentials_file_unsupported")
     parent_fd = file_fd = None
@@ -111,10 +115,10 @@ def _read_private_file(path: str | Path) -> bytes:
             raise CredentialError("credentials_file_unsafe")
         if _identity(before) != _identity(named_before):
             raise CredentialError("credentials_file_changed")
-        if before.st_size > MAX_CREDENTIAL_FILE_BYTES:
+        if before.st_size > max_bytes:
             raise CredentialError("credentials_file_too_large")
         pieces = []
-        remaining = MAX_CREDENTIAL_FILE_BYTES + 1
+        remaining = max_bytes + 1
         while remaining:
             piece = os.read(file_fd, remaining)
             if not piece:
@@ -122,7 +126,7 @@ def _read_private_file(path: str | Path) -> bytes:
             pieces.append(piece)
             remaining -= len(piece)
         body = b"".join(pieces)
-        if len(body) > MAX_CREDENTIAL_FILE_BYTES:
+        if len(body) > max_bytes:
             raise CredentialError("credentials_file_too_large")
         after = os.fstat(file_fd)
         named_after = os.stat(absolute.name, dir_fd=parent_fd, follow_symlinks=False)

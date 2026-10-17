@@ -6,14 +6,15 @@ class Node{constructor(){this.value='';this.checked=false;this.textContent='';th
 const $=name=>{if(!elements.has(name))elements.set(name,new Node());return elements.get(name);};
 const state={section:'prediction',source:'sapi_miniapp_gateway',day:'2026-10-14',storeId:'3014',storeName:'大融城',storeNames:{'3014':'大融城'},queueType:'ordinary',mode:'auto',number:'4045',issued:'11:01',checkedIn:'no',confirmed:true,detail:null,samplingSeconds:180};
 let confirmDelete=true,failDelete=false,listGate=null,serverRecords=[],serverDeleted=[];
+let publicModel=null,archiveIndex={days:{}},forecastInputs=[];
 let waitStores={},forecastCalls=0,forecast={available:false,reason:'insufficient_sparse_trend'};
-const context={window:{confirm:()=>confirmDelete,addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{arrival:()=>({available:false,state:'waiting'}),trackedForecast:()=>{forecastCalls++;return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
- fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});if(body?.action==='list'&&listGate)await listGate;if(body?.action==='delete'&&failDelete)return {ok:false};return {ok:true,json:async()=>path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:serverRecords,deleted_record_ids:serverDeleted}:['delete','restore'].includes(body?.action)?{found:true,deleted:body.action==='delete'}:body?{saved:true}:{local_date:state.day,points:[]}};}};
+const context={window:{confirm:()=>confirmDelete,addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{arrival:()=>({available:false,state:'waiting'}),trackedForecast:(detail,options,history,advice)=>{forecastCalls++;forecastInputs.push({detail,options,history,advice});return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
+ fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});if(body?.action==='list'&&listGate)await listGate;if(body?.action==='delete'&&failDelete)return {ok:false};return {ok:true,json:async()=>path==='/model-advice.json'&&publicModel?publicModel:path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:serverRecords,deleted_record_ids:serverDeleted}:['delete','restore'].includes(body?.action)?{found:true,deleted:body.action==='delete'}:body?{saved:true}:{local_date:state.day,points:[]}};}};
 vm.createContext(context);vm.runInContext(fs.readFileSync('src/sushiwait/web/research-ui.js','utf8'),context);
 const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImmediate(r));
 (async()=>{
  $('ticket-number').value='4045';$('ticket-issued').value='11:01';$('ticket-record-system').checked=true;
- api.attach({getState:()=>state,today:()=>state.day,navigate:section=>state.section=section,history:()=>[],index:()=>({days:{}})});await settle();
+ api.attach({getState:()=>state,today:()=>state.day,navigate:section=>state.section=section,history:()=>[],index:()=>archiveIndex});await settle();
  assert.equal(requests.filter(r=>r.body?.action==='submit').length,0,'editing or checking recording must never submit');
  await $('ticket-predict-form').onsubmit({preventDefault(){}});await settle();
  const submitted=requests.find(r=>r.body?.action==='submit');assert(submitted,'unavailable forecast still recorded after explicit submission');assert.equal(submitted.body.ticket.prediction_reason,'insufficient_sparse_trend');assert.equal(submitted.body.ticket.number,'4045');assert.equal(state.section,'tickets');assert.equal($('ticket-success').hidden,false);
@@ -105,5 +106,25 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  await buttons().find(b=>b.attrs['aria-label']==='删除 '+local.ticket.number+' 号记录').onclick();
  assert.equal(deletes().length,beforeLocal);assert(!api.filterRecords().some(i=>i.id===local.id));
  assert(requests.every(r=>!r.path.includes(submitted.body.owner_secret)));
+ // Expanded stores receive the selected model, then incorporate its asynchronous result.
+ publicModel={status:'ready',supported_store_ids:['3014','3004','3006'],stores:{'3006':{ordinary:{thinking:{state:'computing',advice:null},nonthinking:{state:'ready',advice:{thinking_mode:'nonthinking'}}}}}};
+ state.section='prediction';
+ const expanded=await api.submitEntry({...newFields,store_id:'3006',number:'6900'},{kind:'prediction',mode:'thinking',record:false,follow:true});
+ assert(requests.some(r=>r.path==='/api/v1/prediction/presence'&&r.body.store_id==='3006'&&r.body.mode==='thinking'&&r.body.visible));
+ assert.equal(forecastInputs.at(-1).advice,null,'thinking never silently selects nonthinking');
+ const firstReads=requests.filter(r=>r.path.endsWith('/3006/days/2026-10-13')).length;
+ archiveIndex={days:{'2026-10-13':{'3006':{observations:10}}}};
+ publicModel.stores['3006'].ordinary.thinking={state:'ready',advice:{thinking_mode:'thinking'}};
+ state.section='tickets';now+=31000;api.notify();await settle();await settle();
+ assert.equal(forecastInputs.at(-1).advice.thinking_mode,'thinking');
+ assert(requests.filter(r=>r.path.endsWith('/3006/days/2026-10-13')).length>firstReads,'initial empty index must not permanently freeze history');
+ assert.equal(api.filterRecords().find(i=>i.id===expanded.id).modelState,'ready');
+ // The human-facing reason must explain a bounded horizon rather than generic missing data.
+ forecast={available:false,reason:'beyond_supported_horizon'};
+ now+=31000;api.notify();await settle();await settle();
+ const expandedItem=api.filterRecords().find(i=>i.id===expanded.id);
+ api.openTickets();
+ const texts=[];function collect(n){if(n.textContent)texts.push(n.textContent);for(const c of n.children||[])collect(c);}collect($('my-tickets'));
+ assert(texts.some(t=>t.includes('超过 6 小时')));
  console.log('explicit submission, unavailable forecast recording, manual/continuous modes, tab switching, hidden leases and HTTPS privacy passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

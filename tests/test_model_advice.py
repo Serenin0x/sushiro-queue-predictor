@@ -11,6 +11,17 @@ from test_display_replay import archive
 
 
 class PublicModelTests(unittest.TestCase):
+    def test_public_projection_supports_expanded_stores_without_accepting_new_scopes(self):
+        from sushiwait.modeladvice import public_projection, POLICY
+        from sushiwait.cityscope import STORES
+        value={'schema_version':1,'policy':POLICY,'model':'deepseek-flash','status':'ready',
+               'supported_store_ids':list(STORES),'stores':{s:{'ordinary':{'thinking':{'state':'waiting_for_viewer','advice':None}}} for s in STORES}}
+        self.assertEqual(len(public_projection(value)['stores']),83)
+        for invalid in (['3006','3006'],['999999'],[{}]):
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+                public_projection({**value,'supported_store_ids':invalid})
+        with self.assertRaises(ValueError):public_projection({**value,'stores':{'999999':{}}})
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name).resolve();self.root.chmod(0o700)

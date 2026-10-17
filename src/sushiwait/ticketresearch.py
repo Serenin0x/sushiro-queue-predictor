@@ -16,8 +16,8 @@ from statistics import median
 
 from .displayarrival import POLICY as ARRIVAL_POLICY, label_ticket_arrival
 from .displayreplay import SHANGHAI, _points, _boundary, _time
+from .cityscope import STORES
 
-STORES = {'3014', '3004', '2009', '3015', '2001'}
 MODES = {'auto', 'nonthinking', 'thinking', 'algorithm'}
 _CREATE = (
     'CREATE TABLE tickets(record_id TEXT PRIMARY KEY,owner_hash TEXT NOT NULL,reported TEXT NOT NULL,'

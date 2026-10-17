@@ -391,6 +391,10 @@
     }
     const stable=rates.length?median(rates):null;
     const live=stable?{steady:stable,fast:Math.max(...rates,lastRate,provisional?stable*1.5:stable),slow:Math.min(...rates)*(provisional?.5:1)}:{};
+    // Long queues often exceed two hours. Keep a bounded six-hour scenario,
+    // widen long-range uncertainty, and expose it as provisional rather than
+    // silently converting a positive measured trend into "no estimate".
+    const horizon=360;
     // Reconstruct fixed historical origins with the same arrival rule and preserve censoring.
     const samples=[],acceptedDays=new Set();
     for(const past of Array.isArray(days)?days.slice(0,7):[]){
@@ -403,10 +407,10 @@
         if(Math.abs(minuteOfDay(start.at)-minuteOfDay(last.at))>120)continue;
         const target=String(start.position+gap);let prior=start,lower=0,upper=null;
         for(const row of past.points.slice(i+1)){const next=arrivalPoint(row,pc,past.local_date);
-          if(!next||!arrivalConnected(prior,next,660000)||next.at-start.at>7200000)break;
+          if(!next||!arrivalConnected(prior,next,660000)||next.at-start.at>horizon*60000)break;
           if(['display_top_two','display_all_three_passed'].includes(displayState(target,next.labels))){upper=(next.at-start.at)/60000;break;}
           prior=next;lower=(next.at-start.at)/60000;}
-        samples.push({day:past.local_date,lower,upper});acceptedDays.add(past.local_date);
+        if(lower>0||upper!==null){samples.push({day:past.local_date,lower,upper});acceptedDays.add(past.local_date);}
       }
     }
     const useHistory=acceptedDays.size>=1&&samples.length>=1;
@@ -427,20 +431,38 @@
     const distribution=[];
     if(useHistory){const counts=new Map();samples.forEach(s=>counts.set(s.day,(counts.get(s.day)||0)+1));
       samples.forEach(s=>distribution.push({...s,weight:weights.history/(acceptedDays.size*counts.get(s.day))}));}
-    for(const key of ['steady','fast','slow'])if(live[key]){const minutes=gap/live[key],error=cadence/60+(provisional?minutes*.5:0);distribution.push({lower:Math.max(0,Math.min(120,minutes-error)),upper:minutes>120?null:minutes+error,weight:weights[key]});}
+    for(const key of ['steady','fast','slow'])if(live[key]){const minutes=gap/live[key],error=cadence/60+minutes*(provisional?.5:minutes>120?.25:0);distribution.push({lower:Math.max(0,Math.min(horizon,minutes-error)),upper:minutes>horizon?null:minutes+error,weight:weights[key],candidate:key});}
     const total=distribution.reduce((n,s)=>n+s.weight,0);if(total<=0)return unavailable('forecast_horizon_unsupported');
     distribution.forEach(s=>s.weight/=total);
+    let historyCensored=false;
+    // Unknown historical upper bounds must stay unknown. They must not erase
+    // an independently measurable current rate; use the live scenarios alone
+    // and make the loss of historical support visible.
+    if(endpointQuantile(distribution,'upper',.5)===null&&stable){
+      const finiteLive=distribution.filter(s=>s.candidate&&s.upper!==null);
+      const liveTotal=finiteLive.reduce((n,s)=>n+s.weight,0);
+      if(liveTotal>0&&distribution.some(s=>!s.candidate)){
+        distribution.splice(0,distribution.length,...distribution.filter(s=>s.candidate));
+        const sum=distribution.reduce((n,s)=>n+s.weight,0);distribution.forEach(s=>s.weight/=sum);
+        for(const key of Object.keys(weights))weights[key]=distribution.find(s=>s.candidate===key)?.weight||0;
+        historyCensored=true;provisional=true;
+      }
+    }
     const lower=endpointQuantile(distribution,'lower',.1),upper=endpointQuantile(distribution,'upper',.9),ml=endpointQuantile(distribution,'lower',.5),mu=endpointQuantile(distribution,'upper',.5);
-    if(mu===null)return unavailable('median_upper_unknown');
+    if(mu===null)return unavailable(stable?'beyond_supported_horizon':'median_upper_unknown',{forecast_horizon_minutes:horizon});
     const central=(ml+mu)/2,reference=last.at+central*60000;
-    if(central>120||reference<=options.now)return unavailable('forecast_horizon_unsupported');
-    return {policy:'display_arrival_history_live_v5',available:true,eta_available:false,actual_call_verified:false,provisional,
-      calibrated_interval:false,mode:stable?useHistory?'history_live_mix':'recent_only':'history_initial',
+    if(central>horizon)return unavailable('beyond_supported_horizon',{forecast_horizon_minutes:horizon});
+    if(reference<=options.now)return unavailable('awaiting_arrival_evidence');
+    provisional=provisional||central>120;
+    const closes=Date.parse(detail.local_date+'T22:00:00+08:00');
+    return {policy:'display_arrival_history_live_v6',available:true,eta_available:false,actual_call_verified:false,provisional,
+      calibrated_interval:false,mode:stable?useHistory&&!historyCensored?'history_live_mix':'recent_only':'history_initial',
+      forecast_horizon_minutes:horizon,beyond_business_hours:reference>=closes,history_censored_fallback:historyCensored,
       reference_time:new Date(reference).toISOString(),scenario_earliest:new Date(Math.max(options.now,last.at+lower*60000)).toISOString(),
       scenario_latest:upper===null?null:new Date(last.at+upper*60000).toISOString(),sample_at:new Date(last.at).toISOString(),sample_age_seconds:age/1000,
       reference:last.position,position_difference:gap,sample_count:segment.length,continuous_minutes:segment.length?(last.at-segment[0].at)/60000:0,
       acceleration_signal:Boolean(stable&&lastRate>Math.max(20,stable*3)),latest_interval_stalled:segment.length>1&&lastRate===0,
-      history:{state:useHistory?'available':'insufficient_history',selected_days:acceptedDays.size,samples:samples.length},
+      history:{state:historyCensored?'censored_live_fallback':useHistory?'available':'insufficient_history',selected_days:acceptedDays.size,samples:samples.length},
       ai_participated:Boolean(validAdvice),ai_mode:validAdvice?advice.thinking_mode:null,weights,arrival:arrived};
   }
   function storeWait(detail, options, cohort, advice=null) {

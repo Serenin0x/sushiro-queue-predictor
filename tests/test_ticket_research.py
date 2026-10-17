@@ -50,6 +50,19 @@ class TicketResearchTests(unittest.TestCase):
         self.store.presence({**value,'mode':'algorithm'},now=self.now)
         self.assertEqual(self.store.demand(now=self.now),{})
 
+    def test_model_demand_covers_approved_five_city_scope_only(self):
+        from sushiwait.cityscope import STORES
+        # Exercise one expanded store in each city without generating tickets.
+        ids = ['3006', '2003', '3025', '8', '1002']
+        for i, store in enumerate(ids):
+            self.store.presence({'client_id':f'{i:032x}','store_id':store,'queue_type':'ordinary',
+                                 'mode':'thinking','visible':True},now=self.now)
+        self.assertEqual(set(self.store.demand(now=self.now)),set(ids))
+        self.assertEqual(len(STORES),83)
+        with self.assertRaises(ValueError):
+            self.store.presence({'client_id':'f'*32,'store_id':'999999','queue_type':'ordinary',
+                                 'mode':'thinking','visible':True},now=self.now)
+
     def test_retroactive_ticket_matches_saved_day_and_freezes_first_arrival(self):
         self.store.submit('1'*32,self.secret,self.ticket,now=self.now)
         detail=archive();detail['requested_store_id']='3014'

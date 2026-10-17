@@ -7,11 +7,11 @@ from sushiwait.intake import _canonical
 
 from sushiwait.calendar import date_features
 from sushiwait.cadence import CHINA, period_after
-from sushiwait.modeladvice import POLICY, public_context, public_projection, suggest_weights
+from sushiwait.modeladvice import POLICY, MAX_PROJECTION_BYTES, public_context, public_projection, suggest_weights
 from sushiwait.ticketresearch import TicketResearch
+from sushiwait.cityscope import STORES
 
 READ_ORIGIN = 'http://127.0.0.1:18900'
-STORES = ('3014', '3004', '2009', '3015', '2001')
 
 
 def read(route):
@@ -23,7 +23,7 @@ def read(route):
 
 def write(path, value):
     raw = json.dumps(value, separators=(',', ':'), allow_nan=False).encode()
-    if len(raw) > 32768: raise ValueError('model_state_too_large')
+    if len(raw) > MAX_PROJECTION_BYTES: raise ValueError('model_state_too_large')
     fd, name = tempfile.mkstemp(prefix='.model-writing-', dir=path.parent)
     temporary = Path(name)
     try:
@@ -127,6 +127,7 @@ def tick(root, output, research_file, cache, history, *, now=None, reader=read, 
             'model':'deepseek-flash','status':'waiting_for_open','stores':{}})
         history.clear()
     projection = cache['projection']
+    projection['supported_store_ids'] = list(STORES)
     def publish():
         projection['updated_at'] = (datetime.now(timezone.utc) if now is None else now).isoformat()
         write(output, public_projection(projection))
@@ -153,7 +154,10 @@ def tick(root, output, research_file, cache, history, *, now=None, reader=read, 
                 if mode not in modes:
                     models[mode]={'state':'waiting_for_viewer','advice':models.get(mode,{}).get('advice')}
             if not modes: continue
-            current=reader(f'/api/v1/official/stores/{store}/days/{day}')
+            try: current=reader(f'/api/v1/official/stores/{store}/days/{day}')
+            except Exception:
+                for mode in modes: models[mode]={'state':'waiting_for_observation','advice':None}
+                continue
             if store not in history:
                 history[store]=[]
                 for days in range(1,8):
@@ -171,6 +175,8 @@ def tick(root, output, research_file, cache, history, *, now=None, reader=read, 
                 try:
                     if retired_observation(root,mode,context,now):
                         models[mode]={'state':'previous_attempt_unknown','advice':None};continue
+                    models[mode]={'state':'computing','advice':models.get(mode,{}).get('advice')}
+                    publish()
                     result=suggest(context,budget_file=prepare_budget(root,mode,now),
                         key_file=root/'key/key.private.json',now=now)
                     models[mode]={'state':result['state'],'advice':result.get('advice')}

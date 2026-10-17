@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import importlib.util
 from pathlib import Path
 import json
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location('statistics_gateway', Path(__file__).resolve().parents[1] / 'deploy/statistics_gateway.py')
@@ -76,6 +77,25 @@ class StatisticsGatewayTests(unittest.TestCase):
                      '/api/v1/stores/3014/days/2026-10-09']:
             self.assertEqual(self.request(path)[0]['status'], 200)
         self.assertEqual(len(self.hub.calls), 9)
+
+    def test_model_projection_above_credential_size_is_read_and_validated(self):
+        from sushiwait.cityscope import STORES
+        from sushiwait.modeladvice import POLICY
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve();root.chmod(0o700)
+            path=root/'public-advice.json'
+            value={'schema_version':1,'policy':POLICY,'model':'deepseek-flash','status':'ready',
+                'supported_store_ids':list(STORES),'stores':{s:{q:{m:{'state':'waiting_for_viewer','advice':None}
+                for m in ('thinking','nonthinking')} for q in ('ordinary','reservation')} for s in STORES}}
+            path.write_text(json.dumps(value));path.chmod(0o600)
+            self.assertGreater(path.stat().st_size,16384)
+            self.app=gateway.StatisticsGateway(self.hub,model_advice_file=path)
+            response=self.request('/model-advice.json')
+            self.assertEqual(response[0]['status'],200)
+            self.assertEqual(len(json.loads(response[1]['body'])['supported_store_ids']),83)
+            path.write_text(json.dumps({'api_key':'synthetic-do-not-serve'}))
+            self.app.cache.clear()
+            self.assertEqual(self.request('/model-advice.json')[0]['status'],503)
 
     def test_no_management_status_ticket_queue_or_file_routes(self):
         for path in ['/api/v1/status', '/monitor', '/api/v1/stores/3014/queue',

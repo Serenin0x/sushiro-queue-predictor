@@ -17,8 +17,10 @@ from .deepseek import DeepSeekError, MODEL, _Ledger, _cost, _https_post, _key, _
 from .displayreplay import SOURCE, _boundary, _iso, _points, _time
 from .intake import _canonical
 from .outcomes import _json
+from .cityscope import STORES
 
 POLICY = 'public_display_scenarios_v1'
+MAX_PROJECTION_BYTES = 262144
 CANDIDATES = {'history', 'steady', 'fast', 'slow'}
 REASONS = {'history_dominant', 'rapid_display_turnover', 'slower_display_turnover',
            'mixed_evidence', 'insufficient_evidence'}
@@ -55,12 +57,16 @@ def _trend_boundary(a, b):
 
 def public_projection(value):
     """Do not serve unknown fields or a mistakenly configured credential file."""
-    keys={'schema_version','policy','model','status','stores','updated_at'}
-    if (type(value) is not dict or set(value)-keys or not keys-{'updated_at'}<=set(value)
+    keys={'schema_version','policy','model','status','stores','updated_at','supported_store_ids'}
+    if (type(value) is not dict or set(value)-keys or not keys-{'updated_at','supported_store_ids'}<=set(value)
             or value['schema_version']!=1 or value['policy']!=POLICY or value['model']!=MODEL
             or value['status'] not in ('waiting_for_configuration','waiting_for_open','waiting_for_observation','ready','finished','budget_exhausted')
-            or type(value['stores']) is not dict or set(value['stores'])-{'3014','3004','2009','3015','2001'}):
+            or type(value['stores']) is not dict or set(value['stores'])-STORES.keys()):
         raise ValueError('invalid_public_model_projection')
+    if 'supported_store_ids' in value and (type(value['supported_store_ids']) is not list
+            or any(type(s) is not str or s not in STORES for s in value['supported_store_ids'])
+            or len(set(value['supported_store_ids'])) != len(value['supported_store_ids'])):
+        raise ValueError('invalid_supported_model_stores')
     fields={'schema_version','policy','source','store_id','queue_type','local_date','sample_at','generated_at','expires_at',
             'model','thinking_mode','weights_ppm','reason_code','feature_ids','phase','public_input_sha256'}
     for store,queues in value['stores'].items():
@@ -80,7 +86,7 @@ def public_projection(value):
                         or not set(advice['feature_ids'])<=FEATURES):raise ValueError('invalid_model_advice')
                 for key in ('sample_at','generated_at','expires_at'):_time(advice[key])
                 datetime.strptime(advice['local_date'],'%Y-%m-%d')
-    if len(_canonical(value).encode())>32768:raise ValueError('model_projection_too_large')
+    if len(_canonical(value).encode())>MAX_PROJECTION_BYTES:raise ValueError('model_projection_too_large')
     return value
 
 

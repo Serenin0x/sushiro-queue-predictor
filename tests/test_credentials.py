@@ -141,6 +141,17 @@ class CredentialsTests(unittest.TestCase):
             self.assert_safe_error(self.read, "credentials_file_too_large")
             read.assert_not_called()
 
+    def test_explicit_projection_size_preserves_credential_default_and_path_guards(self):
+        from sushiwait.credentials import _read_private_file
+        body=b'x' * 20000
+        self.path.write_bytes(body)
+        self.assert_safe_error(self.read,'credentials_file_too_large')
+        self.assertEqual(_read_private_file(self.path,max_bytes=262144),body)
+        for limit in (0,-1,True,1048577):
+            self.assert_safe_error(lambda:_read_private_file(self.path,max_bytes=limit),'credentials_file_invalid')
+        linked=self.parent/'linked';linked.symlink_to(self.path)
+        self.assert_safe_error(lambda:_read_private_file(linked,max_bytes=262144),'credentials_file_unsafe')
+
     def test_duplicate_nonfinite_utf8_and_json_errors_are_safe(self):
         for body in (b'{"revision":1,"revision":2}', b'{"other":{"key":1,"key":2}}',
                      b'{"other":NaN}', b'{"other":Infinity}', b'{"other":1e999}',

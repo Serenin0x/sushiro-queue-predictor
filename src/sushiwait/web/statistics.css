@@ -173,3 +173,6 @@ input:focus-visible,select:focus-visible{outline-offset:1px;box-shadow:0 0 0 4px
 .ticket-delete{color:#b72432!important}.ticket-delete:hover{color:#941b29!important;background:#fff5f5}.ticket-delete:disabled{opacity:.55}.ticket-success #ticket-delete-undo{font-size:13px;color:#b72432;padding:5px 10px;white-space:nowrap}
 
 .ticket-database th:last-child,.ticket-database .ticket-row-actions{position:sticky;right:0;z-index:1;background:#fff;box-shadow:-8px 0 12px -12px #27354766}.ticket-database th:last-child{background:#f7f9fb;z-index:2}.ticket-database tbody tr:hover .ticket-row-actions{background:#fafbfc}
+
+.ticket-model-pending .ticket-result-status::after{content:"";display:inline-block;width:11px;height:11px;margin-left:8px;vertical-align:-1px;border:1.5px solid #e9c3c8;border-top-color:#bd2033;border-radius:50%;animation:ticket-model-spin .8s linear infinite}@media(prefers-reduced-motion:reduce){.ticket-model-pending .ticket-result-status::after{animation:none}}
+@keyframes ticket-model-spin{to{transform:rotate(360deg)}}
