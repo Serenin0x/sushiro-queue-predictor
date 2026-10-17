@@ -189,6 +189,32 @@ def _queues(record):
     return {q: groups[q]['value'] for q in QUEUE_NAMES}
 
 
+def _comparison(record, previous, link, local_date, max_gap_seconds=120):
+    """Compare records from an already validated continuity bundle."""
+    zone=ZoneInfo('Asia/Shanghai')
+    state, interval, removed = 'insufficient', None, None
+    if previous is not None:
+        elapsed = (_time(record['recorded_at']) - _time(previous['recorded_at'])).total_seconds()
+        if link['writer_id'] != link['predecessor_writer_id']:
+            state = 'run_boundary'
+        elif not record['ok'] or not previous['ok']:
+            state = 'failed_observation_boundary'
+        elif _time(_started(previous)).astimezone(zone).date().isoformat() != local_date:
+            state = 'day_boundary'
+        elif elapsed <= 0 or _time(_started(record)) < _time(previous['recorded_at']):
+            state = 'time_order_or_duplicate'
+        elif elapsed > max_gap_seconds:
+            state = 'gap'
+        else:
+            before, after = _queues(previous), _queues(record)
+            if before is None or after is None:
+                state = 'missing_queue_fields'
+            else:
+                state, interval = 'comparable_display_sets', elapsed
+                removed = {q: len(set(before[q]) - set(after[q])) for q in QUEUE_NAMES}
+    return state,interval,removed
+
+
 def project_continuity_bundle(bundle, *, as_of, hours, base_interval=60,
                               store_names=None, max_gap_seconds=120):
     """Annotate official curves; long/failed/restarted intervals yield no rate."""
@@ -216,28 +242,10 @@ def project_continuity_bundle(bundle, *, as_of, hours, base_interval=60,
         for row, record in zip(value['points'], selected):
             link = links[record['observation_id']]
             previous = records.get(link['predecessor_id'])
-            state, interval, removed = 'insufficient', None, None
-            if previous is not None:
-                elapsed = (_time(record['recorded_at']) - _time(previous['recorded_at'])).total_seconds()
-                if link['writer_id'] != link['predecessor_writer_id']:
-                    state = 'run_boundary'
-                elif not record['ok'] or not previous['ok']:
-                    state = 'failed_observation_boundary'
-                elif _time(_started(previous)).astimezone(zone).date().isoformat() != key[1]:
-                    state = 'day_boundary'
-                elif elapsed <= 0 or _time(_started(record)) < _time(previous['recorded_at']):
-                    state = 'time_order_or_duplicate'
-                elif elapsed > max_gap_seconds:
-                    state = 'gap'
-                else:
-                    before, after = _queues(previous), _queues(record)
-                    if before is None or after is None:
-                        state = 'missing_queue_fields'
-                    else:
-                        state, interval = 'comparable_display_sets', elapsed
-                        removed = {q: len(set(before[q]) - set(after[q])) for q in QUEUE_NAMES}
-                        comparable += 1
-                        for q in QUEUE_NAMES: totals[q] += removed[q]
+            state,interval,removed=_comparison(record,previous,link,key[1],max_gap_seconds)
+            if state=='comparable_display_sets':
+                comparable += 1
+                for q in QUEUE_NAMES: totals[q] += removed[q]
             states[state] += 1
             row.update(observation_id=record['observation_id'], record_sha256=record['record_sha256'],
                        continuity={**link, 'source_claims_verified': False, 'semantics': SEMANTICS},

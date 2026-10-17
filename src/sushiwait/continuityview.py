@@ -2,7 +2,7 @@
 from collections import Counter
 from zoneinfo import ZoneInfo
 
-from .continuity import SEMANTICS, project_continuity_bundle
+from .continuity import SEMANTICS, _comparison
 from .continuityarchive import SCHEMA, singleton_bundle
 from .monitoring import _time
 from .observations import QUEUE_NAMES
@@ -47,11 +47,14 @@ class ContinuityStatisticsView(OfficialStatisticsView):
             association = singleton_bundle(db, record, packet=packet)
             if association is not None:
                 bundle, linked_at = association
-                linked = project_continuity_bundle(bundle, as_of=packet['as_of'], hours=self.hours,
-                    base_interval=self.base_interval, store_names={store:self.names[store]})
-                annotation = linked['days'][(store, day)]['points'][0]
-                for key in ('continuity', 'comparison_state', 'interval_seconds', 'removed_labels'):
-                    point[key] = annotation[key]
+                # singleton_bundle has already verified both records, exact
+                # columns, writers, times and hashes. Reuse that validation;
+                # rebuilding a complete one-point day here repeated all work.
+                link=bundle['links'][0]
+                previous=bundle['anchors'][0]['record'] if bundle['anchors'] else None
+                state,interval,removed=_comparison(record,previous,link,day)
+                point.update(continuity={**link,'source_claims_verified':False,'semantics':SEMANTICS},
+                    comparison_state=state,interval_seconds=interval,removed_labels=removed)
                 point['continuity_received_at'] = linked_at
             state = point['comparison_state']
             states[state] += 1

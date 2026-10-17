@@ -206,7 +206,7 @@ class OfficialStatisticsView:
             raise OfficialViewError('official_view_unknown_route')
         clock = datetime.now(timezone.utc) if now is None else _time(now.isoformat())
         parent = file_fd = db = None
-        deadline = time.monotonic()+5
+        deadline = time.monotonic()+(8 if _MONTH.fullmatch(path) else 5)
         try:
             parent, name = _open_parent(self.database, private=True)
             file_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)

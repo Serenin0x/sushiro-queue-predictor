@@ -34,7 +34,7 @@ class JoinedOfficialViews:
             view = next((v for v in self.views if v.allowed(path)), None)
             return view.dispatch(path) if view else (404, b'Unknown saved route', 'text/plain')
         rows = []
-        with ThreadPoolExecutor(max_workers=min(3,len(self.views))) as pool:
+        with ThreadPoolExecutor(max_workers=min(2,len(self.views))) as pool:
             responses=list(pool.map(lambda view:view.dispatch(path),self.views))
         for status, body, mime in responses:
             if status != 200:

@@ -170,6 +170,18 @@ class ContinuityArchiveTests(unittest.TestCase):
                 self.assertEqual(self.view().dispatch('/api/v1/official/stores/900001/days/2026-10-11')[0],503)
                 self.database.unlink();self.append()
 
+    def test_saved_view_matches_full_bundle_projection_without_rebuilding_each_point(self):
+        from sushiwait.continuity import project_continuity_bundle
+        bundle=self.bundle();self.append(bundle)
+        expected=project_continuity_bundle(bundle,as_of=AT,hours=HOURS,base_interval=900,
+            store_names={'900001':'Synthetic'})['days'][('900001','2026-10-11')]
+        actual=self.day()
+        for a,b in zip(actual['points'],expected['points']):
+            for key in ('continuity','comparison_state','interval_seconds','removed_labels'):
+                self.assertEqual(a[key],b[key])
+        for key in ('continuity_states','comparable_display_pairs','display_removed_labels'):
+            self.assertEqual(actual['summary'][key],expected['summary'][key])
+
     def test_warm_projection_revalidates_later_links_and_predecessor_damage(self):
         bundle=self.bundle()
         with ContinuityArchive(self.database) as archive:archive.append(bundle['packet'],as_of=AT)
