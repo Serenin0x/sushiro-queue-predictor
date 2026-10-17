@@ -59,7 +59,7 @@ export function selectSavedSource(index, id, date, requested=null, {today=shangh
   return SOURCE_ORDER.find(source=>index.source_months[source].configured_store_ids.includes(id));
 }
 
-export function createSavedStatisticsClient({fetchImpl=globalThis.fetch,timeoutMs=15000,clients=null}={}) {
+export function createSavedStatisticsClient({fetchImpl=globalThis.fetch,timeoutMs=45000,clients=null}={}) {
   const readers=clients??Object.fromEntries(SOURCE_ORDER.map(source=>[source,createStatisticsClient({fetchImpl,timeoutMs,source})]));
   if(SOURCE_ORDER.some(source=>typeof readers[source]?.readMonth!=='function'||typeof readers[source]?.readDay!=='function'))error('invalid_client_options');
   return Object.freeze({

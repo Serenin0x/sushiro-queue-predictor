@@ -255,8 +255,11 @@ def run_collection(root, config, stopped):
                 raise campaign.TrialError('cloud_reader_failed')
         except Exception as error:
             code = str(error) if isinstance(error, campaign.TrialError) else 'daily_collection_failed'
+            if str(error) == 'fleet_shared_authorization_failure':
+                code = 'cloud_query_authorization_failed'
             allowed = {'cloud_reader_failed', 'cloud_refresh_failed', 'cloud_refresh_limit',
-                       'cloud_refresh_outcome_unknown', 'cloud_trial_halted', 'cloud_ledger_invalid'}
+                       'cloud_refresh_outcome_unknown', 'cloud_trial_halted', 'cloud_ledger_invalid',
+                       'cloud_query_authorization_failed'}
             code = code if code in allowed else 'daily_collection_failed'
             # A new date never grants a fresh retry of yesterday's failed session.
             latch(root, code, day_text)

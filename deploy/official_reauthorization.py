@@ -87,6 +87,14 @@ def active_block(root):
 
 def isolation_clearance(root, block):
     """Operator-approved isolation is bound to one known terminal 5xx task."""
+    timeout = Path(root)/'fleet-timeout-clearances'/(block['sha256']+'.json')
+    if timeout.exists():
+        spec = importlib.util.spec_from_file_location('timeout_clearance',
+            Path(__file__).with_name('official_timeout_recovery.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.verify(root, block, __import__('types').SimpleNamespace(
+            read=read, campaign=campaign))
     path = Path(root)/'isolation-clearances'/(block['sha256']+'.json')
     if not path.exists(): return False
     v=read(path)

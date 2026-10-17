@@ -33,11 +33,77 @@ class FleetIsolationTests(unittest.TestCase):
         self.assertEqual(fleet.instant(self.f.value['stores']['3025'][0]),self.now+timedelta(minutes=30))
         restored=fleet.Fleet(self.root,self.plan,0,self.now);self.addCleanup(restored.close)
         self.assertEqual(restored.value,self.f.value)
-    def test_403_is_global_and_never_retried(self):
-        with self.assertRaisesRegex(ValueError,'nontransient'):
-            self.record('3025',403)
+    def test_one_403_isolates_store_for_day_without_stopping_other_stores(self):
+        self.record('3025',403)
         self.assertEqual(self.f.value['failed'],1)
         self.assertIsNone(self.f.value['pending'])
+        self.assertEqual(self.f.value['stores']['3025'][0],self.plan['windows'][0]['end'])
+        self.assertIsNotNone(self.f.due(self.now))
+        self.assertNotEqual(self.f.due(self.now),'3025')
+
+    def test_three_distinct_consecutive_denials_stop_shared_authorization(self):
+        self.record('3025',403);self.record('3026',401)
+        with self.assertRaisesRegex(ValueError,'shared_authorization'):
+            self.record('3032',403)
+        self.assertEqual(self.f.value['issued'],3)
+        self.assertEqual(self.f.value['failed'],3)
+        self.assertIsNone(self.f.value['pending'])
+        with self.assertRaisesRegex(ValueError,'shared_authorization'):
+            fleet.Fleet(self.root,self.plan,0,self.now)
+
+    def test_success_between_denials_prevents_shared_circuit(self):
+        self.record('3025',403)
+        self.f.reserve('3026')
+        self.f.db._insert('3026','live','miniapp_gateway',self.now.isoformat(),True,{})
+        self.f.reconcile()
+        self.record('3032',403)
+        self.assertIsNotNone(self.f.due(self.now))
+
+    def test_old_or_same_store_denials_are_not_shared_credential_evidence(self):
+        self.record('3025',403);self.record('3025',403)
+        self.now+=timedelta(minutes=6)
+        self.record('3026',403)
+        self.assertIsNotNone(self.f.due(self.now))
+
+    def test_request_and_data_failures_have_local_policies(self):
+        for code,status,phase,action in [
+            ('http_error',404,'request','day'),('http_error',500,'request','cooldown'),
+            ('network_error',None,'request','cooldown'),('invalid_json',200,'request','cooldown'),
+            ('business_error',200,'request','cooldown'),
+            ('normalization_failed',200,'normalization','cooldown'),
+            ('tls_verification_failed',None,'request','day'),
+            ('store_id_mismatch',200,'request','day'),('redirect_blocked',302,'request','day'),
+            ('invalid_store_id',None,'request','global'),('timeout',None,'preflight','global')]:
+            row=(1,'3025',self.now.isoformat(),0,json.dumps(dict(error_code=code,http_status=status,failure_phase=phase)))
+            self.assertEqual(fleet.failure_action(row),action)
+
+    def test_writer_continues_other_stores_after_one_denial(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        import threading
+        stop=threading.Event(); visited=[]; now=self.now
+        class Clock(datetime):
+            @classmethod
+            def now(cls,tz=None):return now.astimezone(tz)
+        controller=Mock();controller.context.return_value=(SimpleNamespace(revision=1,authorization='synthetic'), '0'*64)
+        def observe(client,store,db,**kwargs):
+            visited.append(store)
+            if len(visited)==1:
+                db.save_failure(store,QueryResult(False,None,'http_error',403,now.isoformat(),now.isoformat(),1),api_profile='miniapp_gateway',failure_phase='request')
+            else:db._insert(store,'live','miniapp_gateway',now.isoformat(),True,{})
+            if len(visited)==3:stop.set()
+        service=SimpleNamespace(campaign=daily.campaign,reauthorization=daily.reauthorization,publish_status=Mock(),CHINA=daily.CHINA)
+        with patch.object(fleet,'datetime',Clock),patch.object(daily.campaign.legacy,'Controller',return_value=controller),\
+             patch.object(daily.campaign.legacy,'prepare_material_source',return_value=object()),\
+             patch.object(fleet.cli,'describe_authorization',return_value={}),\
+             patch.object(fleet.cli,'_authorization_stop_code',return_value=None),\
+             patch.object(fleet.cli,'client_for',return_value=object()),patch.object(fleet.cli,'observe',side_effect=observe),\
+             patch.object(stop,'wait',return_value=False):
+            fleet.run(service,self.root,self.root,self.plan,Mock(),stop)
+        self.assertEqual(len(set(visited)),3)
+        state=json.loads(self.f.path.read_bytes())
+        self.assertEqual((state['issued'],state['successful'],state['failed']),(3,2,1))
+        self.assertEqual(state['stores'][visited[0]][0],self.plan['windows'][0]['end'])
     def test_uncertain_reservation_is_not_reissued_after_restart(self):
         self.f.reserve('3025')
         with self.assertRaisesRegex(ValueError,'outcome_unknown'):

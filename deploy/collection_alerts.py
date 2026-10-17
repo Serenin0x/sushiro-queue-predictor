@@ -141,7 +141,7 @@ def validate_config(value):
 def message(kind, reason, now, recovery_link=None):
     labels = {
         'collection_rate_limited': '来源返回429限流，采集正在自动退避；等待结束后自动恢复，无需重新扫码。',
-        'collection_partial_failure': '部分门店查询超时，已单独隔离并延迟复查，其他门店继续采集。',
+        'collection_partial_failure': '部分门店查询失败，已单独隔离，其他门店继续采集。',
         'collection_stopped': '采集服务已暂停，需要检查授权或来源错误。',
         'collection_heartbeat_stale': '采集状态超过两分钟没有更新。',
         'collection_not_started': '开店已超过三分钟，今天仍未保存首组采集数据。',

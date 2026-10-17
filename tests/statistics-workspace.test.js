@@ -39,6 +39,7 @@ context.fetch=async path=>{reads.push(path);if(path.includes('/statistics/settin
 };
 vm.createContext(context);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),context);
 const run=code=>vm.runInContext(code,context),settle=async()=>{await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));};
+assert.equal(run('archiveReadStatus({days:{},store_names:{}})'),'归档加载中');
 (async()=>{
  await settle();assert.equal($('store').value,'3014');assert.equal(run('engineeringSection'),'analysis');assert.equal(run('detail.points.length'),6);
  assert.equal($('snapshot-state').textContent,'已保存，字段未显示');assert.equal($('records-page-note').textContent,'6 条筛选记录，第 1 / 1 页');
