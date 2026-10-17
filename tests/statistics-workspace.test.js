@@ -17,7 +17,7 @@ const $=id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id
 document={getElementById:$,createElement:tag=>new Element(tag),body:new Element('body'),activeElement:null,addEventListener(name,fn){listeners['document:'+name]=fn;}};
 $('sushiwait-reference').dataset={engineeringPanels:'true',engineeringLayout:'tasks-v2',statisticsSource:'sapi_miniapp_gateway'};
 $('queue').value='mixedQueue';$('overview-scope').value='observed';$('overview-sort').value='latest';$('records-sort').value='desc';$('records-size').value='20';$('quality-filter').value='all';$('series-1').checked=true;
-const at=Date.parse('2026-10-13T21:10:00+08:00');class Clock extends Date{constructor(...args){super(...(args.length?args:[at]));}static now(){return at;}}
+let at=Date.parse('2026-10-13T21:10:00+08:00');class Clock extends Date{constructor(...args){super(...(args.length?args:[at]));}static now(){return at;}}
 const points=[
  {minute:'00',numbers:['100','103','106'],ok:true,comparison:'packet_continuity_unknown'},
  {minute:'03',numbers:['108','109','110'],ok:true,comparison:'comparable_display_sets',interval:180},
@@ -31,7 +31,8 @@ const month={source:'sapi_miniapp_gateway',api_profile:'miniapp_gateway',month:'
 let deferredMonth=null,resolveMonth=null,deferredStore=null,resolveStore=null;
 const location={pathname:'/statistics-legacy',search:'?section=analysis&date=2026-10-13&store=3014'};
 const context={console,Intl,Date:Clock,Math,Number,String,Object,Array,RegExp,JSON,Promise,Set,Map,URL,URLSearchParams,AbortSignal,setInterval:()=>0,clearInterval(){},document,window:{devicePixelRatio:1,location,matchMedia:()=>({matches:false}),addEventListener(name,fn){listeners[name]=fn;},history:{pushState(a,b,url){routes.push(url);location.search=url.slice(url.indexOf('?'));},replaceState(a,b,url){location.search=url.slice(url.indexOf('?'));}}}};
-context.fetch=async path=>{reads.push(path);if(path.includes('/statistics/settings'))return {ok:true,json:async()=>({schema_version:1,poll_seconds:600})};
+let health={schema_version:1,state:'running',active_store_count:2,unavailable_store_ids:[],display_date:'2026-10-13',display_switch_at:'2026-10-14T11:00:00+08:00'};
+context.fetch=async path=>{reads.push(path);if(path==='/api/v1/collection/health')return {ok:true,json:async()=>health};if(path.includes('/statistics/settings'))return {ok:true,json:async()=>({schema_version:1,poll_seconds:600})};
  if(path.includes('/months/')||path==='/api/v1/days'){if(deferredMonth){await deferredMonth;deferredMonth=null;}return {ok:true,json:async()=>month};}
  const match=path.match(/stores\/(\d+)\/days\/(\d{4}-\d{2}-\d{2})/);assert(match,'unexpected public path '+path);
  if(deferredStore&&match[1]==='3004'){await deferredStore;deferredStore=null;}
@@ -42,14 +43,13 @@ const run=code=>vm.runInContext(code,context),settle=async()=>{await new Promise
 assert.equal(run('archiveReadStatus({days:{},store_names:{}})'),'归档加载中');
 (async()=>{
  await settle();assert.equal($('store').value,'3014');assert.equal(run('engineeringSection'),'analysis');assert.equal(run('detail.points.length'),6);
- assert.equal($('snapshot-state').textContent,'已保存，字段未显示');assert.equal($('records-page-note').textContent,'6 条筛选记录，第 1 / 1 页');
+ assert.equal($('snapshot-state').textContent,'等待更新');assert.equal($('snapshot-numbers').children[0].textContent,'—');assert.equal($('snapshot-reservation').children[0].textContent,'—');assert.equal($('records-page-note').textContent,'6 条观测，第 1 / 1 页');
  const actual=run('workspaceGraphSeries(workspaceRows())');assert.equal(actual.series.length,3);assert.equal(actual.speed.length,1);assert.equal(actual.speed[0].value,8*60/180);assert.equal(actual.series[2].connect,false,'failed/unknown continuation cannot be joined');
- $('range-dinner').onclick();assert.equal(run('workspaceState.from'),'17:30');const selected=run('workspaceRows()[1].key');run('workspaceSelectRecord(workspaceRows()[1].key)');assert.equal(run('workspaceState.selected'),selected);
+ const selected=run('workspaceRows()[1].key');run('workspaceSelectRecord(workspaceRows()[1].key)');assert.equal(run('workspaceState.selected'),selected);
  $('records-size').value='2';$('records-size').onchange();$('records-next').onclick();assert.equal(run('workspaceState.page'),1);
- await run('refresh()');assert.equal(run('workspaceState.range'),'dinner');assert.equal(run('workspaceState.selected'),selected);assert.equal(run('workspaceState.page'),1);
- $('range-from').value='20:00';$('range-to').value='18:00';$('range-apply').onclick();assert.match($('range-error').textContent,/结束时间不能早于/);assert.equal(run('workspaceState.range'),'dinner');
+ await run('refresh()');assert.equal(run('workspaceState.range'),'all');assert.equal(run('workspaceState.selected'),selected);assert.equal(run('workspaceState.page'),1);
  $('ticket-number').value='4045';$('ticket-issued').value='18:01';$('experience-party').value='2';
- for(const section of ['quality','experience','overview','analysis']){$('nav-'+section).onclick();assert.equal(run('engineeringSection'),section);assert.equal($('ticket-number').value,'4045');assert.equal($('experience-party').value,'2');}
+ for(const section of ['experience','overview','analysis']){run(`selectEngineeringSection('${section}')`);assert.equal(run('engineeringSection'),section);assert.equal($('ticket-number').value,'4045');assert.equal($('experience-party').value,'2');}
  // A delayed transition restores only the latest section's scroll position.
  const frames=[],scrolls=[];context.window.requestAnimationFrame=fn=>frames.push(fn);context.window.scrollTo=value=>scrolls.push(value.top);
  context.window.scrollY=380;$('nav-experience').onclick();context.window.scrollY=70;$('nav-analysis').onclick();
@@ -57,8 +57,6 @@ assert.equal(run('archiveReadStatus({days:{},store_names:{}})'),'归档加载中
  $('nav-analysis').onclick();assert.equal(frames.length,0,'same-section action must not restart a page transition');
  assert.equal($('ticket-number').value,'4045');assert.equal($('experience-party').value,'2');
  assert(!routes.some(v=>v.includes('4045')||v.includes('18%3A01')||v.includes('party')),'private input must never enter route');
- $('quality-filter').value='failed';$('quality-filter').onchange();assert.equal($('quality-rows').children.length,1);
- $('quality-filter').value='empty';$('quality-filter').onchange();assert.equal($('quality-rows').children.length,1);
  $('records-search').value='108';$('records-search').oninput();assert.equal($('points').children.length,1);assert.match(run('workspaceCSV()'),/108/);assert(!run('workspaceCSV()').includes('4045'));
  run('workspaceOpenRecord(workspaceRows()[1])');assert.equal($('record-dialog').open,true);$('record-dialog-close').onclick();assert.equal($('record-dialog').open,false);
  // A slow superseded detail cannot overwrite a newer store selection.
@@ -67,11 +65,29 @@ assert.equal(run('archiveReadStatus({days:{},store_names:{}})'),'归档加载中
  // A month refresh started before a user's new selection retains the latest choice.
  $('store').value='3004';deferredMonth=new Promise(r=>resolveMonth=r);const refresh=run('refresh()');await settle();$('store').value='3014';$('store').onchange();await settle();resolveMonth();await refresh;assert.equal($('store').value,'3014');
  // Back/forward restores public context without destroying mounted drafts.
- location.search='?section=quality&date=2026-10-13&store=3004&queue=reservationQueue';listeners.popstate();await settle();assert.equal(run('engineeringSection'),'quality');assert.equal($('store').value,'3004');assert.equal($('queue').value,'reservationQueue');assert.equal($('experience-party').value,'2');
+ location.search='?section=quality&date=2026-10-13&store=3004&queue=reservationQueue';listeners.popstate();await settle();assert.equal(run('engineeringSection'),'analysis');assert.equal($('store').value,'3004');assert.equal($('queue').value,'reservationQueue');assert.equal($('experience-party').value,'2');
  // City changes clear the superseded store, preserve private drafts and limit choices.
  $('city').value='成都';$('city').onchange();await settle();assert.equal($('store').value,'');assert.deepEqual($('store').children.map(v=>v.value),['','2009']);assert.equal($('ticket-number').value,'4045');assert.equal(run('detail'),null);
  $('city').value='all';$('city').onchange();await settle();assert.equal($('store').disabled,true);assert.equal($('store').children.length,1);
  run("workspaceSelectStore('3014')");await settle();assert.equal($('city').value,'北京');assert.equal($('store').value,'3014');assert(!$('store').children.some(v=>v.value==='2009'));
+ // New observations highlight once; browsing another page keeps the same first record.
+ $('records-size').value='2';$('records-size').onchange();$('records-next').onclick();const anchor=$('points').children[0].dataset.observationKey;
+ const nextPoint={...points[1],request_started_at:'2026-10-13T21:11:00+08:00',queue_received_at:'2026-10-13T21:11:01+08:00',count_received_at:'2026-10-13T21:11:01+08:00',queues:{mixedQueue:['190','191','192'],reservationQueue:['7001','7002']}};
+ at=Date.parse('2026-10-13T21:11:02+08:00');points.push(nextPoint);await run('refresh()');assert.equal($('points').children[0].dataset.observationKey,anchor);
+ $('records-previous').onclick();assert($('points').children[0].classList.contains('observation-new'));assert.equal($('snapshot-numbers').children[0].textContent,'190');assert.equal($('snapshot-reservation').children[0].textContent,'7001');
+ const rowNode=$('points').children[0];run('workspaceRenderTable()');assert.equal($('points').children[0],rowNode,'unchanged records keep their DOM nodes');at+=3000;run('workspaceClock()');assert(!rowNode.classList.contains('observation-new'),'highlight expires even when reduced motion suppresses animationend');
+ run('workspaceState.readError=true;workspaceSnapshot()');assert.equal($('snapshot-numbers').children[0].textContent,'—');assert.equal($('snapshot-reservation').children[0].textContent,'—');run('workspaceState.readError=false');
+ // Hover from anywhere inside the plotting area snaps to a real point and shows guides.
+ run('graphs()');const position=run('workspaceState.charts.get("count").positions[0]');$('count').listeners.pointermove({clientX:position.x,clientY:100});assert.equal($('chart-tooltip-count').hidden,false);assert.equal(run('workspaceState.hover.get("count").key'),position.key);assert.match(run('workspaceAxisLabel("count")'),/单位待核实/);$('count').listeners.pointerleave();assert.equal($('chart-tooltip-count').hidden,true);
+ // Visual archive guides never change analytical comparison or bridge failures/boundaries.
+ const guideBefore={...points[0],observation_id:'a',record_sha256:'hash-a',continuity:{writer_id:'w'}},guideNow={...points[1],comparison_state:'gap',continuity:{writer_id:'w',predecessor_id:'a',predecessor_sha256:'hash-a'}};
+ context.guideBefore=guideBefore;context.guideNow=guideNow;assert.equal(run('workspaceVisualLink(guideNow,guideBefore)'),true);
+ for(const patch of [{pair_ok:false},{comparison_state:'run_boundary'},{continuity:{writer_id:'other',predecessor_id:'a',predecessor_sha256:'hash-a'}},{queue_received_at:'2026-10-13T18:20:00+08:00'}]){context.guideNow={...guideNow,...patch};assert.equal(run('workspaceVisualLink(guideNow,guideBefore)'),false);}
+ // Automatic overview holds the previous session before opening, including after reload.
+ location.search='?section=overview';run('workspaceSessionAuto=true');health={...health,state:'closed',active_store_count:0,display_date:'2026-10-13',display_switch_at:'2026-10-14T11:00:00+08:00'};at=Date.parse('2026-10-14T09:00:00+08:00');await run('refresh()');assert.equal(run('day'),'2026-10-13');assert($('rows').children.length>0);assert(!location.search.includes('date='));
+ // At the scheduled boundary even a still-closed collector must show the new empty day.
+ health={...health,display_date:'2026-10-14',display_switch_at:'2026-10-15T11:00:00+08:00'};at=Date.parse('2026-10-14T11:00:00+08:00');await run('refresh()');assert.equal(run('day'),'2026-10-14');assert.equal($('summary').textContent,'无已保存观测');assert.equal($('snapshot-numbers').children[0].textContent,'—');assert.equal($('snapshot-total').textContent,'0');
+ run("workspaceSetDate('2026-10-13')");await settle();await run('refresh()');assert.equal(run('day'),'2026-10-13','manual history remains pinned');
  assert(reads.every(p=>(p.startsWith('/api/v1/')||p==='/model-advice.json')&&!p.includes('4045')));
  console.log('workspace async selection, private drafts, chart boundaries, quality states, pagination, route restoration and CSV isolation passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

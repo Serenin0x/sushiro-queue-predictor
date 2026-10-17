@@ -167,6 +167,14 @@ class StatisticsGateway:
         early=local.weekday()>=5 or date_features(local.isoformat(),as_of=local.isoformat())['date_type']=='holiday'
         opened=local.replace(hour=10 if early else 11,minute=30 if early else 0,second=0,microsecond=0)
         closes=local.replace(hour=22,minute=0,second=0,microsecond=0)
+        # Keep the completed collection day visible across midnight. The
+        # display changes at the next scheduled opening even if collection is
+        # broken, so yesterday's records cannot mask a missed start.
+        display_day=local.date() if local>=opened else local.date()-timedelta(days=1)
+        following=opened if local<opened else opened+timedelta(days=1)
+        early_next=following.weekday()>=5 or date_features(following.isoformat(),as_of=local.isoformat())['date_type']=='holiday'
+        following=following.replace(hour=10 if early_next else 11,minute=30 if early_next else 0)
+        result.update(display_date=display_day.isoformat(),display_switch_at=following.isoformat())
         if result['state']!='needs_attention' and opened<=now<closes and now>opened+timedelta(minutes=3):
             reason=None
             if state in {'closed','completed','starting'}:reason='collection_not_started'

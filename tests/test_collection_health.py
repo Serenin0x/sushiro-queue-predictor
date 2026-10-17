@@ -20,6 +20,22 @@ class CollectionHealthTests(unittest.TestCase):
             self.assertNotIn('secret',result);self.assertNotIn('path',result)
             self.assertTrue(app.allowed('/api/v1/collection/health'))
 
+    def test_collection_display_changes_at_opening_not_midnight(self):
+        with tempfile.TemporaryDirectory() as temp:
+            p=Path(temp).resolve()/'health.json'
+            app=gateway.StatisticsGateway(Hub(),collection_status_file=p)
+            cases=[('2026-10-18T02:00:00+08:00','2026-10-17','2026-10-18T10:30:00+08:00'),
+                   ('2026-10-18T10:29:59+08:00','2026-10-17','2026-10-18T10:30:00+08:00'),
+                   ('2026-10-18T10:30:00+08:00','2026-10-18','2026-10-19T11:00:00+08:00'),
+                   ('2026-10-19T10:59:59+08:00','2026-10-18','2026-10-19T11:00:00+08:00'),
+                   ('2026-10-01T02:00:00+08:00','2026-09-30','2026-10-01T10:30:00+08:00')]
+            for stamp,day,switch in cases:
+                now=datetime.fromisoformat(stamp)
+                p.write_text(json.dumps({'state':'closed','at':stamp}));p.chmod(0o600)
+                result=app.collection_health(now=now)
+                self.assertEqual(result['display_date'],day)
+                self.assertEqual(result['display_switch_at'],switch)
+
     def test_health_is_disabled_without_an_explicit_file(self):
         self.assertFalse(gateway.StatisticsGateway(Hub()).allowed('/api/v1/collection/health'))
 
