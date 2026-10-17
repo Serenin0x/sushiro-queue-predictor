@@ -78,3 +78,9 @@ r=model.trackedForecast(d,{...options(d,'200'),issuedAt:d.points.at(-1).queue_re
 assert(r.available);assert(r.history_censored_fallback);assert.equal(r.weights.history,0);assert.equal(r.mode,'recent_only');
 const late=JSON.parse(JSON.stringify(d));for(const point of late.points)for(const k of ['request_started_at','queue_received_at'])point[k]=new Date(Date.parse(point[k])+9*3600000).toISOString();late.generated_at=new Date(Date.parse(late.generated_at)+9*3600000).toISOString();
 r=model.trackedForecast(late,{...options(late,'340'),issuedAt:late.points[0].queue_received_at});assert(r.available);assert(r.beyond_business_hours,'late extrapolations must show a closing-time caveat');
+
+// Taking a ticket between two healthy polls does not create a false outage.
+d=detail('2026-10-14',[140,160],5);o={...options(d,'150'),issuedAt:d.local_date+'T03:02:00Z'};r=model.arrival(d,o);
+assert.equal(r.interval_basis,'issue_to_first_sample');
+const firstPoll=model.ticketTiming({result_available:r.available,state:r.state,detected_at:r.detected_at,arrival_interval:{basis:r.interval_basis,lower_at:r.lower_at,upper_at:r.upper_at},wait_minutes:{lower:r.wait_lower_minutes,upper:r.wait_upper_minutes}},{issued_at:o.issuedAt,entry_mode:'retrospective'},o.now);
+assert.equal(firstPoll.status,'inferred');assert.equal(firstPoll.wait_minutes.upper,3);

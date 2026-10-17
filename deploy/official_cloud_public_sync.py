@@ -54,6 +54,7 @@ def publish_page(source,archive,outbox,after_id, *, as_of,scope,pending_limit=50
         bundle=read_continuity_bundle(path,as_of=as_of)
     digest=hashlib.sha256(encoded(bundle)).hexdigest()
     with ContinuityArchive(archive) as destination:
+        destination.db.execute('PRAGMA busy_timeout=1000')
         result=destination.append_bundle(bundle,as_of=as_of)
     if result['bundle_sha256']!=digest or result['durability_confirmed'] is not True:
         raise ValueError('cloud_public_commit_unconfirmed')

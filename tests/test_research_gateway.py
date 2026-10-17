@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from test_statistics_gateway import Hub, gateway
 
 
@@ -63,3 +64,22 @@ class ResearchGatewayTests(unittest.TestCase):
         self.assertEqual(self.request('/api/v1/research/tickets',{**action,'action':'restore'})[0]['status'],200)
         records=self.request('/api/v1/research/tickets',{'schema_version':1,'action':'list','owner_secret':'b'*64})
         self.assertEqual(json.loads(records[1]['body'])['total'],1)
+
+    def test_forecast_baseline_uses_private_owner_post_and_saved_observations(self):
+        from test_ticket_timing import TicketTimingTests
+        fixture=TicketTimingTests();fixture.setUp();self.addCleanup(fixture.doCleanups)
+        class View:
+            def dispatch(self,path):return 200,json.dumps(fixture.detail()).encode(),'application/json'
+        self.app.official_view=View()
+        submit={**self.submission(),'ticket':fixture.ticket}
+        action={'schema_version':1,'action':'forecast','record_id':'a'*32,'owner_secret':'b'*64,'forecast':fixture.forecast}
+        with patch('sushiwait.ticketresearch.clock',return_value=fixture.now):
+            self.assertEqual(self.request('/api/v1/research/tickets',submit)[0]['status'],200)
+            response=self.request('/api/v1/research/tickets',action)
+            self.assertTrue(json.loads(response[1]['body'])['accepted'])
+            wrong=self.request('/api/v1/research/tickets',{**action,'owner_secret':'c'*64})
+            self.assertFalse(json.loads(wrong[1]['body'])['found'])
+            rows=self.request('/api/v1/research/tickets',{'schema_version':1,'action':'list','owner_secret':'b'*64})
+            self.assertIn('algorithm',json.loads(rows[1]['body'])['records'][0]['reported']['first_forecasts'])
+        self.assertEqual(self.request('/api/v1/research/tickets',action,scheme='http')[0]['status'],400)
+        self.assertEqual(self.request('/api/v1/research/tickets',action,origin=b'https://example.com')[0]['status'],400)

@@ -179,6 +179,20 @@ class ContinuityArchiveTests(unittest.TestCase):
         self.assertEqual(self.count(),(2,2,1))
         self.assertEqual(self.append()['duplicate_links'],2)
 
+    def test_real_reader_lock_rolls_back_without_erasing_pending_data(self):
+        with ContinuityArchive(self.database):pass
+        reader=sqlite3.connect(self.database);self.addCleanup(reader.close)
+        reader.execute('BEGIN');reader.execute('SELECT count(*) FROM archive_records').fetchone()
+        bundle=self.bundle()
+        with ContinuityArchive(self.database) as archive:
+            with self.assertRaises(ReceiptError) as error:archive.append_bundle(bundle,as_of=AT)
+            self.assertEqual(error.exception.error_code,'continuity_archive_busy')
+            self.assertEqual(error.exception.commit_status,'unknown')
+        reader.rollback()
+        self.assertEqual(self.count(),(0,0,0))
+        result=self.append(bundle);self.assertEqual(result['inserted_records'],2)
+        self.assertEqual(self.append(bundle)['inserted_records'],0)
+
     def test_unlinked_anchor_and_later_link_keep_separate_reception_times(self):
         self.append(self.bundle(after_id=1))
         first=self.bundle(limit=1)

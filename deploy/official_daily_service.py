@@ -19,6 +19,7 @@ import threading
 from sushiwait.calendar import date_features
 from sushiwait.credentials import _read_private_file
 from sushiwait.packets import PacketError, _write_packet, encoded
+from sushiwait.receipts import ReceiptError
 
 
 def sibling(name):
@@ -297,21 +298,24 @@ def run_projection(root, config, stopped):
                     projections.append(projection.Projection(day, group['archive'], scoped,
                                             namespace='public-outbox-' + group['name']))
             deferred = []
+            deferred_errors = {}
             for group, item in zip(config['archive_groups'], projections):
                 name=group['name']
                 try:
                     # The collector can commit between groups. A timestamp from
                     # the beginning of this 28-group pass is already stale.
                     result = item.step(datetime.now(UTC))
-                except PacketError as error:
-                    if error.error_code != 'packet_future_record':
+                except (PacketError,ReceiptError) as error:
+                    if error.error_code not in {'packet_future_record','continuity_archive_busy'}:
                         raise
-                    # A row committed just after our read clock is safe to
-                    # defer. Keep the cursor and packet validation unchanged.
+                    # A newly committed row or a short public-reader lock can
+                    # be deferred without acknowledging its immutable bundle.
+                    # Integrity and storage failures still leave this loop.
                     deferred_counts[name]=deferred_counts.get(name,0)+1
                     deferred.append(name)
+                    deferred_errors[name]=error.error_code
                     print(json.dumps({'event':'daily_public_deferred', 'group':name,
-                        'error_code':'packet_future_record','cursor_advanced':False,
+                        'error_code':error.error_code,'cursor_advanced':False,
                         'consecutive_checks':deferred_counts[name]}),flush=True)
                     continue
                 deferred_counts[name]=0
@@ -321,7 +325,7 @@ def run_projection(root, config, stopped):
             persistent=any(deferred_counts[name]>=3 for name in deferred)
             publish_status(root, 'projection', {'state': 'needs_attention' if persistent else 'running',
                            'day': now.astimezone(CHINA).date().isoformat(),
-                           'error_code':'packet_future_record' if persistent else None,
+                           'error_code':next((deferred_errors[n] for n in deferred if deferred_counts[n]>=3),None) if persistent else None,
                            'deferred_groups':deferred,
                            'store_ids': configured_stores(config), 'cursors': [p.after for p in projections]})
             stopped.wait(10)
@@ -351,7 +355,8 @@ def main():
         allowed={'packet_future_record','packet_database_changed','packet_database_error',
                  'cloud_public_checkpoint_limit','cloud_public_checkpoint_invalid',
                  'cloud_public_checkpoint_changed','cloud_public_pending_unconfirmed',
-                 'cloud_public_commit_unconfirmed','cloud_public_delivery_ambiguous'}
+                 'cloud_public_commit_unconfirmed','cloud_public_delivery_ambiguous','continuity_archive_busy',
+                 'continuity_archive_commit_unconfirmed','continuity_archive_database_error'}
         code=code if code in allowed else 'daily_service_failed'
         publish_status(root, mode, {'state': 'needs_attention', 'error_code': code})
         print(json.dumps({'event':'daily_service_failed','error_code':code,'sensitive_details_omitted':True}),flush=True)

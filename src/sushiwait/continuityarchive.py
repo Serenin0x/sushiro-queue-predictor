@@ -127,7 +127,17 @@ class ContinuityArchive(PacketArchive):
         except ReceiptError as error:
             self.db.rollback()
             raise ReceiptError(error.error_code, commit_status=status) from None
-        except (OSError, CaptureError, sqlite3.Error):
+        except sqlite3.Error as error:
+            self.db.rollback()
+            code=getattr(error,'sqlite_errorcode',None)
+            if type(code) is int and (code & 255) in (sqlite3.SQLITE_BUSY,sqlite3.SQLITE_LOCKED) and status!='committed':
+                # A saved public reader may hold a shared lock at commit.
+                # Keep the immutable pending bundle and retry its exact body;
+                # never acknowledge or advance a cursor on this outcome.
+                raise ReceiptError('continuity_archive_busy',commit_status=status) from None
+            raise ReceiptError('continuity_archive_commit_unconfirmed' if status != 'not_started'
+                               else 'continuity_archive_database_error', commit_status=status) from None
+        except (OSError, CaptureError):
             self.db.rollback()
             raise ReceiptError('continuity_archive_commit_unconfirmed' if status != 'not_started'
                                else 'continuity_archive_database_error', commit_status=status) from None

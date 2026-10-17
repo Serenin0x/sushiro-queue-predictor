@@ -14,7 +14,7 @@ import sqlite3
 import stat
 from statistics import median
 
-from .displayarrival import POLICY as ARRIVAL_POLICY, label_ticket_arrival
+from .displayarrival import POLICY as ARRIVAL_POLICY, label_ticket_arrival, ticket_timing
 from .displayreplay import SHANGHAI, _points, _boundary, _time
 from .cityscope import STORES
 
@@ -40,8 +40,10 @@ def owner_hash(secret):
 
 def reported_ticket(value, now):
     required = {'store_id', 'queue_type', 'number', 'issued_at', 'checked_in', 'entry_mode', 'prediction_reason'}
-    optional={'input_method','image_sha256'}
+    optional={'input_method','image_sha256','record_kind','prediction_mode'}
     if type(value) is not dict or not required<=set(value) or set(value)-required-optional:
+        raise ValueError('invalid_research_ticket')
+    if value.get('record_kind','record') not in ('record','prediction') or value.get('prediction_mode','algorithm') not in MODES:
         raise ValueError('invalid_research_ticket')
     if value.get('input_method','manual') not in {'manual','screenshot_ocr','screenshot_reviewed'} or ('image_sha256' in value and (value.get('input_method') not in {'screenshot_ocr','screenshot_reviewed'} or type(value['image_sha256']) is not str or not re.fullmatch('[0-9a-f]{64}',value['image_sha256']))):
         raise ValueError('invalid_screenshot_evidence')
@@ -121,6 +123,7 @@ class TicketResearch:
         if type(record_id) is not str or not re.fullmatch('[0-9a-f]{32}', record_id) or type(deleted) is not bool:
             raise ValueError('invalid_research_identity')
         with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
             row = self.db.execute('SELECT reported FROM tickets WHERE record_id=? AND owner_hash=?',
                                   [record_id, owner]).fetchone()
             if row is None:
@@ -135,6 +138,48 @@ class TicketResearch:
             self.db.execute('UPDATE tickets SET reported=?,updated_at=? WHERE record_id=? AND owner_hash=?',
                             [json.dumps(reported),now.isoformat(),record_id,owner])
         return {'record_id':record_id, 'deleted':deleted, 'found':True}
+
+    def capture_forecast(self, record_id, secret, forecast, *, read_day=None, now=None):
+        """Freeze the first pre-outcome estimate per actual model, owner-only."""
+        now = now or clock()
+        owner = owner_hash(secret)
+        if type(record_id) is not str or not re.fullmatch('[0-9a-f]{32}',record_id):
+            raise ValueError('invalid_research_identity')
+        keys={'mode','requested_mode','computed_at','sample_at','reference_time','scenario_earliest','scenario_latest','policy'}
+        if (type(forecast) is not dict or set(forecast)!=keys or forecast['mode'] not in ('algorithm','thinking','nonthinking')
+                or forecast['requested_mode'] not in MODES or forecast['policy']!='display_arrival_history_live_v6'):
+            raise ValueError('invalid_forecast_baseline')
+        computed,sample,predicted,early=map(_time,(forecast[k] for k in ('computed_at','sample_at','reference_time','scenario_earliest')))
+        late=_time(forecast['scenario_latest']) if forecast['scenario_latest'] is not None else None
+        if not sample<=computed<=now or (computed-sample).total_seconds()>660 or not computed<=early<=predicted or predicted>computed+timedelta(hours=6) or late and predicted>late:
+            raise ValueError('invalid_forecast_baseline')
+        row=self.db.execute('SELECT reported FROM tickets WHERE record_id=? AND owner_hash=? AND '+_ACTIVE,[record_id,owner]).fetchone()
+        if not row:return {'found':False,'accepted':False}
+        reported=json.loads(row[0]);issued=_time(reported['issued_at'])
+        if computed<issued or computed.astimezone(SHANGHAI).date()!=issued.astimezone(SHANGHAI).date():
+            raise ValueError('invalid_forecast_baseline')
+        if reported.get('record_kind','prediction' if reported['entry_mode']=='live' else 'record')!='prediction':
+            return {'found':True,'accepted':False,'reason':'record_only'}
+        if read_day is not None:self.update_labels(read_day,record_id=record_id,now=now)
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            row=self.db.execute('SELECT reported,result FROM tickets WHERE record_id=? AND owner_hash=? AND '+_ACTIVE,[record_id,owner]).fetchone()
+            if not row:return {'found':False,'accepted':False}
+            reported=json.loads(row[0]);label=json.loads(row[1]) if row[1] else {}
+            baselines=reported.setdefault('first_forecasts',{})
+            if forecast['mode'] in baselines:
+                return {'found':True,'accepted':True,'duplicate':True,'baseline':baselines[forecast['mode']]}
+            if now.astimezone(SHANGHAI).date()!=issued.astimezone(SHANGHAI).date() or now.astimezone(SHANGHAI).hour>=22:
+                return {'found':True,'accepted':False,'reason':'prediction_closed'}
+            if label.get('result_available'):
+                return {'found':True,'accepted':False,'reason':'outcome_already_known'}
+            if label.get('state')=='archive_unavailable':
+                return {'found':True,'accepted':False,'reason':'archive_unavailable','retryable':True}
+            baseline={**forecast,'received_at':now.isoformat(),'basis':'browser_reported_before_saved_outcome'}
+            baselines[forecast['mode']]=baseline;reported['record_kind']='prediction';reported['prediction_mode']=forecast['requested_mode']
+            self.db.execute('UPDATE tickets SET reported=?,updated_at=? WHERE record_id=? AND owner_hash=? AND '+_ACTIVE,
+                            [json.dumps(reported),now.isoformat(),record_id,owner])
+        return {'found':True,'accepted':True,'duplicate':False,'baseline':baseline}
 
     def own_records(self, secret):
         return self.query_records(secret)['records']
@@ -164,8 +209,12 @@ class TicketResearch:
         total = self.db.execute('SELECT count(*) FROM tickets WHERE '+where, values).fetchone()[0]
         rows = self.db.execute('SELECT record_id,reported,result,received_at FROM tickets WHERE '+where+
             ' ORDER BY received_at DESC,record_id DESC LIMIT ? OFFSET ?', values+[page_size,(page-1)*page_size]).fetchall()
-        return {'records':[{'record_id':r[0], 'reported':json.loads(r[1]),
-                    'result':json.loads(r[2]) if r[2] else None, 'received_at':r[3]} for r in rows],
+        records=[];checked_at=clock()
+        for identity,raw,result,received in rows:
+            reported=json.loads(raw);label=json.loads(result) if result else None
+            records.append({'record_id':identity,'reported':reported,'result':label,'received_at':received,
+                            'timing':ticket_timing(label,reported,now=checked_at)})
+        return {'records':records,
                 'deleted_record_ids':[r[0] for r in self.db.execute(
                     'SELECT record_id FROM tickets WHERE owner_hash=? AND NOT ('+_ACTIVE+')', [owner_hash(secret)])],
                 'total':total, 'page':page, 'page_size':page_size, 'has_more':page*page_size<total}
@@ -239,6 +288,8 @@ class TicketResearch:
         for raw, result in self.db.execute('SELECT reported,result FROM tickets WHERE result IS NOT NULL AND '+_ACTIVE):
             reported, label = json.loads(raw), json.loads(result)
             if not label.get('result_available') or 'number_reversal' in label.get('quality_flags', []):
+                continue
+            if ticket_timing(label,reported,now=now)['status'] not in ('observed','inferred'):
                 continue
             identity = (reported['store_id'],reported['queue_type'],int(reported['number']),reported['issued_at'])
             if identity in seen:

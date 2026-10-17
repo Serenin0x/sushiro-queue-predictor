@@ -283,6 +283,20 @@
       calibration_for_actual_wait: false, offset_positions: offset, stride_points: stride, cases};
   }
   const ARRIVAL_POLICY = 'display_top_two_or_all_three_passed_v3';
+  function ticketTiming(label, reported, now) {
+    label=label||{};const issued=stamp(reported.issued_at),value={policy:'display_arrival_timing_v1',status:'pending',call_at:null,call_interval:null,wait_minutes:null,prediction_error_minutes:null,prediction_baseline:null,reason:null,actual_call_verified:false};
+    if(label.result_available){
+      if(label.state==='arrived'&&Number.isFinite(stamp(label.detected_at))){const wait=(stamp(label.detected_at)-issued)/60000;Object.assign(value,{status:'observed',call_at:label.detected_at,call_interval:{lower_at:label.detected_at,upper_at:label.detected_at},wait_minutes:{lower:wait,upper:wait}});}
+      else if(['adjacent_samples','issue_to_first_sample'].includes(label.arrival_interval?.basis))Object.assign(value,{status:'inferred',call_interval:label.arrival_interval,wait_minutes:label.wait_minutes});
+      else Object.assign(value,{status:'missing',reason:'unobserved_crossing'});
+    }else if(['input_conflict','number_cycle_uncertain'].includes(label.state))Object.assign(value,{status:'conflict',reason:label.reason||label.state});
+    else if(now>=Date.parse(localDay(issued)+'T22:00:00+08:00'))Object.assign(value,{status:'missing',reason:label.state||'no_arrival_observation'});
+    if((reported.record_kind||(reported.entry_mode==='live'?'prediction':'record'))!=='prediction')return value;
+    const baselines=reported.first_forecasts||{},mode=reported.prediction_mode||'auto',order=mode==='auto'?['thinking','nonthinking','algorithm']:[mode,'algorithm'];
+    const baseline=order.map(m=>baselines[m]).find(Boolean);value.prediction_baseline=baseline||null;
+    if(baseline&&value.call_interval){const predicted=stamp(baseline.reference_time);value.prediction_error_minutes={lower:(predicted-stamp(value.call_interval.upper_at))/60000,upper:(predicted-stamp(value.call_interval.lower_at))/60000};}
+    return value;
+  }
   function displayState(ticket, labels) {
     const target = number(ticket);
     if (target === null || target < 1) return 'unsupported_ticket';
@@ -344,10 +358,12 @@
       if(state==='display_all_three_passed'&&conflict){flags.add('display_passed_before_reported_issue');continue;}
       if (state==='display_top_two' || state==='display_all_three_passed' && !suspended) {
         const lower=negative?.at??c.issued;
-        if (!negative) flags.add('no_adjacent_before_arrival_sample');
+        const issueAnchor=!negative&&prior&&!conflict&&p.position>=prior.position&&arrivalConnected(prior,p,660000);
+        if (!negative&&!issueAnchor) flags.add('no_adjacent_before_arrival_sample');
         return {policy:ARRIVAL_POLICY, available:true, state:state==='display_top_two'?'arrived':'inferred_arrived',
           label_kind:state, detected_at:new Date(p.at).toISOString(), lower_at:new Date(lower).toISOString(),
           upper_at:new Date(p.at).toISOString(), wait_lower_minutes:(lower-c.issued)/60000,
+          interval_basis:negative?'adjacent_samples':issueAnchor?'issue_to_first_sample':'issue_to_detection',
           wait_upper_minutes:(p.at-c.issued)/60000, display_numbers:p.labels.slice(),
           observation_id:row.observation_id??null, checked_in_reported:options.checkedIn??null,
           actual_call_verified:false, quality_flags:[...flags]};
@@ -486,7 +502,7 @@
     const estimate=Object.keys(weights).reduce((n,k)=>n+weights[k]*factors[k]*center,0);
     return {available:true,policy:'store_wait_test_cohort_v1',wait_minutes:estimate,early_minutes:Math.max(0,cohort.early_lower*Math.min(1,ratio*.75)),late_minutes:cohort.late_upper*Math.max(1,ratio*1.25),sample_count:cohort.sample_count,distinct_days:cohort.distinct_days,ai_participated:Boolean(valid&&rate>0),actual_call_verified:false,calibrated_interval:false,weights,position_known:false};
   }
-  const api = {POLICY, HISTORY_POLICY, ARRIVAL_POLICY, forecast, forecastWithHistory, replay, displayState, arrival, trackedForecast, storeWait};
+  const api = {POLICY, HISTORY_POLICY, ARRIVAL_POLICY, forecast, forecastWithHistory, replay, displayState, arrival, trackedForecast, storeWait, ticketTiming};
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SushiWaitReference = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

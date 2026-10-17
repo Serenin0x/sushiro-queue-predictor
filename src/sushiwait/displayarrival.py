@@ -11,6 +11,48 @@ import re
 from .displayreplay import SHANGHAI, _boundary, _iso, _points, _time
 
 POLICY = 'display_top_two_or_all_three_passed_v3'
+TIMING_POLICY = 'display_arrival_timing_v1'
+
+
+def ticket_timing(label, reported, *, now):
+    """Direct captures have a timestamp; uninterrupted crossings an interval.
+
+    A crossing after a sampling hole does not supply a usable call time.
+    Prediction errors use frozen pre-outcome baselines, never a final refresh.
+    """
+    label = label or {}
+    value = {'policy':TIMING_POLICY,'status':'pending','call_at':None,'call_interval':None,
+             'wait_minutes':None,'prediction_error_minutes':None,'prediction_baseline':None,
+             'reason':None,'actual_call_verified':False}
+    issued = _time(reported['issued_at'])
+    if label.get('result_available'):
+        if label.get('state') == 'arrived':
+            at = label.get('detected_at')
+            if at:
+                wait = (_time(at)-issued).total_seconds()/60
+                value.update(status='observed',call_at=at,call_interval={'lower_at':at,'upper_at':at},
+                             wait_minutes={'lower':wait,'upper':wait})
+        elif (label.get('arrival_interval') or {}).get('basis') in ('adjacent_samples','issue_to_first_sample'):
+            value.update(status='inferred',call_interval=label['arrival_interval'],wait_minutes=label['wait_minutes'])
+        else:
+            value.update(status='missing',reason='unobserved_crossing')
+    elif label.get('state') in ('input_conflict','number_cycle_uncertain'):
+        value.update(status='conflict',reason=label.get('reason') or label['state'])
+    elif now.astimezone(SHANGHAI) >= issued.astimezone(SHANGHAI).replace(hour=22,minute=0,second=0,microsecond=0):
+        value.update(status='missing',reason=label.get('state') or 'no_arrival_observation')
+    if reported.get('record_kind', 'prediction' if reported.get('entry_mode')=='live' else 'record') != 'prediction':
+        return value
+    baselines = reported.get('first_forecasts',{})
+    mode = reported.get('prediction_mode','auto')
+    order = ('thinking','nonthinking','algorithm') if mode=='auto' else (mode,'algorithm')
+    baseline = next((baselines[m] for m in order if m in baselines),None)
+    value['prediction_baseline'] = baseline
+    if baseline and value['call_interval']:
+        predicted = _time(baseline['reference_time'])
+        value['prediction_error_minutes'] = {
+            'lower':(predicted-_time(value['call_interval']['upper_at'])).total_seconds()/60,
+            'upper':(predicted-_time(value['call_interval']['lower_at'])).total_seconds()/60}
+    return value
 
 
 def _number(value):
@@ -94,13 +136,16 @@ def label_ticket_arrival(detail, *, store_id, number, issued_at, queue='ordinary
             continue
         if previous is not None:
             boundary = _boundary(previous, point, max_gap_seconds)
+            backfill = (point['position'] < previous['position']
+                and len(point['labels']) == len(previous['labels']) == 3
+                and max(map(int,point['labels'])) >= min(map(int,previous['labels'])))
+            if boundary == 'reference_reversal' and backfill:
+                boundary = None
             if boundary:
                 flags.add(boundary)
                 last_negative = None
             # Check this separately: a gap or writer boundary must not hide a reset.
             if point['position'] < previous['position']:
-                backfill = (len(point['labels']) == len(previous['labels']) == 3
-                    and max(map(int,point['labels'])) >= min(map(int,previous['labels'])))
                 if backfill:
                     flags.add('display_position_backfill')
                 else:
@@ -120,14 +165,16 @@ def label_ticket_arrival(detail, *, store_id, number, issued_at, queue='ordinary
                 for key in ('reason', 'prior_sample_at', 'prior_display_numbers'):
                     result.pop(key, None)
             lower = last_negative['at'] if last_negative is not None else issued
-            if last_negative is None:
+            issue_anchor = bool(last_negative is None and prior and not conflict
+                and _boundary(prior,point,max_gap_seconds) is None)
+            if last_negative is None and not issue_anchor:
                 flags.add('no_adjacent_before_arrival_sample')
             if direct and checked_in is False:
                 flags.add('display_match_despite_reported_no_checkin')
             result.update(result_available=True, state='arrived' if direct else 'inferred_arrived',
                 label_kind=state, detected_at=_iso(point['at']),
                 arrival_interval={'lower_at': _iso(lower), 'upper_at': _iso(point['at']),
-                    'basis': 'adjacent_samples' if last_negative is not None else 'issue_to_detection'},
+                    'basis': 'adjacent_samples' if last_negative is not None else 'issue_to_first_sample' if issue_anchor else 'issue_to_detection'},
                 wait_minutes={'lower': (lower-issued).total_seconds()/60,
                     'upper': (point['at']-issued).total_seconds()/60},
                 observation_id=point['id'], display_numbers=point['labels'],

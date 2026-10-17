@@ -8,8 +8,8 @@ const state={section:'prediction',source:'sapi_miniapp_gateway',day:'2026-10-14'
 let confirmDelete=true,failDelete=false,listGate=null,serverRecords=[],serverDeleted=[];
 let publicModel=null,archiveIndex={days:{}},forecastInputs=[];
 let waitStores={},forecastCalls=0,forecast={available:false,reason:'insufficient_sparse_trend'};
-const context={window:{confirm:()=>confirmDelete,addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{arrival:()=>({available:false,state:'waiting'}),trackedForecast:(detail,options,history,advice)=>{forecastCalls++;forecastInputs.push({detail,options,history,advice});return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
- fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});if(body?.action==='list'&&listGate)await listGate;if(body?.action==='delete'&&failDelete)return {ok:false};return {ok:true,json:async()=>path==='/model-advice.json'&&publicModel?publicModel:path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:serverRecords,deleted_record_ids:serverDeleted}:['delete','restore'].includes(body?.action)?{found:true,deleted:body.action==='delete'}:body?{saved:true}:{local_date:state.day,points:[]}};}};
+const context={window:{confirm:()=>confirmDelete,addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{ticketTiming:require('../src/sushiwait/web/reference-model.js').ticketTiming,arrival:()=>({available:false,state:'waiting'}),trackedForecast:(detail,options,history,advice)=>{forecastCalls++;forecastInputs.push({detail,options,history,advice});return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
+ fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});if(body?.action==='list'&&listGate)await listGate;if(body?.action==='delete'&&failDelete)return {ok:false};return {ok:true,json:async()=>path==='/model-advice.json'&&publicModel?publicModel:path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:serverRecords,deleted_record_ids:serverDeleted}:body?.action==='forecast'?{found:true,accepted:true,baseline:body.forecast}:['delete','restore'].includes(body?.action)?{found:true,deleted:body.action==='delete'}:body?{saved:true}:{local_date:state.day,points:[]}};}};
 vm.createContext(context);vm.runInContext(fs.readFileSync('src/sushiwait/web/research-ui.js','utf8'),context);
 const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImmediate(r));
 (async()=>{
@@ -75,7 +75,7 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  assert.equal($('my-tickets').children[0].children[1].children.length,api.filterRecords().length);
  // Private sample planning excludes ambiguous, unsaved and other-queue rows.
  const sample=api.filterRecords().find(i=>i.saved&&i.ticket.store_id==='3004');
- sample.serverResult={result_available:true,state:'inferred_arrived',quality_flags:[]};
+ sample.serverResult={result_available:true,state:'inferred_arrived',arrival_interval:{basis:'adjacent_samples',lower_at:'2026-10-14T04:00:00Z',upper_at:'2026-10-14T04:10:00Z'},wait_minutes:{lower:30,upper:40},quality_flags:[]};
  const summary=api.recordSummary('2026-10-01','2026-10-31','ordinary');
  assert(summary['3004'].completed>=1);assert(summary['3004'].inferred>=1);
  assert.equal(Object.keys(api.recordSummary('2026-10-01','2026-10-31','reservation')).length,0);
@@ -126,5 +126,35 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  api.openTickets();
  const texts=[];function collect(n){if(n.textContent)texts.push(n.textContent);for(const c of n.children||[])collect(c);}collect($('my-tickets'));
  assert(texts.some(t=>t.includes('超过 6 小时')));
+ // Save first numeric forecasts before outcomes, per actual mode; never replace them on refresh.
+ const iso=n=>new Date(n).toISOString();
+ forecast={policy:'display_arrival_history_live_v6',available:true,ai_participated:false,sample_at:iso(now-60000),reference_time:iso(now+1800000),scenario_earliest:iso(now+1200000),scenario_latest:iso(now+2400000),sample_count:6,continuous_minutes:30,history:{selected_days:0}};
+ const ongoing=await api.submitEntry({...newFields,store_id:'3014',number:'7100'},{kind:'prediction',mode:'thinking',record:true,follow:true});
+ let tracked=api.filterRecords().find(i=>i.id===ongoing.id),first=tracked.firstForecasts.algorithm.reference_time;
+ assert(tracked.forecastAcks.algorithm);assert(requests.some(r=>r.body?.action==='forecast'&&r.body.record_id===ongoing.id));
+ forecast={...forecast,ai_participated:true,ai_mode:'thinking',reference_time:iso(now+1500000)};
+ now+=31000;api.notify();await settle();await settle();
+ tracked=api.filterRecords().find(i=>i.id===ongoing.id);assert(tracked.forecastAcks.thinking);assert.equal(tracked.firstForecasts.algorithm.reference_time,first);
+ const thinking=tracked.firstForecasts.thinking.reference_time;
+ forecast={...forecast,reference_time:iso(now+1200000)};now+=31000;api.notify();await settle();await settle();
+ assert.equal(tracked.firstForecasts.thinking.reference_time,thinking,'later predictions cannot shrink the measured first-prediction error');
+ const detected=iso(Date.parse(thinking)-900000);
+ serverRecords=[{record_id:tracked.id,reported:{...tracked.ticket,record_kind:'prediction',prediction_mode:'thinking',first_forecasts:tracked.firstForecasts},result:{result_available:true,state:'arrived',detected_at:detected,display_numbers:['7100','7101','7102'],quality_flags:[]},received_at:tracked.createdAt}];
+ now=Date.parse(detected)+60000;await api.refreshRecords();
+ assert.equal(tracked.follow,false,'a server-detected arrival ends local automatic tracking');
+ const allText=()=>{const text=[];function walk(n){if(n.textContent)text.push(n.textContent);for(const c of n.children||[])walk(c);}walk($('my-tickets'));return text;};
+ assert(allText().some(t=>t.includes('首次捕获')));assert(allText().some(t=>t.includes('等待 约')));assert(allText().some(t=>t==='滞后 15 分钟'));
+ // A saved post-gap crossing is not displayed as a known call time or an error.
+ serverRecords[0].result={result_available:true,state:'inferred_arrived',detected_at:detected,arrival_interval:{basis:'issue_to_detection',lower_at:tracked.ticket.issued_at,upper_at:detected},wait_minutes:{lower:0,upper:90}};
+ await api.refreshRecords();assert(allText().includes('无叫号时间'));assert(allText().includes('无法计算'));
+ // Recording-only rows retain timing and never acquire prediction errors.
+ const recording=api.filterRecords().find(i=>i.kind==='record');recording.serverResult={result_available:true,state:'arrived',detected_at:iso(now),display_numbers:[recording.ticket.number]};
+ api.openTickets();
+ const row=$('my-tickets').children[0].children[1].children.find(r=>r.children[0].children[0].textContent===recording.ticket.number);
+ assert(row,'recording row is visible');assert.equal(row.children[5].textContent,'—');
+ // A late public sync must be read again soon, not delayed a whole extra source period.
+ forecast={policy:'display_arrival_history_live_v6',available:true,ai_participated:true,ai_mode:'thinking',sample_at:iso(now-170000),reference_time:iso(now+600000),scenario_earliest:iso(now+300000),scenario_latest:iso(now+900000),sample_count:6,continuous_minutes:30,history:{selected_days:0}};
+ const recovered=await api.submitEntry({...newFields,store_id:'3014',number:'7200'},{kind:'prediction',mode:'thinking',record:false,follow:true});
+ assert.equal(api.filterRecords().find(i=>i.id===recovered.id).nextAt,now+30000);
  console.log('explicit submission, unavailable forecast recording, manual/continuous modes, tab switching, hidden leases and HTTPS privacy passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

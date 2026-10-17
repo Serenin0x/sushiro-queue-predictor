@@ -176,3 +176,5 @@ input:focus-visible,select:focus-visible{outline-offset:1px;box-shadow:0 0 0 4px
 
 .ticket-model-pending .ticket-result-status::after{content:"";display:inline-block;width:11px;height:11px;margin-left:8px;vertical-align:-1px;border:1.5px solid #e9c3c8;border-top-color:#bd2033;border-radius:50%;animation:ticket-model-spin .8s linear infinite}@media(prefers-reduced-motion:reduce){.ticket-model-pending .ticket-result-status::after{animation:none}}
 @keyframes ticket-model-spin{to{transform:rotate(360deg)}}
+
+.ticket-outcome{display:grid;grid-template-columns:132px 1fr;gap:12px 20px;margin:20px 0;padding:18px 0;border-block:1px solid #e5e9ef;font-size:14px}.ticket-outcome dt{color:#7b8798}.ticket-outcome dd{margin:0;color:#253246;font-variant-numeric:tabular-nums}.ticket-outcome[hidden]{display:none}.ticket-row-outcome,.ticket-row-error{font-variant-numeric:tabular-nums;min-width:155px}.ticket-database{min-width:1310px}.ticket-row-error{white-space:normal!important;line-height:1.6}@media(max-width:640px){.ticket-outcome{grid-template-columns:110px 1fr;font-size:13px;gap:12px}}

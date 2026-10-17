@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile,unittest
 from unittest.mock import Mock,patch
 from sushiwait.packets import PacketError,encoded
+from sushiwait.receipts import ReceiptError
 from test_official_daily_service import daily,config
 import test_official_cloud_campaign_sync as campaign_fixture
 
@@ -39,6 +40,16 @@ class DailyProjectionRaceTests(unittest.TestCase):
     def test_other_integrity_errors_are_not_swallowed(self):
         with self.assertRaises(PacketError):
             self.run_projection([PacketError('packet_database_changed')],1)
+        with self.assertRaises(ReceiptError):
+            self.run_projection([ReceiptError('continuity_archive_commit_unconfirmed')],1)
+
+    def test_busy_archive_defers_only_that_group_alerts_and_recovers(self):
+        first,other,status,_=self.run_projection([ReceiptError('continuity_archive_busy')]*3+[None],4)
+        self.assertEqual(first.after,0)
+        self.assertEqual(other.step.call_count,4)
+        self.assertEqual([c.args[2]['state'] for c in status.call_args_list],['running','running','needs_attention','running'])
+        self.assertEqual(status.call_args_list[2].args[2]['error_code'],'continuity_archive_busy')
+        self.assertEqual(status.call_args.args[2]['deferred_groups'],[])
     def test_actual_future_row_is_not_exported_or_cursor_advanced(self):
         fixture=campaign_fixture.CampaignProjectionTests();fixture.setUp();self.addCleanup(fixture.doCleanups)
         try:

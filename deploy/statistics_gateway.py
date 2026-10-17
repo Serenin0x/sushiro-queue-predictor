@@ -217,21 +217,23 @@ class StatisticsGateway:
         from sushiwait.ticketresearch import TicketResearch
         def process():
             research = TicketResearch(self.research_file)
+            def read_day(store, date):
+                if self.official_view is None:
+                    raise ValueError('official_view_not_configured')
+                status, body, _ = self.official_view.dispatch(f'/api/v1/official/stores/{store}/days/{date}')
+                if status != 200:
+                    raise ValueError('saved_archive_unavailable')
+                return json.loads(body)
             try:
                 if scope['path']=='/api/v1/prediction/presence':
                     return research.presence({k:v for k,v in value.items() if k!='schema_version'})
                 if value.get('action')=='submit' and set(value)=={'schema_version','action','record_id','owner_secret','ticket'}:
                     saved = research.submit(value['record_id'],value['owner_secret'],value['ticket'])
-                    def read_day(store, date):
-                        if self.official_view is None:
-                            raise ValueError('official_view_not_configured')
-                        status, body, _ = self.official_view.dispatch(f'/api/v1/official/stores/{store}/days/{date}')
-                        if status != 200:
-                            raise ValueError('saved_archive_unavailable')
-                        return json.loads(body)
                     if saved.get('saved'):
                         research.update_labels(read_day, record_id=value['record_id'])
                     return saved
+                if value.get('action')=='forecast' and set(value)=={'schema_version','action','record_id','owner_secret','forecast'}:
+                    return research.capture_forecast(value['record_id'],value['owner_secret'],value['forecast'],read_day=read_day)
                 if value.get('action') in {'delete','restore'} and set(value)=={'schema_version','action','record_id','owner_secret'}:
                     return research.set_deleted(value['record_id'],value['owner_secret'],deleted=value['action']=='delete')
                 if value.get('action')=='list' and {'schema_version','action','owner_secret'}<=set(value) and not set(value)-{'schema_version','action','owner_secret','page','page_size','filters'}:
