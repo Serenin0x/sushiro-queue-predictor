@@ -36,6 +36,19 @@ class FiveCityScopeTests(unittest.TestCase):
             self.assertEqual(daily.read_config(root),c)
             c['archive_groups'][-1]['store_ids'].append('99999');(root/'daily-config.json').write_bytes(encoded(c))
             with self.assertRaises(ValueError):daily.read_config(root)
+    def test_new_calendar_plan_keeps_old_day_immutable_and_budgets_all_stores(self):
+        old=daily.make_plan(self.expanded(),datetime.fromisoformat('2026-10-17T12:00:00+08:00'))
+        new=daily.make_plan(self.expanded(),datetime.fromisoformat('2026-10-18T12:00:00+08:00'))
+        self.assertEqual((old['cadence'],old['ordinary_query_limit']),('meal-peaks-v1',11537))
+        self.assertEqual(new['cadence'],'calendar-meal-peaks-v1')
+        start,end,rounds=daily.campaign.validate_plan(new)[0]
+        self.assertEqual(new['ordinary_query_limit'],rounds*83)
+        self.assertGreater(rounds,139)
+        self.assertEqual(new['renewal_limit'],14)
+        self.assertEqual(start.astimezone(daily.CHINA).isoformat(),'2026-10-18T10:30:00+08:00')
+        bad=deepcopy(new);bad.pop('fleet_scope')
+        with self.assertRaises(daily.campaign.TrialError):daily.campaign.validate_plan(bad)
+
     def test_old_plan_not_expanded_implicitly(self):
         p=daily.make_plan(config(),datetime.fromisoformat('2026-10-16T11:00:00+08:00'))
         p['store_ids']+=['1']

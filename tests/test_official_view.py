@@ -44,6 +44,23 @@ def make_packet(rows, *, store='900001', profile='miniapp_gateway', origin='synt
 
 
 class OfficialViewTests(unittest.TestCase):
+    def test_month_projects_only_occupied_days_and_reuses_verified_day(self):
+        with patch.object(self.view,'_day',wraps=self.view._day) as day,patch.object(self.view,'_project',wraps=self.view._project) as project:
+            self.read(MONTH)
+            self.assertEqual(day.call_count,1)
+            self.read(DAY)
+            self.assertEqual(project.call_count,1)
+            self.append(make_packet([(2,'2026-10-10T03:01:00Z','2026-10-10T03:01:00Z')]))
+            self.assertEqual(self.read()['summary']['observations'],2)
+            self.assertEqual(project.call_count,2)
+
+    def test_cached_projection_rechecks_changed_record_and_refreshes_elapsed_coverage(self):
+        first=self.read()
+        later=self.view.read(DAY,now=NOW.replace(hour=13))
+        self.assertGreater(later['summary']['expected_background_slots_so_far'],first['summary']['expected_background_slots_so_far'])
+        with sqlite3.connect(self.db) as db:db.execute('UPDATE archive_records SET record_sha256=?',['0'*64])
+        self.assertEqual(self.view.dispatch(DAY)[0],503)
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name).resolve()
         self.root.chmod(0o700);self.db=self.root/'public.sqlite3'

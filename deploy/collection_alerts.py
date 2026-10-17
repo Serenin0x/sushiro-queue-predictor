@@ -21,7 +21,7 @@ import urllib.request
 
 from sushiwait.credentials import _read_private_file
 from sushiwait.calendar import date_features
-from sushiwait.cadence import POLICY, next_sample_at
+from sushiwait.cadence import POLICY, CALENDAR_POLICY, next_sample_at
 
 UTC = timezone.utc
 CHINA = timezone(timedelta(hours=8))
@@ -96,9 +96,9 @@ def condition(collection, projection, now):
         if (now-progress).total_seconds() < -60:
             return 'collection_status_unavailable'
         cadence = collection.get('cadence')
-        if cadence not in {None, POLICY}:
+        if cadence not in {None, POLICY, CALENDAR_POLICY}:
             return 'collection_status_unavailable'
-        due = next_sample_at(progress) if cadence else progress + timedelta(seconds=600)
+        due = next_sample_at(progress,cadence) if cadence else progress + timedelta(seconds=600)
         if now > due + timedelta(seconds=PROGRESS_GRACE_SECONDS):
             return 'collection_progress_stale'
         if projection.get('state') != 'running':

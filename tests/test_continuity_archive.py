@@ -170,6 +170,18 @@ class ContinuityArchiveTests(unittest.TestCase):
                 self.assertEqual(self.view().dispatch('/api/v1/official/stores/900001/days/2026-10-11')[0],503)
                 self.database.unlink();self.append()
 
+    def test_warm_projection_revalidates_later_links_and_predecessor_damage(self):
+        bundle=self.bundle()
+        with ContinuityArchive(self.database) as archive:archive.append(bundle['packet'],as_of=AT)
+        view=self.view();path='/api/v1/official/stores/900001/days/2026-10-11'
+        now=datetime.fromisoformat(AT.replace('Z','+00:00'))
+        self.assertEqual(view.read(path,now=now)['points'][1]['comparison_state'],'packet_continuity_unknown')
+        self.append()
+        self.assertEqual(view.read(path,now=now)['points'][1]['comparison_state'],'comparable_display_sets')
+        first=bundle['packet']['records'][0]['observation_id']
+        with sqlite3.connect(self.database) as db:db.execute('UPDATE archive_records SET store_id=? WHERE observation_id=?',['900002',first])
+        self.assertEqual(view.dispatch(path)[0],503)
+
     def test_postcommit_directory_sync_error_reports_committed_without_erasing_data(self):
         with ContinuityArchive(self.database) as archive:
             with patch('sushiwait.continuityarchive.os.fsync',side_effect=OSError('do not echo')):

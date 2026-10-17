@@ -92,7 +92,7 @@ def public_projection(value):
 
 def public_context(detail, *, queue='ordinary', history=(), now=None, cadence=600, connection_check=False):
     now = now or datetime.now(timezone.utc)
-    if queue not in ('ordinary', 'reservation') or type(cadence) is not int or not 180 <= cadence <= 600:
+    if queue not in ('ordinary', 'reservation') or type(cadence) is not int or not 120 <= cadence <= 600:
         raise ValueError('invalid_model_scope')
     field = 'mixedQueue' if queue == 'ordinary' else 'reservationQueue'
     points = _points(detail, field)
@@ -176,7 +176,7 @@ def _validate_context(value):
             or value['source']!=SOURCE or value['queue_type'] not in ('ordinary','reservation')
             or value['candidate_ids']!=sorted(CANDIDATES) or value['source_update_time_verified'] is not False
             or value['phase'] not in ('live_shared','historical_connection_check')
-            or type(value['cadence_seconds']) is not int or not 180<=value['cadence_seconds']<=600
+            or type(value['cadence_seconds']) is not int or not 120<=value['cadence_seconds']<=600
             or type(value['store_id']) is not str or not value['store_id'].isdigit()
             or type(value['observation_id']) is not str or not 1<=len(value['observation_id'])<=128
             or value['date_type'] not in ('ordinary_workday','ordinary_weekend','holiday','makeup_workday','unknown')):
@@ -225,7 +225,7 @@ def suggest_weights(context, *, budget_file, key_file, now=None, transport=None)
             match=call['observation_key'] in (observation_key,digest)
             if not match:
                 if legacy_keys is None:
-                    legacy_keys={hashlib.sha256(_canonical({**context,'cadence_seconds':n}).encode()).hexdigest() for n in range(180,601)}
+                    legacy_keys={hashlib.sha256(_canonical({**context,'cadence_seconds':n}).encode()).hexdigest() for n in range(120,601)}
                 match=call['observation_key'] in legacy_keys
             if match:
                 return {'state':'cached' if result and result['advice'] else 'previous_attempt_unknown',

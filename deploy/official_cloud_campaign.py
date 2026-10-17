@@ -35,7 +35,8 @@ def validate_plan(value):
     try:
         if (type(value) is not dict or set(value) not in (keys, keys | {'cadence'}, keys | {'cadence','fleet_scope'})
                 or type(value['schema_version']) is not int or value['schema_version'] != (4 if 'fleet_scope' in value else 3 if 'cadence' in value else 2)
-                or 'cadence' in value and value['cadence'] != 'meal-peaks-v1'
+                or 'cadence' in value and value['cadence'] not in ('meal-peaks-v1','calendar-meal-peaks-v1')
+                or value.get('cadence')=='calendar-meal-peaks-v1' and 'fleet_scope' not in value
                 or type(value['plan_id']) is not str
                 or not re.fullmatch('[a-z][a-z0-9-]{3,63}', value['plan_id'])
                 or type(value['app_id']) is not str

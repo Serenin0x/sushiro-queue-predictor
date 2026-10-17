@@ -55,6 +55,33 @@ class Hub:
 
 
 class StatisticsGatewayTests(unittest.TestCase):
+    def test_slow_month_does_not_block_static_response(self):
+        import threading
+        started,release=threading.Event(),threading.Event()
+        old=self.hub.dispatch
+        def dispatch(path):
+            if path=='/api/v1/months/2026-10':
+                started.set();release.wait(2)
+            return old(path)
+        self.hub.dispatch=dispatch
+        async def request(path):
+            output=[]
+            async def receive():return {'type':'http.request','body':b''}
+            async def send(value):output.append(value)
+            await self.app({'type':'http','method':'GET','path':path,'query_string':b''},receive,send)
+            return output
+        async def run():
+            slow=asyncio.create_task(request('/api/v1/months/2026-10'))
+            try:
+                for _ in range(200):
+                    if started.is_set():break
+                    await asyncio.sleep(.005)
+                self.assertTrue(started.is_set())
+                result=await asyncio.wait_for(request('/statistics.css'),.5)
+                self.assertEqual(result[0]['status'],200)
+            finally:release.set();await slow
+        asyncio.run(run())
+
     def setUp(self):
         self.hub = Hub()
         self.app = gateway.StatisticsGateway(self.hub)

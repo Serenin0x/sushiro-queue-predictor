@@ -12,6 +12,8 @@ import time
 import json
 import math
 from urllib.parse import parse_qsl
+from weakref import WeakValueDictionary
+from concurrent.futures import ThreadPoolExecutor
 
 from sushiwait.monitorhub import MonitorHub, read_config
 
@@ -21,7 +23,7 @@ class JoinedOfficialViews:
     def __init__(self, primary, extra):
         if set(primary.names) & set(extra.names) or len(primary.names) + len(extra.names) > 128:
             raise ValueError('official_view_join_scope_invalid')
-        self.views = (primary, extra)
+        self.views = tuple(v for group in (primary,extra) for v in (group.views if isinstance(group,JoinedOfficialViews) else (group,)))
         self.names = {**primary.names, **extra.names}
 
     def allowed(self, path):
@@ -32,20 +34,21 @@ class JoinedOfficialViews:
             view = next((v for v in self.views if v.allowed(path)), None)
             return view.dispatch(path) if view else (404, b'Unknown saved route', 'text/plain')
         rows = []
-        for view in self.views:
-            status, body, mime = view.dispatch(path)
+        with ThreadPoolExecutor(max_workers=min(3,len(self.views))) as pool:
+            responses=list(pool.map(lambda view:view.dispatch(path),self.views))
+        for status, body, mime in responses:
             if status != 200:
                 return status, body, mime
             rows.append(json.loads(body))
-        a, b = rows
+        a = rows[0]
         for key in ('source', 'api_profile', 'data_origin', 'month', 'timezone', 'daily_schema_version'):
-            if a[key] != b[key]:
+            if any(a[key] != row[key] for row in rows[1:]):
                 return 503, b'Archive scope mismatch', 'text/plain'
         result = {**a, 'store_names': self.names,
                   'configured_store_ids': list(self.names),
-                  'unavailable_store_ids': list(dict.fromkeys(a['unavailable_store_ids'] + b['unavailable_store_ids'])),
-                  'days': {day: {**a['days'].get(day, {}), **b['days'].get(day, {})}
-                           for day in sorted(set(a['days']) | set(b['days']))}}
+                  'unavailable_store_ids': list(dict.fromkeys(s for row in rows for s in row['unavailable_store_ids'])),
+                  'days': {day: {s:value for row in rows for s,value in row['days'].get(day,{}).items()}
+                           for day in sorted({day for row in rows for day in row['days']})}}
         return 200, json.dumps(result, ensure_ascii=False, allow_nan=False).encode(), mime
 
 
@@ -77,6 +80,8 @@ class StatisticsGateway:
         self.refresh_policy_file = refresh_policy_file
         self.cache = OrderedDict()
         self.lock = asyncio.Lock()
+        self.route_locks = WeakValueDictionary()
+        self.archive_slots = asyncio.Semaphore(4)
         self.deadline = datetime.fromisoformat(hub.config['deadline_at'].replace('Z', '+00:00')) if hub.config['schema_version']==1 else None
 
     def allowed(self, path):
@@ -117,10 +122,11 @@ class StatisticsGateway:
                     or type(value['cadence']) is not str or value['cadence'] != 'meal-peaks-v1')):
             raise ValueError('statistics_refresh_policy_invalid')
         if smooth:
-            from sushiwait.cadence import period_after, description
+            from sushiwait.cadence import period_after, description, daily_policy
             now = datetime.now(timezone.utc) if now is None else now
-            return {'schema_version':1, 'poll_seconds':math.ceil(period_after(now,value['cadence'])),
-                    'cadence_policy':description(value['cadence'])}
+            policy=daily_policy(now)
+            return {'schema_version':1, 'poll_seconds':math.ceil(period_after(now,policy)),
+                    'cadence_policy':description(policy)}
         return {'schema_version':1, 'poll_seconds':value['interval_seconds']}
 
     def polling_seconds(self):
@@ -155,7 +161,7 @@ class StatisticsGateway:
                  'daily_collection_failed','daily_service_failed'}
         result['reason_code']='heartbeat_stale' if age>120 else value.get('error_code') if value.get('error_code') in allowed else None
         from datetime import timedelta
-        from sushiwait.cadence import CHINA, next_sample_at
+        from sushiwait.cadence import CHINA, next_sample_at, POLICY, CALENDAR_POLICY
         from sushiwait.calendar import date_features
         local=now.astimezone(CHINA)
         early=local.weekday()>=5 or date_features(local.isoformat(),as_of=local.isoformat())['date_type']=='holiday'
@@ -166,7 +172,7 @@ class StatisticsGateway:
             if state in {'closed','completed','starting'}:reason='collection_not_started'
             elif value.get('failed_slots',0) and value.get('isolation_policy')!='store-isolation-v1':reason='collection_failed_samples'
             elif not value.get('last_progress_at') or value.get('successful_slots')==0:reason='collection_not_started'
-            elif now>next_sample_at(datetime.fromisoformat(value['last_progress_at']))+timedelta(minutes=2):reason='collection_progress_stale'
+            elif now>next_sample_at(datetime.fromisoformat(value['last_progress_at']),value.get('cadence') if value.get('cadence') in {POLICY,CALENDAR_POLICY} else POLICY)+timedelta(minutes=2):reason='collection_progress_stale'
             if reason:result.update(state='needs_attention',reason_code=reason)
         if value.get('isolation_policy')=='store-isolation-v1':
             ids=value.get('unavailable_store_ids',[])
@@ -398,9 +404,12 @@ class StatisticsGateway:
         elif self.deadline is not None and datetime.now(timezone.utc) >= self.deadline:
             status, body, mime = 503, b'Trial deadline reached', 'text/plain; charset=utf-8'
         else:
-            # Serialize bounded cache fills. The hub reads worker-owned copies,
-            # never an active SQLite database or the restaurant origin.
-            async with self.lock:
+            # Coalesce the same route without queuing health, assets and model
+            # responses behind an unrelated month/day archive read.
+            route_lock=self.route_locks.get(path)
+            if route_lock is None:
+                route_lock=asyncio.Lock();self.route_locks[path]=route_lock
+            async with route_lock:
                 saved = self.cache.get(path)
                 if saved and time.monotonic() - saved[0] < 5:
                     _, status, body, mime = saved
@@ -447,10 +456,14 @@ class StatisticsGateway:
                     else:
                         reader = self.official_view if path.startswith('/api/v1/official/') else self.hub
                         route = '/statistics' if path == '/statistics-history' else path
-                        status, body, mime = await asyncio.to_thread(reader.dispatch, route)
+                        if path.startswith('/api/v1/'):
+                            async with self.archive_slots:
+                                status, body, mime = await asyncio.to_thread(reader.dispatch, route)
+                        else:
+                            status, body, mime = await asyncio.to_thread(reader.dispatch, route)
                     self.cache[path] = (time.monotonic(), status, body, mime)
                     self.cache.move_to_end(path)
-                    while len(self.cache) > 16:
+                    while len(self.cache)>16 or sum(len(v[2]) for v in self.cache.values())>16*1024*1024:
                         self.cache.popitem(last=False)
         if path in {'/statistics', '/statistics-legacy', '/statistics-history'} and status == 200:
             # The internal monitor is deliberately outside the public scope.

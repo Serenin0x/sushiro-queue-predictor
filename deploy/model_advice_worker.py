@@ -6,7 +6,7 @@ from sushiwait.deepseek import _Ledger, DeepSeekError
 from sushiwait.intake import _canonical
 
 from sushiwait.calendar import date_features
-from sushiwait.cadence import CHINA, period_after
+from sushiwait.cadence import CHINA, period_after, daily_policy
 from sushiwait.modeladvice import POLICY, MAX_PROJECTION_BYTES, public_context, public_projection, suggest_weights
 from sushiwait.ticketresearch import TicketResearch
 from sushiwait.cityscope import STORES
@@ -165,7 +165,7 @@ def tick(root, output, research_file, cache, history, *, now=None, reader=read, 
                     try: history[store].append(reader(f'/api/v1/official/stores/{store}/days/{past}'))
                     except Exception: pass
             latest = next((p.get('queue_received_at') for p in reversed(current.get('points',[])) if p.get('queue_received_at')), None)
-            cadence=math.ceil(period_after(datetime.fromisoformat(latest.replace('Z','+00:00')))) if latest else 600
+            cadence=math.ceil(period_after(datetime.fromisoformat(latest.replace('Z','+00:00')),daily_policy(now))) if latest else 600
             try: context=public_context(current,queue=queue,history=history[store],cadence=cadence,now=now)
             except (ValueError,KeyError):
                 for mode in modes: models[mode]={'state':'waiting_for_observation','advice':None}

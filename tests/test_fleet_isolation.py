@@ -24,6 +24,18 @@ class FleetIsolationTests(unittest.TestCase):
         result=QueryResult(False,None,'http_error',code,self.now.isoformat(),self.now.isoformat(),1)
         self.f.db.save_failure(store,result,api_profile='miniapp_gateway',failure_phase='request')
         self.f.reconcile()
+    def test_calendar_success_uses_two_minute_peak_and_no_catchup(self):
+        at=datetime.fromisoformat('2026-10-18T12:00:00+08:00')
+        plan=daily.make_plan(FiveCityScopeTests().expanded(),at)
+        path=self.root/'calendar';path.mkdir(mode=0o700)
+        with_new=fleet.Fleet(path,plan,0,at);self.addCleanup(with_new.close)
+        with_new.reserve('3025');with_new.db._insert('3025','live','miniapp_gateway',at.isoformat(),True,{})
+        with_new.reconcile()
+        self.assertEqual(fleet.instant(with_new.value['stores']['3025'][0]),at+timedelta(seconds=120))
+        for elapsed,expected in [(0,1.4),(.5,.9),(2,0)]:
+            self.assertAlmostEqual(fleet.request_delay(plan['cadence'],elapsed),expected)
+        self.assertEqual(fleet.request_delay('meal-peaks-v1',.5),2.1)
+
     def test_504_isolates_only_one_store_preserving_spend(self):
         self.record('3025')
         self.assertEqual(self.f.status()['unavailable_store_ids'],['3025'])

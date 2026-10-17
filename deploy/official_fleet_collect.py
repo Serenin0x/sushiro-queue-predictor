@@ -8,11 +8,12 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 from sushiwait import cli
-from sushiwait.cadence import next_sample_at
+from sushiwait.cadence import CALENDAR_POLICY, next_sample_at
 from sushiwait.credentials import _read_private_file
 from sushiwait.packets import encoded
 from sushiwait.storage import SnapshotStore
@@ -132,7 +133,7 @@ class Fleet:
         if ok:
             self.value['successful'] += 1
             self.value['rate_limit_streak'] = 0
-            item[0], item[2] = next_sample_at(at).isoformat(), 0
+            item[0], item[2] = next_sample_at(at,self.plan['cadence']).isoformat(), 0
         else:
             self.value['failed'] += 1
             action = failure_action(row)
@@ -202,6 +203,11 @@ class Fleet:
             'unavailable_store_ids': [s for s, item in self.value['stores'].items() if item[2] > 0]}
 
 
+def request_delay(policy, elapsed):
+    # One request at a time; even overdue stores never start in a burst.
+    return max(0,1.4-max(0,elapsed)) if policy==CALENDAR_POLICY else 2.1
+
+
 def run(service, root, day, plan, ledger, stopped):
     start, end, _ = service.campaign.validate_plan(plan)[0]
     usage, _ = service.reauthorization.task_usage(day, plan, include_fleet=False)
@@ -235,8 +241,11 @@ def run(service, root, day, plan, ledger, stopped):
                 raise ValueError('fleet_auth_timing_stop')
             client = cli.client_for(SimpleNamespace(api_profile='miniapp_gateway'), credentials=context)
             fleet.reserve(store)
+            started=time.monotonic()
             cli.observe(client, store, fleet.db, api_profile='miniapp_gateway')
             fleet.reconcile()
-            stopped.wait(2.1)
+            # The new weekend target needs 83 starts in 120 seconds. Space
+            # actual starts, keep one in flight, and never catch up in a burst.
+            stopped.wait(request_delay(plan['cadence'],time.monotonic()-started))
     finally:
         fleet.close()

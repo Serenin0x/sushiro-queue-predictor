@@ -12,6 +12,17 @@ from .officialview import OfficialStatisticsView
 class ContinuityStatisticsView(OfficialStatisticsView):
     _schema = SCHEMA
 
+    def _dependencies(self, db, rows):
+        marks=','.join('?' for _ in rows)
+        # Include exact predecessor columns/bodies as well as current claims.
+        # A later link or any changed dependency cannot reuse a prior result.
+        return db.execute(f"SELECT c.observation_id,c.writer_id,c.claimed_at,c.link_sha256,CASE WHEN length(CAST(c.link_json AS BLOB))<=4096 THEN c.link_json END,c.linked_at,"
+            "p.observation_id,p.record_sha256,p.store_id,p.api_profile,p.data_origin,p.recorded_at,p.ok,p.archived_at,CASE WHEN length(CAST(p.record_json AS BLOB))<=65536 THEN p.record_json END,"
+            "a.writer_id,a.claimed_at FROM continuity_claims c "
+            "LEFT JOIN archive_records p ON p.observation_id=json_extract(CASE WHEN length(CAST(c.link_json AS BLOB))<=4096 THEN c.link_json END,'$.predecessor_id') "
+            "LEFT JOIN continuity_claims a ON a.observation_id=p.observation_id "
+            f"WHERE c.observation_id IN ({marks}) ORDER BY c.observation_id",[r[0] for r in rows]).fetchall()
+
     def _common(self, now):
         return {**super()._common(now), 'archive_kind': 'public_records_with_reported_continuity',
                 'continuity_archive_schema_version': 1, 'source_claims_verified': False}

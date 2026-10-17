@@ -76,6 +76,36 @@ class SmoothCadenceTests(unittest.TestCase):
                 self.assertEqual(main(['collect','--store-id','900001','--cadence',cadence.POLICY]+options),2)
                 client.assert_not_called();collect.assert_not_called()
 
+    def test_calendar_profiles_distinguish_holiday_makeup_and_weekend(self):
+        for day,base,peak in [('2026-10-18',300,120),('2026-10-19',600,180),
+                               ('2026-10-01',360,180),('2026-10-10',600,180),
+                               ('2027-01-02',300,120)]:
+            clock=datetime.fromisoformat(day+'T15:00:00+08:00')
+            self.assertAlmostEqual(cadence.interval_at(clock,cadence.CALENDAR_POLICY),base)
+            self.assertAlmostEqual(cadence.period_after(clock.replace(hour=12),cadence.CALENDAR_POLICY),peak,places=5)
+        self.assertEqual(cadence.daily_policy(at(19)),cadence.POLICY)
+        self.assertEqual(cadence.daily_policy(datetime.fromisoformat('2026-10-18T00:00:00+08:00')),cadence.CALENDAR_POLICY)
+
+    def test_calendar_shoulders_are_smooth_and_integrated(self):
+        clock=datetime.fromisoformat('2026-10-18T11:00:00+08:00')
+        points=[cadence.interval_at(clock+timedelta(minutes=m),cadence.CALENDAR_POLICY) for m in range(31)]
+        self.assertTrue(all(a>b for a,b in zip(points,points[1:])))
+        self.assertAlmostEqual(points[0],300);self.assertAlmostEqual(points[-1],120)
+        for m in (0,8,29,149):
+            start=clock+timedelta(minutes=m);end=cadence.next_sample_at(start,cadence.CALENDAR_POLICY)
+            self.assertAlmostEqual(cadence.phase_between(start,end,cadence.CALENDAR_POLICY),1,places=7)
+        for m in (0,30,150,180):
+            center=clock+timedelta(minutes=m);h=timedelta(milliseconds=1)
+            left,mid,right=[cadence.interval_at(t,cadence.CALENDAR_POLICY) for t in (center-h,center,center+h)]
+            self.assertLess(abs(left-right),0.00001)
+            self.assertLess(abs((mid-left)/.001-(right-mid)/.001),0.0001)
+
+    def test_calendar_midnight_changes_rate_without_losing_phase(self):
+        start=datetime.fromisoformat('2026-10-18T23:58:00+08:00')
+        end=cadence.next_sample_at(start,cadence.CALENDAR_POLICY)
+        self.assertAlmostEqual((end-start).total_seconds(),480,places=5)
+        self.assertAlmostEqual(cadence.phase_between(start,end,cadence.CALENDAR_POLICY),1,places=7)
+
     def helper(self):
         h=task_helpers.CollectionTaskTests(methodName='runTest');h.setUp();self.addCleanup(h.doCleanups)
         return h

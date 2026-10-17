@@ -17,6 +17,7 @@ import sys
 import threading
 
 from sushiwait.calendar import date_features
+from sushiwait.cadence import CALENDAR_POLICY, daily_policy
 from sushiwait.credentials import _read_private_file
 from sushiwait.packets import PacketError, _write_packet, encoded
 from sushiwait.receipts import ReceiptError
@@ -87,10 +88,11 @@ def make_plan(config, at):
         raise ValueError('daily_start_not_reached')
     stores=configured_stores(config)
     expanded=config['schema_version']==2
-    rounds = campaign.legacy.planned_rounds(start, end, 'meal-peaks-v1')
+    cadence=daily_policy(start) if expanded else 'meal-peaks-v1'
+    rounds = campaign.legacy.planned_rounds(start, end, cadence)
     plan = {**config['source'], 'schema_version': 4 if expanded else 3,
             'plan_id': ('five-cities-' if expanded else 'five-stores-') + start.strftime('%Y%m%d'),
-            'store_ids': stores, 'interval_seconds': 600, 'cadence': 'meal-peaks-v1',
+            'store_ids': stores, 'interval_seconds': 600, 'cadence': cadence,
             'windows': [{'start': start.isoformat(), 'end': end.isoformat()}],
             'ordinary_query_limit': rounds * len(stores), 'renewal_limit': 14}
     if expanded: plan['fleet_scope']='five-cities-v1'
@@ -235,6 +237,8 @@ def run_collection(root, config, stopped):
                     raise ValueError('fleet_policy_invalid')
                 sibling('official_fleet_collect').run(__import__('types').SimpleNamespace(campaign=campaign, reauthorization=reauthorization, publish_status=publish_status, CHINA=CHINA), root, day, plan, ledger, stopped)
                 continue
+            if plan['cadence']==CALENDAR_POLICY:
+                raise ValueError('calendar_cadence_requires_fleet_isolation')
             last_pulse = None
             def pulse():
                 nonlocal last_pulse

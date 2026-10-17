@@ -77,6 +77,13 @@ class CollectionAlertTests(unittest.TestCase):
             self.assertEqual(alerts.condition(self.status(at=at.isoformat(),state='closed'), {}, at),
                              'collection_not_started')
 
+    def test_calendar_progress_alarm_uses_declared_day_profile(self):
+        progress=datetime.fromisoformat('2026-10-18T12:00:00+08:00')
+        for age,expected in [(239,'healthy'),(241,'collection_progress_stale')]:
+            now=progress+timedelta(seconds=age)
+            status=self.status(at=now.isoformat(),last_progress_at=progress.isoformat(),cadence='calendar-meal-peaks-v1')
+            self.assertEqual(alerts.condition(status,self.status(at=now.isoformat()),now),expected)
+
     def test_peak_progress_alarm_follows_smooth_cadence(self):
         progress=NOW.replace(hour=4,minute=0)
         due=alerts.next_sample_at(progress)+timedelta(seconds=120)

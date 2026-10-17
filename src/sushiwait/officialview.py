@@ -6,13 +6,16 @@ origin, inspect a credential, infer collector liveness or fall back to CRM.
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
 import sqlite3
 import time
+import threading
 
 from .businesshours import BusinessHours
 from .capture import _open_parent, _check_parent
@@ -78,6 +81,8 @@ class OfficialStatisticsView:
             self.data_origin = data_origin
             self.hours = deepcopy(BusinessHours(hours).rules)
             self.base_interval = base_interval
+            self._day_cache = OrderedDict()
+            self._cache_lock = threading.RLock()
         except Exception:
             raise OfficialViewError('official_view_invalid_config') from None
 
@@ -123,6 +128,36 @@ class OfficialStatisticsView:
         return project_packet(packet, as_of=_stamp(now), hours=self.hours,
             base_interval=self.base_interval, store_names={store:self.names[store]})
 
+    def _dependencies(self, db, rows):
+        return ()
+
+    def _cached_day(self, key, fingerprint, now):
+        with self._cache_lock:
+            saved = self._day_cache.get(key)
+            if not saved or saved[0] != fingerprint or saved[1] > now:
+                return None
+            self._day_cache.move_to_end(key)
+            result = json.loads(saved[2])
+        result.update(self._common(now))
+        summary = result['summary']
+        through = min(now, _time(result['local_date']+'T00:00:00+08:00')+timedelta(days=1))
+        import math
+        elapsed = sum(math.ceil(max(0,(min(_time(b),through)-_time(a)).total_seconds())/self.base_interval)
+                      for a,b in summary['declared_intervals'] if through > _time(a))
+        summary['expected_background_slots_so_far'] = elapsed
+        summary['observed_slot_fraction_so_far'] = min(1,summary['observed_background_slots']/elapsed) if elapsed else None
+        return result
+
+    def _remember_day(self, key, fingerprint, now, result):
+        body = encoded(result)
+        if len(body) > 4*1024*1024:
+            return
+        with self._cache_lock:
+            self._day_cache[key] = (fingerprint,now,body)
+            self._day_cache.move_to_end(key)
+            while len(self._day_cache)>64 or sum(len(v[2]) for v in self._day_cache.values())>4*1024*1024:
+                self._day_cache.popitem(last=False)
+
     def _day(self, db, store, day, now):
         # UTC canonical strings have a uniform date/time prefix. Boundary
         # prefixes omit Z so .microseconds and whole seconds compare correctly.
@@ -136,6 +171,12 @@ class OfficialStatisticsView:
         if count == 0:
             return self._empty_day(store, day, now)
         rows = db.execute(f"SELECT {','.join(_COLUMNS)} FROM archive_records WHERE {condition} ORDER BY {_START},recorded_at,observation_id LIMIT 1001", params).fetchall()
+        # Reuse only when every selected byte and its continuity dependencies
+        # still match. New rows, repaired links and corruption invalidate it.
+        fingerprint = hashlib.sha256(encoded([rows,self._dependencies(db,rows)])).hexdigest()
+        cached = self._cached_day((store,day),fingerprint,now)
+        if cached is not None:
+            return cached
         packet = build_packet([], as_of=_stamp(now), store_ids=[store],
             api_profile='miniapp_gateway', data_origin=self.data_origin)
         for row in rows:
@@ -157,6 +198,7 @@ class OfficialStatisticsView:
         result['summary'].update(selection_scope=SELECTION_SCOPE,
             full_source_arrays_persisted=True,
             persistence_semantics='validated_selected_records_in_packet_archive')
+        self._remember_day((store,day),fingerprint,now,result)
         return result
 
     def read(self, path, *, now=None):
@@ -192,15 +234,20 @@ class OfficialStatisticsView:
                     'configured_store_ids':list(self.names), 'store_names':dict(self.names),
                     'unavailable_store_ids':[], 'days':{}, 'timezone':'Asia/Shanghai',
                     'heatmap_semantics':'coverage_only_traffic_not_calibrated'}
-                day = date.fromisoformat(month+'-01')
-                while day.strftime('%Y-%m') == month:
-                    for store in self.names:
-                        if time.monotonic() >= deadline:
-                            raise OfficialViewError('official_view_read_timeout')
-                        summary = self._day(db, store, day.isoformat(), clock)['summary']
-                        if summary is not None:
-                            result['days'].setdefault(day.isoformat(), {})[store] = summary
-                    day += timedelta(days=1)
+                first = date.fromisoformat(month+'-01')
+                following = (first.replace(day=28)+timedelta(days=4)).replace(day=1)
+                lower = _stamp(_time(first.isoformat()+'T00:00:00+08:00')).removesuffix('Z')
+                upper = _stamp(_time(following.isoformat()+'T00:00:00+08:00')).removesuffix('Z')
+                placeholders=','.join('?' for _ in self.names)
+                occupied=db.execute(f"SELECT DISTINCT store_id,date(substr({_START},1,19),'+8 hours') FROM archive_records "
+                    f"WHERE store_id IN ({placeholders}) AND api_profile=? AND data_origin=? AND {_START}>=? AND {_START}<? "
+                    "ORDER BY 2,1",[*self.names,'miniapp_gateway',self.data_origin,lower,upper]).fetchall()
+                for store,day in occupied:
+                    if time.monotonic() >= deadline:
+                        raise OfficialViewError('official_view_read_timeout')
+                    summary = self._day(db,store,day,clock)['summary']
+                    if summary is not None:
+                        result['days'].setdefault(day,{})[store] = summary
             self._guard(parent, name, identity, file_fd)
             db.rollback()
             return result
