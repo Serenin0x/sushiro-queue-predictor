@@ -145,8 +145,8 @@ function workspaceRenderOverview(){
  const configured=index.source_months?.sapi_miniapp_gateway?.configured_store_ids||index.configured_store_ids||Object.keys(index.store_names);
  let ids=(Object.keys(all).length?Object.keys(all):configured).filter(id=>(workspaceState.city==='all'||workspaceStoreCity(id)===workspaceState.city)&&(index.store_names[id]||id).toLocaleLowerCase().includes(query));
  ids.sort((a,b)=>(index.store_names[a]||a).localeCompare(index.store_names[b]||b,'zh-CN'));
- const pages=Math.max(1,Math.ceil(ids.length/15));workspaceState.overviewPage=Math.min(workspaceState.overviewPage,pages-1);
- const visible=ids.slice(workspaceState.overviewPage*15,(workspaceState.overviewPage+1)*15);
+ const pages=Math.max(1,Math.ceil(ids.length/18));workspaceState.overviewPage=Math.min(workspaceState.overviewPage,pages-1);
+ const visible=ids.slice(workspaceState.overviewPage*18,(workspaceState.overviewPage+1)*18);
  const signature=JSON.stringify([day,visible,visible.map(id=>all[id]),workspaceHealth?.state,workspaceHealth?.unavailable_store_ids,workspaceState.readError]);
  if(workspaceState.overviewSignature!==signature){
   const focused=document.activeElement?.dataset?.storeId;$('rows').replaceChildren();

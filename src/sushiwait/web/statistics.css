@@ -200,3 +200,8 @@ input:focus-visible,select:focus-visible{outline-offset:1px;box-shadow:0 0 0 4px
 @media(prefers-reduced-motion:reduce){#workspace-filters select,#workspace-filters input,.monitor-date .date-shortcuts button{transition:none}}
 
 .chart-guide-key{display:inline-flex;align-items:center;gap:6px;color:#8a94a1;font-size:11px;margin-left:auto}.chart-guide-key::before{content:'';width:20px;border-top:1px dashed #b4212b}
+
+/* Compact store rows: two columns, with a third only when the content has room. */
+.monitor-list-section{container-type:inline-size}.monitor-store-list{grid-template-columns:1fr;gap:10px}.monitor-store-row{grid-template-columns:minmax(42px,1fr) 62px 68px 16px;grid-template-rows:auto auto;gap:6px 10px;min-height:68px;padding:12px 14px!important;align-content:center;border-radius:4px}.monitor-store-name{display:contents}.monitor-store-name strong{grid-column:1 / 3;grid-row:1;align-self:center;font-size:13px;line-height:1.45;font-weight:500;letter-spacing:0}.monitor-store-name>span{grid-column:1;grid-row:2;font-size:11px;line-height:1.5;align-self:center}.monitor-store-total{grid-column:3;grid-row:1;font-size:13px;text-align:right;align-self:center}.monitor-store-row time{grid-column:2;grid-row:2;font-size:11px;align-self:center;text-align:right}.monitor-store-state{grid-column:3;grid-row:2;font-size:11px;justify-self:end;align-self:center;gap:5px}.monitor-row-arrow{grid-column:4;grid-row:1 / 3;font-size:18px;align-self:center;justify-self:end}.monitor-store-row:hover{transform:none;border-color:#c8d0da!important;background:#fcfafb!important}
+@container(min-width:650px){.monitor-store-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container(min-width:1120px){.monitor-store-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
