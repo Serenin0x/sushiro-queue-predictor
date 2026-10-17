@@ -4,11 +4,12 @@ let now=Date.parse('2026-10-14T04:30:00Z');const requests=[],elements=new Map(),
 class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
 class Node{constructor(){this.value='';this.checked=false;this.textContent='';this.children=[];this.hidden=false;this.disabled=false;this.attrs={};this.classList={add(){},remove(){},toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=[...v];}setAttribute(k,v){this.attrs[k]=v;}focus(){}}
 const $=name=>{if(!elements.has(name))elements.set(name,new Node());return elements.get(name);};
+const removedFilters=new Set(['tickets-city','tickets-store','tickets-period','tickets-from','tickets-to','tickets-kind']);
 const state={section:'prediction',source:'sapi_miniapp_gateway',day:'2026-10-14',storeId:'3014',storeName:'大融城',storeNames:{'3014':'大融城'},queueType:'ordinary',mode:'auto',number:'4045',issued:'11:01',checkedIn:'no',confirmed:true,detail:null,samplingSeconds:180};
 let confirmDelete=true,failDelete=false,listGate=null,serverRecords=[],serverDeleted=[];
 let publicModel=null,archiveIndex={days:{}},forecastInputs=[];
 let waitStores={},forecastCalls=0,forecast={available:false,reason:'insufficient_sparse_trend'};
-const context={window:{confirm:()=>confirmDelete,addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{ticketTiming:require('../src/sushiwait/web/reference-model.js').ticketTiming,arrival:()=>({available:false,state:'waiting'}),trackedForecast:(detail,options,history,advice)=>{forecastCalls++;forecastInputs.push({detail,options,history,advice});return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
+const context={window:{confirm:()=>confirmDelete,addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{ticketTiming:require('../src/sushiwait/web/reference-model.js').ticketTiming,arrival:()=>({available:false,state:'waiting'}),trackedForecast:(detail,options,history,advice)=>{forecastCalls++;forecastInputs.push({detail,options,history,advice});return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:name=>removedFilters.has(name)?null:$(name),createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
  fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});if(body?.action==='list'&&listGate)await listGate;if(body?.action==='delete'&&failDelete)return {ok:false};return {ok:true,json:async()=>path==='/model-advice.json'&&publicModel?publicModel:path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:serverRecords,deleted_record_ids:serverDeleted}:body?.action==='forecast'?{found:true,accepted:true,baseline:body.forecast}:['delete','restore'].includes(body?.action)?{found:true,deleted:body.action==='delete'}:body?{saved:true}:{local_date:state.day,points:[]}};}};
 vm.createContext(context);vm.runInContext(fs.readFileSync('src/sushiwait/web/research-ui.js','utf8'),context);
 const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImmediate(r));
@@ -47,19 +48,17 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  $('store-wait-card').hidden=false;api.notify();await settle();api.notify();await settle();assert(waitRequests().some(r=>r.body.visible===true));
  $('store-wait-card').hidden=true;api.notify();await settle();assert.equal(waitRequests().at(-1).body.visible,false);
  assert(requests.every(r=>!r.path.includes('4045')&&!r.path.includes('1234')&&!r.path.includes(submitted.body.owner_secret)));
- // Database filters use issuance date and the row's own store, not global selection.
+ // The simplified database exposes every store/date/kind; only number search remains.
  state.section='tickets';
- $('tickets-store').value='3004';$('tickets-store').onchange();
- assert(api.filterRecords().every(i=>i.ticket.store_id==='3004'));
- $('tickets-from').value='2026-10-13';$('tickets-from').onchange();
- $('tickets-to').value='2026-10-13';$('tickets-to').onchange();
- assert.equal(api.filterRecords().length,0);
- $('tickets-period').value='all';$('tickets-period').onchange();
- assert(api.filterRecords().length>0);
- $('tickets-store').value='';$('tickets-store').onchange();
- $('tickets-kind').value='record';$('tickets-kind').onchange();
- assert(api.filterRecords().every(i=>i.kind==='record'));
- $('tickets-kind').value='all';$('tickets-kind').onchange();
+ assert(new Set(api.filterRecords().map(i=>i.ticket.store_id)).size>1);
+ assert(new Set(api.filterRecords().map(i=>i.kind)).size>1);
+ assert(api.filterRecords().some(i=>i.ticket.issued_at.startsWith('2026-10-12')));
+ const html=fs.readFileSync('src/sushiwait/web/statistics.html','utf8');
+ for(const id of ['tickets-city','tickets-store','tickets-period','tickets-from','tickets-to','tickets-kind'])assert(!html.includes('id="'+id+'"'));
+ $('tickets-sort').value='asc';$('tickets-sort').onchange();
+ assert(Date.parse(api.filterRecords()[0].ticket.issued_at)<=Date.parse(api.filterRecords().at(-1).ticket.issued_at));
+ $('tickets-sort').value='desc';$('tickets-sort').onchange();
+ assert(Date.parse(api.filterRecords()[0].ticket.issued_at)>=Date.parse(api.filterRecords().at(-1).ticket.issued_at));
  $('tickets-search').value='6200';$('tickets-search').oninput();
  assert.equal(api.filterRecords().length,1);
  $('tickets-search').value='';$('tickets-search').oninput();
@@ -93,10 +92,12 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  failDelete=false;
  let finishList;listGate=new Promise(r=>finishList=r);serverRecords=[{record_id:target.id,reported:target.ticket,result:null,received_at:target.createdAt}];
  const pendingList=api.refreshRecords();await settle();
+ assert.equal($('research-refresh').disabled,true);assert.equal($('research-refresh').attrs['aria-busy'],'true');
  await deleteControl().onclick();
  assert(!api.filterRecords().some(i=>i.id===target.id));assert(!JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.some(i=>i.id===target.id));
  assert(JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).deleted_ids.includes(target.id));
  finishList();listGate=null;await pendingList;assert(!api.filterRecords().some(i=>i.id===target.id),'stale list must not resurrect a deleted record');
+ assert.equal($('research-refresh').disabled,false);assert.equal($('research-refresh').attrs['aria-busy'],'false');
  assert.equal($('ticket-delete-undo').hidden,false);await $('ticket-delete-undo').onclick();assert(api.filterRecords().some(i=>i.id===target.id));assert(requests.some(r=>r.body?.action==='restore'));
  // A deletion made in another tab is synchronized from the owner-only list.
  serverRecords=[];serverDeleted=[target.id];await api.refreshRecords();assert(!api.filterRecords().some(i=>i.id===target.id));

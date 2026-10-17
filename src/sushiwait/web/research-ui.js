@@ -6,7 +6,7 @@
  const deletedIds=new Set();
  const waitClient=random(16);
  const cards=new Map(),leases=new Map(),histories=new Map(),tableRows=new Map();
- const tableState={page:0,size:10,city:'all',store:'',from:'',to:'',kind:'all',query:'',sort:'desc'};
+ const tableState={page:0,size:10,query:'',sort:'desc'};
  function random(bytes){return [...crypto.getRandomValues(new Uint8Array(bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');}
  function secure(){return location.protocol==='https:'||['127.0.0.1','localhost'].includes(location.hostname);}
  function owner(){if(memoryOwner)return memoryOwner;try{const v=localStorage.getItem('sushiwait.research-owner.v1');if(/^[0-9a-f]{64}$/.test(v||''))return memoryOwner=v;}catch(_){}memoryOwner=random(32);try{localStorage.setItem('sushiwait.research-owner.v1',memoryOwner);}catch(_){}return memoryOwner;}
@@ -20,6 +20,7 @@
  function persist(){try{localStorage.setItem(storageKey,JSON.stringify({schema_version:1,deleted_ids:[...deletedIds].slice(-5000),items:items.slice(0,100).map(i=>({id:i.id,ticket:i.ticket,source:i.source,storeName:i.storeName,mode:i.mode,kind:i.kind,follow:i.follow,record:i.record,saved:i.saved,createdAt:i.createdAt,result:i.result,arrived:i.arrived,lastAt:i.lastAt,firstForecasts:i.firstForecasts,forecastAcks:i.forecastAcks,forecastRejected:i.forecastRejected,serverResult:i.serverResult}))}));}catch(_){} }
  function restore(){try{const v=JSON.parse(localStorage.getItem(storageKey)||'{}');if(v.schema_version!==1||!Array.isArray(v.items))return;for(const id of v.deleted_ids||[])if(/^[0-9a-f]{32}$/.test(id))deletedIds.add(id);for(const i of v.items.slice(0,100)){if(deletedIds.has(i.id)||!/^[0-9a-f]{32}$/.test(i.id)||!['prediction','record'].includes(i.kind)||!['auto','algorithm','nonthinking','thinking'].includes(i.mode)||!['sapi_miniapp_gateway','crm_remote_v1_1'].includes(i.source))continue;const t=i.ticket;const d=new Date(Date.parse(t.issued_at)+28800000).toISOString();makeTicket({storeId:t.store_id,queueType:t.queue_type,checkedIn:t.checked_in===null?'unknown':t.checked_in?'yes':'no'},d.slice(0,10),d.slice(11,16),t.number,t.entry_mode);items.push({...i,nextAt:0,result:i.result&&typeof i.result.available==='boolean'?i.result:null,arrived:i.arrived?.policy===root.SushiWaitReference?.ARRIVAL_POLICY?i.arrived:null,needsRecheck:i.kind==='prediction'});}}catch(_){} }
  function node(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
+ function refreshButton(button,busy,idle,label='正在更新'){button.disabled=Boolean(busy);button.setAttribute('aria-busy',String(Boolean(busy)));button.textContent=busy?label:idle;}
  function clock(at){return Number.isFinite(Date.parse(at))?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(at)):'—';}
  function issuedLabel(at){return new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(at));}
  const reasons={ticket_precedes_issue:'取号前的展示已超过此号，正在核对数据',insufficient_sparse_trend:'正在积累有效趋势',no_current_sample:'等待有效叫号数据',stale_sample:'等待下一次采集更新',awaiting_post_issue_sample:'等待取号后的观测',ticket_cycle_uncertain:'号码轮次暂时无法确认',awaiting_arrival_evidence:'已接近，等待到号证据',today_only:'这张号码已不在今天的预测范围',archive_unavailable:'没有对应日期的观测',unsupported_queue:'请选择堂食或预约队列',arrival_complete:'已到号',median_upper_unknown:'历史样本尚未覆盖这段等待，需要新的叫号趋势',beyond_supported_horizon:'当前趋势推算需超过 6 小时，暂不能给出可靠时间',forecast_horizon_unsupported:'当前趋势暂不能形成有效等待区间',scope_mismatch:'门店或数据来源不匹配',future_or_invalid_clock:'数据时间异常，请稍后刷新',issue_time_required:'请核对取号日期和时间',sampling_density_unsupported:'观测数量异常，正在核对'};
@@ -30,7 +31,7 @@
   const e=t.prediction_error_minutes;if(e){const low=Math.floor(e.lower),high=Math.ceil(e.upper);error=low===high?(low===0?'约 0 分钟':`${low<0?'提前':'滞后'} ${Math.abs(low)} 分钟`):high<=0?`提前 ${Math.abs(high)}–${Math.abs(low)} 分钟`:low>=0?`滞后 ${low}–${high} 分钟`:`提前 ${Math.abs(low)} 至滞后 ${high} 分钟`;}
   return {timing:t,call,wait:done?minuteRange(t.wait_minutes):'—',error};}
  function card(item){if(cards.has(item.id))return cards.get(item.id);const el=node('article','card ticket-result-card'),head=node('div','ticket-result-heading'),title=node('div'),number=node('strong','ticket-result-number',item.ticket.number),store=node('h3','',item.storeName),kind=node('span','ticket-kind',item.kind==='record'?'记录':'预测');title.append(store,number);head.append(title,kind);const meta=node('p','ticket-meta',`${issuedLabel(item.ticket.issued_at)} 取号　${item.ticket.queue_type==='ordinary'?'堂食':'预约'}`),body=node('div','ticket-estimate'),primary=node('strong','ticket-remaining'),range=node('p','ticket-range'),status=node('p','ticket-result-status'),tools=node('div','ticket-result-tools');body.append(primary,range);const evidence=node('details','ticket-evidence'),evidenceTitle=node('summary','','计算依据'),evidenceText=node('p','');evidence.append(evidenceTitle,evidenceText);const outcome=node('dl','ticket-outcome'),callTime=node('dd'),waitTime=node('dd'),predictionError=node('dd'),baselineTime=node('dd'),baselineLabel=node('dt','','预估基准'),errorLabel=node('dt','','首次留存预测误差');outcome.append(node('dt','','到号时间'),callTime,node('dt','','等待时长'),waitTime,baselineLabel,baselineTime,errorLabel,predictionError);const result={el,primary,range,status,kind,tools,evidence,evidenceText,outcome,callTime,waitTime,predictionError,errorLabel,baselineTime,baselineLabel};
-  if(item.kind==='prediction'){const refresh=node('button','button-quiet','刷新预测');refresh.type='button';refresh.onclick=()=>refreshItem(item,true);result.refresh=refresh;const follow=node('button','button-quiet');follow.type='button';follow.onclick=()=>{item.follow=!item.follow;item.nextAt=0;persist();updateCard(item);notify();};result.follow=follow;tools.append(refresh,follow);}
+  if(item.kind==='prediction'){const refresh=node('button','button-quiet ticket-refresh','刷新预测');refresh.type='button';refresh.onclick=()=>refreshItem(item,true);result.refresh=refresh;const follow=node('button','button-quiet');follow.type='button';follow.onclick=()=>{item.follow=!item.follow;item.nextAt=0;persist();updateCard(item);notify();};result.follow=follow;tools.append(refresh,follow);}
   tools.append(deleteButton(item));
   if(item.record&&!item.saved){const retry=node('button','button-quiet','重试录入');retry.type='button';retry.onclick=async()=>{retry.disabled=true;await saveItem(item);retry.disabled=false;updateCard(item);};result.retry=retry;tools.append(retry);}
   el.append(head,meta,body,outcome,status,evidence,tools);cards.set(item.id,result);return result;
@@ -51,48 +52,40 @@
   c.evidence.hidden=item.kind==='record';const a=item.result?.arrival||item.arrived,r=item.result;
   c.el.classList.toggle('ticket-model-pending',item.modelState==='computing'&&!item.result?.ai_participated);
   c.evidenceText.textContent=a?.reason==='ticket_precedes_issue'?`${clock(a.prior_sample_at)} 已显示 ${a.prior_display_numbers.join('、')}，早于填写的取号时间；当前不能据此估算这张票。`:arrived?`${(item.serverResult?.display_numbers||item.arrived?.display_numbers||[]).join('、')}。${t.status==='observed'?'号码出现在前两位':'三个展示号码全部超过本人号'}，属于展示到号参考。`:r?.available?`${clock(r.sample_at)} 首位 ${r.reference}，相差 ${r.position_difference} 个号码。近 ${Math.round(r.continuous_minutes)} 分钟 ${r.sample_count} 个观测，历史 ${r.history?.selected_days||0} 天。${r.provisional?'初步估计，等待较长或样本较少。':''}${r.history_censored_fallback?'历史到号上界不足，本次采用当天趋势。':''}${r.ai_participated?'模型按当前趋势调整情景权重。':''}`:reasons[r?.reason]||'正在读取有效观测';
-  if(c.refresh){c.refresh.disabled=Boolean(item.busy);c.refresh.textContent=item.busy?'正在更新':'刷新预测';c.follow.textContent=item.follow?'停止跟踪':'持续跟踪';c.follow.setAttribute('aria-pressed',String(Boolean(item.follow)));c.follow.disabled=Boolean(arrived)||t.status==='missing'||new Date(Date.parse(item.ticket.issued_at)+28800000).toISOString().slice(0,10)!==config.today();}
+  if(c.refresh){refreshButton(c.refresh,item.busy,'刷新预测');c.follow.textContent=item.follow?'停止跟踪':'持续跟踪';c.follow.setAttribute('aria-pressed',String(Boolean(item.follow)));c.follow.disabled=Boolean(arrived)||t.status==='missing'||new Date(Date.parse(item.ticket.issued_at)+28800000).toISOString().slice(0,10)!==config.today();}
   if(c.retry)c.retry.hidden=Boolean(item.saved);c.el.classList.toggle('ticket-arrived',Boolean(arrived));updateTableRow(item);
  }
  function ticketDate(item){return new Date(Date.parse(item.ticket.issued_at)+28800000).toISOString().slice(0,10);}
- function filteredItems(){return items.filter(i=>(tableState.city==='all'||(config.cityById?.[i.ticket.store_id]||'城市待核')===tableState.city)&&(!tableState.store||i.ticket.store_id===tableState.store)&&(!tableState.from||ticketDate(i)>=tableState.from)&&(!tableState.to||ticketDate(i)<=tableState.to)&&(tableState.kind==='all'||i.kind===tableState.kind)&&(!tableState.query||i.ticket.number.includes(tableState.query))).sort((a,b)=>(Date.parse(a.ticket.issued_at)-Date.parse(b.ticket.issued_at)||a.id.localeCompare(b.id))*(tableState.sort==='asc'?1:-1));}
+ function filteredItems(){return items.filter(i=>!tableState.query||i.ticket.number.includes(tableState.query)).sort((a,b)=>(Date.parse(a.ticket.issued_at)-Date.parse(b.ticket.issued_at)||a.id.localeCompare(b.id))*(tableState.sort==='asc'?1:-1));}
  function updateTableRow(item){const row=tableRows.get(item.id);if(!row)return;const c=card(item),info=timingText(item);
   row.status.textContent=c.primary.textContent;row.sub.textContent=item.kind==='prediction'?c.range.textContent:item.saved?'已录入系统':'等待保存';
   row.call.textContent=info.call;row.wait.textContent=info.wait==='—'?'':`等待 ${info.wait}`;row.error.textContent=info.error;
   row.follow.textContent=item.kind==='record'?'—':item.follow?'自动跟踪中':'手动刷新';
-  if(row.refresh){row.refresh.disabled=Boolean(item.busy);row.refresh.textContent=item.busy?'更新中':'刷新预测';}
+  if(row.refresh)refreshButton(row.refresh,item.busy,'刷新预测');
  }
- function ticketPickers(){if(!$('tickets-city'))return;const cities=[...new Set(items.map(i=>config.cityById?.[i.ticket.store_id]||'城市待核'))].sort((a,b)=>a.localeCompare(b,'zh-CN'));if(tableState.city!=='all'&&!cities.includes(tableState.city))tableState.city='all';
-  const options=(id,rows,value)=>{const el=$(id);el.replaceChildren();for(const [v,label]of rows){const o=node('option','',label);o.value=v;el.append(o);}el.value=value;};
-  options('tickets-city',[['all','全部城市'],...cities.map(c=>[c,c])],tableState.city);
-  const names=new Map(items.filter(i=>tableState.city==='all'||(config.cityById?.[i.ticket.store_id]||'城市待核')===tableState.city).map(i=>[i.ticket.store_id,i.storeName]));
-  if(tableState.store&&!names.has(tableState.store))tableState.store='';
-  options('tickets-store',[['','全部门店'],...[...names].sort((a,b)=>a[1].localeCompare(b[1],'zh-CN'))],tableState.store);
- }
- function renderItems(){const target=$('my-tickets');target.replaceChildren();tableRows.clear();ticketPickers();
+ function renderItems(){const target=$('my-tickets');target.replaceChildren();tableRows.clear();
   const filtered=filteredItems(),pages=Math.max(1,Math.ceil(filtered.length/tableState.size));tableState.page=Math.min(tableState.page,pages-1);
   const table=node('table','ticket-database'),thead=node('thead'),header=node('tr');for(const name of ['号码 / 门店','取号时间','类型 / 模型','当前状态','到号与等待','预估误差','跟踪','操作'])header.append(node('th','',name));thead.append(header);table.append(thead);const tbody=node('tbody');
   for(const item of filtered.slice(tableState.page*tableState.size,(tableState.page+1)*tableState.size)){
    updateCard(item);const row=node('tr'),identity=node('td'),number=node('button','ticket-row-number',item.ticket.number);number.type='button';number.onclick=()=>openDetail(item);identity.append(number,node('span','ticket-row-store',item.storeName));
    const date=node('td','ticket-row-date',issuedLabel(item.ticket.issued_at)),kind=node('td'),status=node('td'),primary=node('strong','ticket-row-state'),sub=node('span','ticket-row-sub'),outcome=node('td','ticket-row-outcome'),call=node('span'),wait=node('span','ticket-row-sub'),error=node('td','ticket-row-error'),follow=node('td','ticket-row-follow'),actions=node('td','ticket-row-actions');
    kind.append(node('span','',item.kind==='record'?'记录':'预测'),node('span','ticket-row-sub',item.kind==='record'?(item.ticket.queue_type==='ordinary'?'堂食':'预约'):({auto:'自动融合',algorithm:'算法',thinking:'Flash 思考',nonthinking:'Flash 非思考'})[item.mode]));status.append(primary,sub);outcome.append(call,wait);
-   let refresh;if(item.kind==='prediction'){refresh=node('button','button-quiet','刷新预测');refresh.type='button';refresh.onclick=()=>refreshItem(item,true);actions.append(refresh);}
+   let refresh;if(item.kind==='prediction'){refresh=node('button','button-quiet ticket-refresh','刷新预测');refresh.type='button';refresh.onclick=()=>refreshItem(item,true);actions.append(refresh);}
    const more=node('button','button-quiet','详情');more.type='button';more.setAttribute('aria-label',item.ticket.number+' 号详情');more.onclick=()=>openDetail(item);actions.append(more,deleteButton(item));row.append(identity,date,kind,status,outcome,error,follow,actions);tbody.append(row);tableRows.set(item.id,{status:primary,sub,call,wait,error,follow,refresh});updateTableRow(item);
   }
   table.append(tbody);target.append(table);
-  if(!filtered.length){const empty=node('div','ticket-table-empty',items.length?'没有符合筛选的号码':'还没有号码记录');target.append(empty);}
-  $('my-ticket-count').textContent=`共 ${items.length} 条，当前筛选 ${filtered.length} 条`;
+  if(!filtered.length){const empty=node('div','ticket-table-empty',items.length?'没有找到这个号码':'还没有号码记录');target.append(empty);}
+  $('my-ticket-count').textContent=tableState.query?`共 ${items.length} 条，找到 ${filtered.length} 条`:`共 ${items.length} 条`;
   if($('tickets-page-note'))$('tickets-page-note').textContent=`第 ${tableState.page+1} / ${pages} 页`;
   if($('tickets-prev'))$('tickets-prev').disabled=tableState.page===0;
   if($('tickets-next'))$('tickets-next').disabled=tableState.page>=pages-1;
  }
  function openDetail(item){selected=item.id;updateCard(item);const dialog=$('ticket-detail-dialog');$('ticket-detail-body').replaceChildren(card(item).el);if(dialog.showModal)dialog.showModal();else dialog.hidden=false;}
- function tableSetup(){if(!$('tickets-city'))return;
-  for(const [id,key]of [['tickets-city','city'],['tickets-store','store'],['tickets-from','from'],['tickets-to','to'],['tickets-kind','kind'],['tickets-sort','sort']])$(id).onchange=()=>{tableState[key]=$(id).value;if(key==='city')tableState.store='';if(key==='from'||key==='to')$('tickets-period').value='custom';tableState.page=0;renderItems();};
+ function tableSetup(){if(!$('tickets-search'))return;
+  $('tickets-sort').onchange=()=>{tableState.sort=$('tickets-sort').value;tableState.page=0;renderItems();};
   $('tickets-search').oninput=()=>{tableState.query=$('tickets-search').value.trim();tableState.page=0;renderItems();};
   $('tickets-size').onchange=()=>{tableState.size=Number($('tickets-size').value)||10;tableState.page=0;renderItems();};
   $('tickets-prev').onclick=()=>{tableState.page=Math.max(0,tableState.page-1);renderItems();};$('tickets-next').onclick=()=>{tableState.page++;renderItems();};
-  $('tickets-period').onchange=()=>{const value=$('tickets-period').value;if(value==='custom')return;tableState.to=value==='all'?'':config.today();tableState.from=value==='all'?'':new Date(Date.parse(config.today()+'T00:00:00Z')-(Number(value)-1)*86400000).toISOString().slice(0,10);$('tickets-from').value=tableState.from;$('tickets-to').value=tableState.to;tableState.page=0;renderItems();};
   $('ticket-detail-close').onclick=()=>{$('ticket-detail-dialog').close?.();$('ticket-detail-dialog').hidden=false;};
   $('tickets-export').onclick=()=>{const lines=[['门店','号码','取号时间','队列','类型','模型','保存状态','到号时间','等待时长','首次留存预测误差'],...filteredItems().map(i=>[i.storeName,i.ticket.number,issuedLabel(i.ticket.issued_at),i.ticket.queue_type,i.kind,i.mode,i.saved?'已保存':'本机',timingText(i).call,timingText(i).wait,timingText(i).error])];const safe=v=>'"'+String(v).replace(/^[=+@-]/,"'").replaceAll('"','""')+'"';const blob=new Blob(['\ufeff'+lines.map(r=>r.map(safe).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=node('a');a.href=url;a.download='sushiwait-my-tickets.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  }
@@ -144,7 +137,7 @@
  async function loadWait(){if(!config||config.getState().section!=='prediction'||$('store-wait-card')?.hidden||document.visibilityState!=='visible'||waitBusy||Date.now()-waitAt<30000)return;waitBusy=true;waitAt=Date.now();try{waitData=await get('/wait-reference.json');waitAdvice=await get('/model-advice.json');acceptModelScope(waitAdvice);}catch(_){}finally{waitBusy=false;renderWait();}}
  async function records(force=false){
   if(!secure()||listBusy||document.visibilityState!=='visible'||!['tickets','intelligence'].includes(config.getState().section)||!force&&Date.now()-lastList<60000)return;
-  listBusy=true;lastList=Date.now();const revision=recordRevision;
+  listBusy=true;lastList=Date.now();const revision=recordRevision;refreshButton($('research-refresh'),true,'更新记录');
   try{
    const all=[],removed=new Set();
    for(let page=1;page<=10;page++){const value=await post('/api/v1/research/tickets',{action:'list',owner_secret:owner(),page,page_size:500});all.push(...value.records);for(const id of value.deleted_record_ids||[])removed.add(id);sampleReadState=value.has_more&&page===10?'partial':'ready';if(!value.has_more)break;}
@@ -153,7 +146,7 @@
    for(const id of removed){deletedIds.add(id);const item=items.find(i=>i.id===id);if(item)forgetItem(item);}
    for(const record of all){if(deletedIds.has(record.record_id))continue;let item=items.find(i=>i.id===record.record_id);if(!item){const t=record.reported;item={id:record.record_id,ticket:t,source:'sapi_miniapp_gateway',storeName:config.getState().storeNames?.[t.store_id]||t.store_id,mode:t.prediction_mode||'algorithm',kind:t.record_kind||(t.entry_mode==='live'?'prediction':'record'),record:true,saved:true,follow:false,createdAt:record.received_at};items.push(item);}item.saved=true;item.serverResult=record.result;item.firstForecasts={...item.firstForecasts,...record.reported.first_forecasts};item.forecastAcks||={};for(const mode of Object.keys(record.reported.first_forecasts||{}))item.forecastAcks[mode]=true;if(record.result?.result_available||record.timing?.status==='missing'){item.follow=false;item.modelUntil=0;release(item.id);}syncForecasts(item);}
    persist();renderItems();root.SushiWaitAnalytics?.localChanged?.();
-  }catch(_){sampleReadState='failed';$('my-ticket-status').textContent='服务器记录暂时无法读取';root.SushiWaitAnalytics?.localChanged?.();}finally{listBusy=false;}
+  }catch(_){sampleReadState='failed';$('my-ticket-status').textContent='服务器记录暂时无法读取';root.SushiWaitAnalytics?.localChanged?.();}finally{listBusy=false;refreshButton($('research-refresh'),false,'更新记录');}
  }
  function notify(){if(!config)return;root.SushiWaitScreenshots?.directoryChanged();sendPresence();renderWait();loadWait();if(config.getState().section==='intelligence')records();if(config.getState().section!=='tickets'||document.visibilityState!=='visible')return;records();for(const item of items){if(tableRows.has(item.id)||cards.has(item.id))updateCard(item);if(item.kind==='prediction'&&!item.arrived?.available&&(item.needsRecheck||(item.follow&&Date.now()>=item.nextAt)||(item.modelUntil>Date.now()&&Date.now()-(item.lastAt||0)>=30000)))refreshItem(item);}}
  function tab(record){$('ticket-predict-form').hidden=record;$('research-form').hidden=!record;for(const name of ['predict','record']){$('entry-tab-'+name).setAttribute('aria-selected',String(record===(name==='record')));$('entry-tab-'+name).tabIndex=record===(name==='record')?0:-1;}}
