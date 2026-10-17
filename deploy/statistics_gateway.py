@@ -229,8 +229,11 @@ class StatisticsGateway:
                         if status != 200:
                             raise ValueError('saved_archive_unavailable')
                         return json.loads(body)
-                    research.update_labels(read_day, record_id=value['record_id'])
+                    if saved.get('saved'):
+                        research.update_labels(read_day, record_id=value['record_id'])
                     return saved
+                if value.get('action') in {'delete','restore'} and set(value)=={'schema_version','action','record_id','owner_secret'}:
+                    return research.set_deleted(value['record_id'],value['owner_secret'],deleted=value['action']=='delete')
                 if value.get('action')=='list' and {'schema_version','action','owner_secret'}<=set(value) and not set(value)-{'schema_version','action','owner_secret','page','page_size','filters'}:
                     return research.query_records(value['owner_secret'],page=value.get('page',1),page_size=value.get('page_size',100),filters=value.get('filters'))
                 raise ValueError('invalid_research_action')
@@ -238,6 +241,8 @@ class StatisticsGateway:
                 research.close()
         async with self.research_lock:
             result = await asyncio.to_thread(process)
+        if value.get('action') in {'delete','restore'}:
+            self.cache.pop('/wait-reference.json',None)
         return 200, json.dumps(result,ensure_ascii=False,allow_nan=False).encode(), 'application/json'
 
     async def analysis_request(self, value):

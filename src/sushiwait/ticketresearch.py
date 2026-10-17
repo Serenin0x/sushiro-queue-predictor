@@ -25,6 +25,7 @@ _CREATE = (
     'CREATE TABLE viewers(client_id TEXT PRIMARY KEY,store_id TEXT NOT NULL,queue TEXT NOT NULL,'
     'mode TEXT NOT NULL,expires_at TEXT NOT NULL)',
 )
+_ACTIVE = "json_extract(reported,'$.deleted_at') IS NULL"
 
 
 def clock():
@@ -104,13 +105,36 @@ class TicketResearch:
             before = json.loads(previous[1])
             if previous[0] != owner or any(before[k] != reported[k] for k in ('store_id','queue_type','number','issued_at')):
                 raise ValueError('research_identity_conflict')
-            return {'record_id': record_id, 'saved': True, 'duplicate': True}
+            return {'record_id': record_id, 'saved': not bool(before.get('deleted_at')),
+                    'duplicate': True, **({'deleted': True} if before.get('deleted_at') else {})}
         if self.db.execute('SELECT count(*) FROM tickets').fetchone()[0] >= 5000:
             raise ValueError('research_database_full')
         with self.db:
             self.db.execute('INSERT INTO tickets VALUES(?,?,?,NULL,?,?)',
                             [record_id, owner, json.dumps(reported), now.isoformat(), now.isoformat()])
         return {'record_id': record_id, 'saved': True, 'duplicate': False}
+
+    def set_deleted(self, record_id, secret, *, deleted=True, now=None):
+        """Owner-only reversible removal; stale submissions cannot revive it."""
+        now = now or clock()
+        owner = owner_hash(secret)
+        if type(record_id) is not str or not re.fullmatch('[0-9a-f]{32}', record_id) or type(deleted) is not bool:
+            raise ValueError('invalid_research_identity')
+        with self.db:
+            row = self.db.execute('SELECT reported FROM tickets WHERE record_id=? AND owner_hash=?',
+                                  [record_id, owner]).fetchone()
+            if row is None:
+                # Missing and another owner's records are indistinguishable.
+                return {'record_id':record_id, 'deleted':deleted, 'found':False}
+            reported = json.loads(row[0])
+            if deleted:
+                reported.setdefault('deleted_at', now.isoformat())
+                self.db.execute('DELETE FROM viewers WHERE client_id=?', [record_id])
+            else:
+                reported.pop('deleted_at', None)
+            self.db.execute('UPDATE tickets SET reported=?,updated_at=? WHERE record_id=? AND owner_hash=?',
+                            [json.dumps(reported),now.isoformat(),record_id,owner])
+        return {'record_id':record_id, 'deleted':deleted, 'found':True}
 
     def own_records(self, secret):
         return self.query_records(secret)['records']
@@ -122,7 +146,7 @@ class TicketResearch:
                 or not 1 <= page_size <= 500 or type(filters) is not dict
                 or set(filters) - {'store_id', 'from', 'to'}):
             raise ValueError('invalid_research_page')
-        clauses, values = ['owner_hash=?'], [owner_hash(secret)]
+        clauses, values = ['owner_hash=?', _ACTIVE], [owner_hash(secret)]
         if filters.get('store_id'):
             if type(filters['store_id']) is not str or not re.fullmatch('[1-9][0-9]{0,9}', filters['store_id']):
                 raise ValueError('invalid_research_filter')
@@ -142,6 +166,8 @@ class TicketResearch:
             ' ORDER BY received_at DESC,record_id DESC LIMIT ? OFFSET ?', values+[page_size,(page-1)*page_size]).fetchall()
         return {'records':[{'record_id':r[0], 'reported':json.loads(r[1]),
                     'result':json.loads(r[2]) if r[2] else None, 'received_at':r[3]} for r in rows],
+                'deleted_record_ids':[r[0] for r in self.db.execute(
+                    'SELECT record_id FROM tickets WHERE owner_hash=? AND NOT ('+_ACTIVE+')', [owner_hash(secret)])],
                 'total':total, 'page':page, 'page_size':page_size, 'has_more':page*page_size<total}
 
     def presence(self, value, *, now=None):
@@ -154,7 +180,9 @@ class TicketResearch:
         with self.db:
             self.db.execute('DELETE FROM viewers WHERE expires_at<=?', [now.isoformat()])
             self.db.execute('DELETE FROM viewers WHERE client_id=?', [value['client_id']])
-            if value['visible'] and value['mode'] != 'algorithm':
+            deleted = self.db.execute('SELECT 1 FROM tickets WHERE record_id=? AND NOT ('+_ACTIVE+')',
+                                      [value['client_id']]).fetchone()
+            if value['visible'] and value['mode'] != 'algorithm' and not deleted:
                 if self.db.execute('SELECT count(*) FROM viewers').fetchone()[0] >= 64:
                     raise ValueError('prediction_viewer_capacity')
                 self.db.execute('INSERT INTO viewers VALUES(?,?,?,?,?)', [value['client_id'],value['store_id'],
@@ -171,8 +199,8 @@ class TicketResearch:
     def update_labels(self, read_day, *, now=None, record_id=None):
         now = now or clock()
         cache, changed = {}, 0
-        rows = (self.db.execute('SELECT record_id,reported,result FROM tickets WHERE record_id=?',[record_id]).fetchall()
-                if record_id is not None else self.db.execute('SELECT record_id,reported,result FROM tickets LIMIT 5000').fetchall())
+        rows = (self.db.execute('SELECT record_id,reported,result FROM tickets WHERE record_id=? AND '+_ACTIVE,[record_id]).fetchall()
+                if record_id is not None else self.db.execute('SELECT record_id,reported,result FROM tickets WHERE '+_ACTIVE+' LIMIT 5000').fetchall())
         for identity, raw, previous in rows:
             old = json.loads(previous) if previous else None
             if old and old.get('result_available') and old.get('policy') == ARRIVAL_POLICY:
@@ -208,7 +236,7 @@ class TicketResearch:
         from .calendar import date_features
         current = date_features(now.isoformat(), as_of=now.isoformat())
         groups, seen = {}, set()
-        for raw, result in self.db.execute('SELECT reported,result FROM tickets WHERE result IS NOT NULL'):
+        for raw, result in self.db.execute('SELECT reported,result FROM tickets WHERE result IS NOT NULL AND '+_ACTIVE):
             reported, label = json.loads(raw), json.loads(result)
             if not label.get('result_available') or 'number_reversal' in label.get('quality_flags', []):
                 continue

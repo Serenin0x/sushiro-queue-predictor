@@ -5,9 +5,10 @@ class Clock extends Date{constructor(...args){super(...(args.length?args:[now]))
 class Node{constructor(){this.value='';this.checked=false;this.textContent='';this.children=[];this.hidden=false;this.disabled=false;this.attrs={};this.classList={add(){},remove(){},toggle(){}};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=[...v];}setAttribute(k,v){this.attrs[k]=v;}focus(){}}
 const $=name=>{if(!elements.has(name))elements.set(name,new Node());return elements.get(name);};
 const state={section:'prediction',source:'sapi_miniapp_gateway',day:'2026-10-14',storeId:'3014',storeName:'大融城',storeNames:{'3014':'大融城'},queueType:'ordinary',mode:'auto',number:'4045',issued:'11:01',checkedIn:'no',confirmed:true,detail:null,samplingSeconds:180};
+let confirmDelete=true,failDelete=false,listGate=null,serverRecords=[],serverDeleted=[];
 let waitStores={},forecastCalls=0,forecast={available:false,reason:'insufficient_sparse_trend'};
-const context={window:{addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{arrival:()=>({available:false,state:'waiting'}),trackedForecast:()=>{forecastCalls++;return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
- fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});return {ok:true,json:async()=>path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:[]}:body?{saved:true}:{local_date:state.day,points:[]}};}};
+const context={window:{confirm:()=>confirmDelete,addEventListener:(name,fn)=>events[name]=fn,SushiWaitReference:{arrival:()=>({available:false,state:'waiting'}),trackedForecast:()=>{forecastCalls++;return forecast;},storeWait:()=>({available:false})}},location:{protocol:'https:',hostname:'124.222.57.236'},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},crypto:require('node:crypto').webcrypto,Uint8Array,Date:Clock,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,
+ fetch:async(path,options)=>{const body=options?.body?JSON.parse(options.body):null;requests.push({path,body});if(body?.action==='list'&&listGate)await listGate;if(body?.action==='delete'&&failDelete)return {ok:false};return {ok:true,json:async()=>path==='/wait-reference.json'?{stores:waitStores}:body?.action==='list'?{records:serverRecords,deleted_record_ids:serverDeleted}:['delete','restore'].includes(body?.action)?{found:true,deleted:body.action==='delete'}:body?{saved:true}:{local_date:state.day,points:[]}};}};
 vm.createContext(context);vm.runInContext(fs.readFileSync('src/sushiwait/web/research-ui.js','utf8'),context);
 const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImmediate(r));
 (async()=>{
@@ -80,5 +81,29 @@ const api=context.window.SushiWaitResearch,settle=async()=>new Promise(r=>setImm
  sample.serverResult.quality_flags=['number_reversal'];
  assert.equal(api.recordSummary('2026-10-01','2026-10-31','ordinary')['3004'].completed,summary['3004'].completed-1);
  assert(!JSON.stringify(summary).includes('issued_at'));
+
+ // Cancel, server failure, delete, stale list and undo exercise the real controls.
+ const buttons=()=>{const out=[];function walk(n){if(n.attrs?.['aria-label']?.startsWith('删除 '))out.push(n);for(const c of n.children||[])walk(c);}walk($('my-tickets'));return out;};
+ const target=api.filterRecords().find(i=>i.saved&&i.ticket.store_id==='3004');
+ const deleteControl=()=>buttons().find(b=>b.attrs['aria-label']==='删除 '+target.ticket.number+' 号记录');
+ const deletes=()=>requests.filter(r=>r.body?.action==='delete');
+ confirmDelete=false;const count=deletes().length;await deleteControl().onclick();assert.equal(deletes().length,count);assert(api.filterRecords().some(i=>i.id===target.id));
+ confirmDelete=true;failDelete=true;await deleteControl().onclick();assert(api.filterRecords().some(i=>i.id===target.id));assert.match($('my-ticket-status').textContent,/删除失败/);
+ failDelete=false;
+ let finishList;listGate=new Promise(r=>finishList=r);serverRecords=[{record_id:target.id,reported:target.ticket,result:null,received_at:target.createdAt}];
+ const pendingList=api.refreshRecords();await settle();
+ await deleteControl().onclick();
+ assert(!api.filterRecords().some(i=>i.id===target.id));assert(!JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).items.some(i=>i.id===target.id));
+ assert(JSON.parse(storage.get('sushiwait.submitted-tickets.v1')).deleted_ids.includes(target.id));
+ finishList();listGate=null;await pendingList;assert(!api.filterRecords().some(i=>i.id===target.id),'stale list must not resurrect a deleted record');
+ assert.equal($('ticket-delete-undo').hidden,false);await $('ticket-delete-undo').onclick();assert(api.filterRecords().some(i=>i.id===target.id));assert(requests.some(r=>r.body?.action==='restore'));
+ // A deletion made in another tab is synchronized from the owner-only list.
+ serverRecords=[];serverDeleted=[target.id];await api.refreshRecords();assert(!api.filterRecords().some(i=>i.id===target.id));
+ // Browser-only records use the same UI without sending private delete requests.
+ await api.submitEntry({...newFields,number:'6800'},{kind:'prediction',mode:'algorithm',record:false,follow:false});
+ const local=api.filterRecords().find(i=>!i.record);const beforeLocal=deletes().length;
+ await buttons().find(b=>b.attrs['aria-label']==='删除 '+local.ticket.number+' 号记录').onclick();
+ assert.equal(deletes().length,beforeLocal);assert(!api.filterRecords().some(i=>i.id===local.id));
+ assert(requests.every(r=>!r.path.includes(submitted.body.owner_secret)));
  console.log('explicit submission, unavailable forecast recording, manual/continuous modes, tab switching, hidden leases and HTTPS privacy passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

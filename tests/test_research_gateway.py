@@ -48,3 +48,18 @@ class ResearchGatewayTests(unittest.TestCase):
         v={'schema_version':1,'client_id':'a'*32,'store_id':'3014','queue_type':'ordinary','mode':'thinking','visible':True}
         self.assertEqual(self.request('/api/v1/prediction/presence',v)[0]['status'],200)
         v['number']='4045';self.assertEqual(self.request('/api/v1/prediction/presence',v)[0]['status'],400)
+
+    def test_delete_restore_and_wrong_owner_through_private_post_only(self):
+        self.request('/api/v1/research/tickets',self.submission())
+        action={'schema_version':1,'action':'delete','record_id':'a'*32,'owner_secret':'b'*64}
+        self.assertEqual(self.request('/api/v1/research/tickets',action,origin=b'https://example.com')[0]['status'],400)
+        other=self.request('/api/v1/research/tickets',{**action,'owner_secret':'c'*64})
+        self.assertFalse(json.loads(other[1]['body'])['found'])
+        deleted=self.request('/api/v1/research/tickets',action)
+        self.assertTrue(json.loads(deleted[1]['body'])['deleted'])
+        records=self.request('/api/v1/research/tickets',{'schema_version':1,'action':'list','owner_secret':'b'*64})
+        self.assertEqual(json.loads(records[1]['body'])['total'],0)
+        self.assertEqual(self.request('/api/v1/research/tickets',action,scheme='http')[0]['status'],400)
+        self.assertEqual(self.request('/api/v1/research/tickets',{**action,'action':'restore'})[0]['status'],200)
+        records=self.request('/api/v1/research/tickets',{'schema_version':1,'action':'list','owner_secret':'b'*64})
+        self.assertEqual(json.loads(records[1]['body'])['total'],1)

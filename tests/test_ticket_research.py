@@ -66,6 +66,39 @@ class TicketResearchTests(unittest.TestCase):
         self.store.update_labels(missing,now=self.now)
         self.assertEqual(self.store.own_records(self.secret)[0]['result']['state'],'archive_unavailable')
 
+    def test_delete_is_owner_scoped_idempotent_and_reversible(self):
+        self.store.submit('1'*32,self.secret,self.ticket,now=self.now)
+        self.assertFalse(self.store.set_deleted('1'*32,'b'*64,now=self.now)['found'])
+        self.assertEqual(len(self.store.own_records(self.secret)),1)
+        self.assertTrue(self.store.set_deleted('1'*32,self.secret,now=self.now)['deleted'])
+        self.assertTrue(self.store.set_deleted('1'*32,self.secret,now=self.now)['deleted'])
+        self.assertEqual(self.store.own_records(self.secret),[])
+        self.assertEqual(self.store.query_records(self.secret)['deleted_record_ids'],['1'*32])
+        self.assertEqual(self.store.query_records('b'*64)['deleted_record_ids'],[])
+        retry=self.store.submit('1'*32,self.secret,self.ticket,now=self.now)
+        self.assertTrue(retry['deleted']);self.assertFalse(retry['saved'])
+        self.assertEqual(self.store.update_labels(lambda *_:self.fail('deleted record must not be tracked'),now=self.now),0)
+        self.assertTrue(self.store.set_deleted('1'*32,self.secret,deleted=False,now=self.now)['found'])
+        self.assertEqual(self.store.own_records(self.secret)[0]['reported']['number'],'120')
+        self.assertNotIn('deleted_at',self.store.own_records(self.secret)[0]['reported'])
+
+    def test_deleted_record_cannot_renew_model_viewing_lease(self):
+        identity='1'*32
+        self.store.submit(identity,self.secret,self.ticket,now=self.now)
+        presence={'client_id':identity,'store_id':'3014','queue_type':'ordinary','mode':'thinking','visible':True}
+        self.store.presence(presence,now=self.now)
+        self.store.set_deleted(identity,self.secret,now=self.now)
+        self.assertEqual(self.store.demand(now=self.now),{})
+        self.store.presence(presence,now=self.now)
+        self.assertEqual(self.store.demand(now=self.now),{})
+
+    def test_deleted_rows_stay_deleted_after_database_reopen(self):
+        self.store.submit('1'*32,self.secret,self.ticket,now=self.now)
+        self.store.set_deleted('1'*32,self.secret,now=self.now)
+        other=TicketResearch(self.store.path)
+        try:self.assertEqual(other.query_records(self.secret)['total'],0)
+        finally:other.close()
+
     def test_anonymous_summary_contains_no_ticket_owner_or_issue_time(self):
         import json
         for i in range(6):
@@ -80,6 +113,10 @@ class TicketResearchTests(unittest.TestCase):
         summary=self.store.public_wait_summary(now=self.now)
         self.assertEqual(summary['stores']['3014']['ordinary']['sample_count'],6)
         for private in ('issued_at','number','owner_hash',self.secret):self.assertNotIn(private,json.dumps(summary))
+        self.store.set_deleted(f'{0:032x}',self.secret,now=self.now)
+        self.assertEqual(self.store.public_wait_summary(now=self.now)['stores']['3014']['ordinary']['sample_count'],5)
+        self.store.set_deleted(f'{1:032x}',self.secret,now=self.now)
+        self.assertEqual(self.store.public_wait_summary(now=self.now)['stores'],{})
 
 class TicketPagingTests(unittest.TestCase):
     setUp = TicketResearchTests.setUp
