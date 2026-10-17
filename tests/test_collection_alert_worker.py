@@ -18,3 +18,14 @@ class AlertWorkerTests(unittest.TestCase):
     def test_two_fresh_statuses_are_healthy(self):
         with patch.object(worker,'read_status',side_effect=[RUNNING,RUNNING]):
             self.assertEqual(worker.current_condition(Path('/synthetic'),NOW),'healthy')
+
+    def test_read_model_heartbeat_and_storage_are_not_silent(self):
+        model={'at':NOW.isoformat(),'policy':'indexed_day_rollups_v1','state':'running'}
+        for change,expected in [({},'healthy'),({'state':'needs_attention'},'public_sync_stopped'),({'at':'2000-01-01T00:00:00Z'},'public_sync_stopped'),({'storage_pressure':True},'storage_capacity_low')]:
+            with patch.object(worker,'read_status',side_effect=[RUNNING,RUNNING,{**model,**change}]):
+                self.assertEqual(worker.current_condition(Path('/synthetic'),NOW,Path('/synthetic/model-status.json')),expected)
+
+    def test_failed_web_service_is_reported_without_querying_source(self):
+        model={'at':NOW.isoformat(),'policy':'indexed_day_rollups_v1','state':'running'}
+        with patch.object(worker,'read_status',side_effect=[RUNNING,RUNNING,model]):
+            self.assertEqual(worker.current_condition(Path('/synthetic'),NOW,Path('/synthetic/status'),gateway_probe=lambda:False),'public_sync_stopped')

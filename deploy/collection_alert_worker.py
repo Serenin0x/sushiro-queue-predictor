@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
 import sys
 import threading
 import urllib.request
@@ -62,7 +63,7 @@ def recovery_link(root):
         return None
 
 
-def current_condition(collection_root, now):
+def current_condition(collection_root, now, read_model_status=None, gateway_probe=None):
     """A broken sync status must not be misreported as a collector failure."""
     try:
         collection=read_status(collection_root/'collection-status.json')
@@ -72,7 +73,16 @@ def current_condition(collection_root, now):
         projection=read_status(collection_root/'projection-status.json')
     except Exception:
         projection={'state':'unavailable'}
-    return condition(collection,projection,now)
+    result=condition(collection,projection,now)
+    if read_model_status is not None and result in {'healthy','closed','collection_partial_failure'}:
+        try:
+            model=read_status(read_model_status)
+            age=(now-alerts.instant(model['at'])).total_seconds()
+            if model.get('storage_pressure') is True:return 'storage_capacity_low'
+            if model.get('policy')!='indexed_day_rollups_v1' or age < -60 or age>120 or model.get('state')!='running':return 'public_sync_stopped'
+            if gateway_probe is not None and not gateway_probe():return 'public_sync_stopped'
+        except Exception:return 'public_sync_stopped'
+    return result
 
 
 def main():
@@ -91,9 +101,16 @@ def main():
     try:
         state_file, config = delivery_settings(root)
         monitor = Monitor(state_file, config)
+        selector=root/'read-model-settings.json';read_model_status=None
+        if selector.exists():
+            settings=read_status(selector)
+            if settings!={'schema_version':1,'status_file':'/home/ubuntu/sushiwait-readmodel-e0544-20261017/status.json'}:
+                raise ValueError('read_model_alert_config_invalid')
+            read_model_status=Path(settings['status_file'])
         while not stopped.is_set():
             now = datetime.now(timezone.utc)
-            status = current_condition(collection_root, now)
+            status = current_condition(collection_root, now, read_model_status,
+                gateway_probe=lambda:subprocess.run(['systemctl','is-active','--quiet','sushiwait-mainland-statistics'],timeout=3).returncode==0)
             delivery = monitor.step(status, now,
                 recovery_link=(lambda: recovery_link(root)) if status == 'collection_stopped' else None)
             print(json.dumps({'event': 'collection_alert_check', 'policy': alerts.ALERT_POLICY, 'condition': status,

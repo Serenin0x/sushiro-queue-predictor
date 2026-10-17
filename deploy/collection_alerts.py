@@ -146,7 +146,8 @@ def message(kind, reason, now, recovery_link=None):
         'collection_heartbeat_stale': '采集状态超过两分钟没有更新。',
         'collection_not_started': '开店已超过三分钟，今天仍未保存首组采集数据。',
         'collection_progress_stale': '营业时间内，超过计划采样时间两分钟仍未保存新样本。',
-        'public_sync_stopped': '采集数据的网页同步需要检查。',
+        'public_sync_stopped': '采集数据的网页同步或统计汇总需要检查。',
+        'storage_capacity_low': '服务器可用磁盘低于5GiB或15%，需要扩容或迁移归档；系统未删除原始记录。',
         'collection_status_unavailable': '暂时无法读取采集状态。',
     }
     if kind == 'recovered':
@@ -279,7 +280,7 @@ class Monitor:
         elif self.state['incident_since'] is None:
             self.state.update(incident_since=now.isoformat(), reason=status)
             kind = 'incident'
-        elif status in {'collection_stopped', 'collection_not_started', 'collection_partial_failure', 'collection_rate_limited', 'public_sync_stopped'} and status != self.state['reason']:
+        elif status in {'collection_stopped', 'collection_not_started', 'collection_partial_failure', 'collection_rate_limited', 'public_sync_stopped', 'storage_capacity_low'} and status != self.state['reason']:
             # A startup/heartbeat incident must not delay a later owner-action
             # alert (and its authorization link) for the six-hour reminder gap.
             self.state['reason'] = status

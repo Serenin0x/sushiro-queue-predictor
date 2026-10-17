@@ -180,6 +180,11 @@ class StatisticsGateway:
                 raise ValueError('invalid_collection_health')
             result['unavailable_store_ids']=ids
             result['active_store_count']=len(value.get('store_ids',[]))-len(ids)
+        if result['state']!='needs_attention' and hasattr(self.official_view,'health'):
+            try:
+                if self.official_view.health(now)['state']!='running':
+                    result.update(state='needs_attention',reason_code='public_sync_stopped')
+            except Exception:result.update(state='needs_attention',reason_code='public_sync_stopped')
         # Fixed diagnostic codes only; never arbitrary supplier messages.
         return result
 
@@ -273,11 +278,17 @@ class StatisticsGateway:
                 saved=self.analysis_cache.get(key)
                 if saved and not value.get('fresh') and time.monotonic()-saved[0]<90:report=saved[1]
                 else:
-                    def read(route):
-                        status,body,_=reader.dispatch(route)
-                        if status!=200:raise ValueError('archive_unavailable')
-                        return json.loads(body)
-                    report=await asyncio.to_thread(build_report,read,reader.names,selected)
+                    def generate():
+                        from contextlib import nullcontext
+                        context=reader.report_reader() if hasattr(reader,'report_reader') else nullcontext(reader)
+                        with context as saved_reader:
+                            def read(route):
+                                status,body,_=saved_reader.dispatch(route)
+                                if status!=200:raise ValueError('archive_unavailable')
+                                return json.loads(body)
+                            return build_report(read,reader.names,selected,
+                                summarized_day=getattr(saved_reader,'summarized_day',None))
+                    report=await asyncio.to_thread(generate)
                     self.analysis_cache[key]=(time.monotonic(),report)
                     self.analysis_cache.move_to_end(key)
                     while len(self.analysis_cache)>8:self.analysis_cache.popitem(last=False)
@@ -507,6 +518,9 @@ async def serve(args):
     for path in getattr(args,'additional_official_view_file',[]) or []:
         if official is None: raise ValueError('primary_official_view_required')
         official = JoinedOfficialViews(official,read_official_config(path))
+    if getattr(args,'read_model_file',None):
+        from sushiwait.readmodel import ReadModelView
+        official=ReadModelView(args.read_model_file,getattr(official,'views',(official,)),status_file=__import__('pathlib').Path(args.read_model_file).parent/'status.json')
     app = StatisticsGateway(hub, official_view=official, calendar_source=args.calendar_source,
         refresh_seconds=args.refresh_seconds, refresh_policy_file=args.refresh_policy_file, model_advice_file=args.model_advice_file,
         research_file=args.research_file, public_origin=args.public_origin, ocr_enabled=args.ocr_enabled,
@@ -540,6 +554,7 @@ if __name__ == '__main__':
     parser.add_argument('--ocr-enabled', action='store_true', help='Optional private on-server screenshot OCR')
     parser.add_argument('--public-origin', default='https://124.222.57.236', help='Exact HTTPS origin for private forms')
     parser.add_argument('--research-file', help='Optional private owner-scoped test database and viewing leases')
+    parser.add_argument('--read-model-file', help='Optional indexed, incrementally published public read model')
     parser.add_argument('--official-view-file', help='Optional private official public-field archive configuration; no credentials')
     parser.add_argument('--extra-official-view-file', help='Optional disjoint two-store saved archive; no extra upstream access')
     parser.add_argument('--additional-official-view-file', action='append', default=[], help='Additional disjoint saved archive')

@@ -1,0 +1,28 @@
+[Unit]
+Description=SUSHIWAIT incremental public statistics read model
+After=local-fs.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=@ROOT@
+ExecStart=@PYTHON@ @ROOT@/read_model_worker.py @ROOT@/config.json
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=40
+UMask=0077
+Nice=10
+CPUQuota=100%
+MemoryMax=512M
+TasksMax=8
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateNetwork=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@ROOT@
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

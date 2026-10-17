@@ -111,7 +111,7 @@ def summarize_day(detail, queue, now):
         'last_sample_at':previous_time.isoformat() if previous_time else None}
 
 
-def build_report(reader, names, value, *, now=None, time_limit=25):
+def build_report(reader, names, value, *, now=None, time_limit=25, summarized_day=None):
     now = now or datetime.now(timezone.utc); value=selection(value,now)
     began=time.monotonic(); base=SOURCES[value['source']]
     names={k:v for k,v in names.items() if not value['store_id'] or k==value['store_id']}
@@ -140,10 +140,13 @@ def build_report(reader, names, value, *, now=None, time_limit=25):
         for day in sorted(set(available.get(store,[]))):
             if time.monotonic()-began>time_limit: incomplete=True;unread+=1;unread_dates.append(day);continue
             try:
-                detail=reader(f'{base}/stores/{store}/days/{day}')
-                if detail.get('source')!=value['source'] or detail.get('requested_store_id')!=store or detail.get('local_date')!=day:
-                    raise ValueError('analysis_detail_scope')
-                days.append(summarize_day(detail,value['queue'],now))
+                if summarized_day is not None:
+                    days.append(summarized_day(store,day,value['queue'],now))
+                else:
+                    detail=reader(f'{base}/stores/{store}/days/{day}')
+                    if detail.get('source')!=value['source'] or detail.get('requested_store_id')!=store or detail.get('local_date')!=day:
+                        raise ValueError('analysis_detail_scope')
+                    days.append(summarize_day(detail,value['queue'],now))
             except Exception: unread+=1;unread_dates.append(day)
         total={k:sum(d[k] for d in days) for k in ('observations','successful','visible','empty','failed','missing','paused','unique_displayed','covered_slots','comparable_intervals','reversals')}
         expected=0;coverage_start=min((date.fromisoformat(d['date']) for d in days if d['observations']),default=start);cursor=max(start,coverage_start)
@@ -175,7 +178,7 @@ def build_report(reader, names, value, *, now=None, time_limit=25):
             'coverage_from':coverage_start.isoformat(),'unread_dates':unread_dates,'expected_slots':expected,'coverage_percent':coverage,'success_percent':success,'days_observed':observed_days,
             'days_missing':(end-start).days+1-observed_days,'read_failures':unread,'readiness_score':score,'score_parts':parts,
             'readiness_level':'待积累' if score<40 else '可做初步趋势' if score<70 else '可开展预测验证',
-            'prediction_accuracy':None,'daily':[{k:v for k,v in d.items() if k!='gaps'} for d in days],'hourly':hours,'peak_hours':[h['hour'] for h in peaks],
+            'prediction_accuracy':None,'daily':[{k:v for k,v in d.items() if k!='gaps' and (k!='hours' or i==len(days)-1)} for i,d in enumerate(days)],'hourly':hours,'peak_hours':[h['hour'] for h in peaks],
             'gaps':gaps[-200:],'gap_count':len(gaps),'sampling_gaps':sum(g['kind']=='sampling_gap' for g in gaps),
             'suggestions':suggestions,'last_sample_at':max((d['last_sample_at'] for d in days if d['last_sample_at']),default=None)})
     report={'schema_version':1,'policy':POLICY,'selection':value,'generated_at':now.isoformat(),'stores':rows,

@@ -12,6 +12,8 @@ const api=context.window.SushiWaitAnalytics,settle=()=>new Promise(r=>setImmedia
 (async()=>{
  $('insight-source').value='sapi_miniapp_gateway';$('insight-queue').value='ordinary';
  api.attach({today:()=>selection.to,section:()=>section,navigateStore(){}});await settle();
+ assert.equal($('insight-period').value,'30');
+ assert.equal($('insight-from').value,'2026-09-17');
  assert.equal($('insight-ai-run').disabled,true);
  assert.equal($('insight-ai-loading').hidden,false);
  const paidIntent=()=>requests.filter(r=>r.body?.action==='explain'&&r.body.visible);
@@ -26,5 +28,6 @@ const api=context.window.SushiWaitAnalytics,settle=()=>new Promise(r=>setImmedia
  assert.equal(paidIntent().at(-1).body.selection.store_id,'3014');
  const previous=paidIntent().at(-1).body.request_id;await api.refresh();assert.notEqual(paidIntent().at(-1).body.request_id,previous);assert(requests.some(r=>r.body?.action==='report'&&r.body.fresh===true));
  section='tickets';api.notify();await settle();assert.equal($('insight-ai-run').disabled,false);
+ $('insight-from').value='2000-01-01';const beforeRange=requests.length;await api.refresh();assert.equal(requests.length,beforeRange);assert($('insight-status').textContent.includes('366'));
  console.log('analytics visible demand, release/re-entry and independent store scope passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
