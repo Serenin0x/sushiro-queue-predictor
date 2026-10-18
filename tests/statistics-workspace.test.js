@@ -130,6 +130,22 @@ assert.equal(run('archiveReadStatus({days:{},store_names:{}})'),'归档加载中
  month.days['2026-10-14']=Object.fromEntries(['3014','3004'].map(store=>[store,{...row(store),local_date:'2026-10-14',last_observation_at:'2026-10-14T11:01:00+08:00'}]));await run('workspaceSyncManual(workspaceManual.job,1)');assert.equal(run('workspaceManual.syncing'),false);assert.equal($('manual-all').disabled,false);
  await $('manual-store').onclick();assert.equal(manualPosts.at(-1).store_id,'3014');
  run('workspaceHealth.state="closed";workspaceRenderManual()');assert.equal($('manual-all').disabled,true);assert.equal($('manual-store').disabled,true);
+ // Proactive authorization works while closed and cannot submit a collection job.
+ const beforeAuthorization=manualPosts.filter(v=>v.action==='request').length,authorizationRoutes=[];
+ context.window.location.assign=path=>authorizationRoutes.push(path);manualAuthorized=false;
+ const originalManualFetch=context.fetch;let unsafeAuthorization=false;
+ context.fetch=async(path,options)=>{
+  const value=path==='/api/v1/collection/manual'?JSON.parse(options.body):null;
+  if(value?.action==='reauthorize'&&manualAuthorized){manualPosts.push(value);return {ok:true,json:async()=>({path:unsafeAuthorization?'https://other.invalid':'/recover/#'+'A'.repeat(43)})};}
+  return originalManualFetch(path,options);
+ };
+ await $('wechat-authorize').onclick();assert.equal($('manual-login-dialog').open,true);
+ assert.equal($('manual-login-title').textContent,'微信授权');assert.match($('manual-login-submit').textContent,/二维码/);
+ $('manual-password').value='synthetic-test-only';await run('workspaceLoginManual({preventDefault(){}})');
+ assert.deepEqual(authorizationRoutes,['/recover/#'+'A'.repeat(43)]);assert.equal($('manual-password').value,'');
+ assert.equal(manualPosts.filter(v=>v.action==='request').length,beforeAuthorization,'authorization must never create a query job');
+ unsafeAuthorization=true;await $('wechat-authorize').onclick();assert.equal(authorizationRoutes.length,1);
+ assert.match($('wechat-authorize-status').textContent,/暂不可用/);assert.equal($('wechat-authorize').disabled,false);
  assert(reads.every(p=>(p.startsWith('/api/v1/')||p==='/model-advice.json')&&!p.includes('4045')));
  console.log('workspace async selection, private drafts, chart boundaries, quality states, pagination, route restoration and CSV isolation passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

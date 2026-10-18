@@ -22,6 +22,7 @@ if(taskWorkspace){engineeringSections.overview=["门店监测",""];engineeringSe
 // Saved city directory shared with the calendar; unknown future IDs stay explicitly unclassified.
 const workspaceCityById={"1":"广州","2":"广州","3":"广州","4":"广州","5":"广州","6":"广州","7":"广州","8":"广州","9":"佛山","10":"广州","11":"佛山","12":"广州","13":"广州","15":"广州","16":"武汉","17":"东莞","18":"广州","19":"东莞","21":"武汉","23":"东莞","24":"武汉","25":"广州","26":"惠州","27":"广州","28":"广州","29":"广州","30":"广州","31":"珠海","32":"广州","34":"厦门","35":"江门","36":"珠海","37":"广州","38":"广州","39":"佛山","40":"广州","41":"武汉","42":"长沙","43":"珠海","44":"武汉","45":"广州","1001":"深圳","1002":"深圳","1003":"深圳","1004":"深圳","1005":"深圳","1006":"深圳","1007":"深圳","1008":"深圳","1009":"深圳","1010":"深圳","1011":"深圳","1012":"深圳","1013":"深圳","1014":"深圳","1015":"深圳","1016":"深圳","1017":"深圳","1018":"深圳","1019":"深圳","2001":"成都","2003":"成都","2004":"成都","2006":"重庆","2007":"重庆","2008":"成都","2009":"成都","2010":"西安","2011":"成都","3001":"天津","3002":"天津","3003":"天津","3004":"北京","3005":"北京","3006":"北京","3007":"天津","3008":"苏州","3009":"北京","3010":"苏州","3011":"杭州","3012":"北京","3013":"北京","3014":"北京","3015":"北京","3016":"北京","3017":"苏州","3018":"杭州","3019":"北京","3020":"杭州","3021":"杭州","3022":"宁波","3023":"北京","3024":"无锡","3025":"上海","3026":"上海","3027":"苏州","3028":"苏州","3029":"北京","3030":"北京","3031":"北京","3032":"上海","3033":"上海","3034":"上海","3035":"北京","3036":"上海","3037":"济南","3038":"北京","3039":"杭州","3040":"上海","3041":"上海","3042":"北京","3043":"金华","3044":"宁波","3045":"北京","3046":"宁波","3047":"绍兴","3048":"绍兴","3049":"杭州","3050":"北京","3051":"上海","3052":"宁波","3053":"北京","3054":"南京","3055":"南京","3056":"绍兴","3057":"嘉兴","3058":"杭州","3059":"温州","3060":"北京","3061":"金华","3062":"南通","3063":"嘉兴","3064":"青岛","3065":"南京","3066":"上海","3067":"石家庄","3068":"杭州","3069":"青岛","3070":"上海","3071":"合肥","3072":"上海","3073":"上海","3074":"北京","3076":"温州","3078":"天津","3079":"镇江","3080":"济南"};
 const workspaceState={city:"all",from:"00:00",to:"23:59",range:"all",page:0,selected:null,chartPositions:[],chartScope:null,lastPointKey:null,readError:false,restoring:false,routeStore:null,overviewPage:0,charts:new Map(),hover:new Map(),seenScope:null,seenKeys:new Set(),newKeys:new Map()};
+let workspaceLoginPurpose='collection',workspaceAuthorizationBusy=false;
 const workspaceManual={authorized:false,busy:false,job:null,timer:null,checked:false,message:'',request:null,view:null,completed:null,syncing:false};
 let workspaceHealth=null,workspaceLastBoundaryCheck=0;
 let workspaceSessionAuto=taskWorkspace&&!new URLSearchParams(window.location.search).has('date');
@@ -260,12 +261,35 @@ function workspaceRenderHealth(){
  $('monitor-status-reason').textContent=reasons[workspaceHealth?.reason_code]||(workspaceHealth?.next_open_at?`下次开采 ${new Date(workspaceHealth.next_open_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}`:state==='running'?'采集运行中':state==='completed'?'本轮采集已结束':'暂时无法确认采集状态');
  workspaceRenderManual();
 }
+function workspaceShowLogin(purpose){
+ workspaceLoginPurpose=purpose;const authorization=purpose==='authorization';
+ $('manual-login-title').textContent=authorization?'微信授权':'采集授权';
+ $('manual-login-submit').textContent=authorization?'验证并打开二维码页':'授权并获取';
+ $('manual-login-purpose').hidden=!authorization;
+ $('manual-login-purpose').textContent=authorization?'使用现有管理密码确认身份，再用原微信扫码。有效期由微信决定。':'';
+ $('manual-password').value='';$('manual-login-note').textContent='';
+ if(!$('manual-login-dialog').open)$('manual-login-dialog').showModal();
+}
+async function workspaceStartAuthorization(){
+ if(workspaceAuthorizationBusy)return;
+ workspaceAuthorizationBusy=true;const button=$('wechat-authorize'),note=$('wechat-authorize-status');
+ button.classList.remove('authorization-activated');window.requestAnimationFrame?.(()=>button.classList.add('authorization-activated'));
+ button.disabled=true;button.setAttribute('aria-busy','true');note.hidden=false;note.textContent='正在打开授权页';
+ try{
+  const data=await workspaceManualPost({action:'reauthorize'});
+  if(typeof data.path!=='string'||!/^\/recover\/#[A-Za-z0-9_-]{43}$/.test(data.path))throw Error('reauthorization_unavailable');
+  window.location.assign(data.path);
+ }catch(error){
+  note.textContent={reauthorization_unavailable:'授权入口暂不可用，请稍后重试',reauthorization_blocked:'当前采集异常需要核对，请查看异常邮件'}[error.message]||workspaceManualErrors[error.message]||'暂时无法打开授权页，请重试';
+  if(error.message==='manual_login_required'){note.hidden=true;workspaceShowLogin('authorization');}
+ }finally{workspaceAuthorizationBusy=false;button.disabled=false;button.setAttribute('aria-busy','false');}
+}
 function workspaceRenderManual(){
  if(!taskWorkspace)return;
  const enabled=workspaceHealth?.manual_collection_enabled===true,monitoring=['overview','analysis'].includes(engineeringSection),running=workspaceManual.job?.state==='running';
  for(const id of ['manual-all','manual-store']){
   const button=$(id),outside=id==='manual-store'&&!workspaceHealth?.manual_store_ids?.includes($('store').value);button.hidden=!enabled;button.disabled=workspaceManual.busy||running||workspaceManual.syncing||workspaceHealth?.state!=='running'||outside;
-  button.setAttribute('aria-busy',String(workspaceManual.busy||running));button.title=outside?'此门店尚未启用采集':workspaceHealth?.state==='closed'?'营业外暂停，开采后可手动获取':workspaceHealth?.state!=='running'?'采集暂不可用，请查看采集状态':id==='manual-all'?'获取已启用的五城全部可采门店，不受城市筛选影响':'获取当前门店的新观测';
+  button.setAttribute('aria-busy',String(workspaceManual.busy||running));button.title=outside?'此门店尚未启用采集':workspaceHealth?.state==='closed'?'营业外暂停，开采后可手动获取':workspaceHealth?.state!=='running'?'采集暂不可用，请查看采集状态':id==='manual-all'?'获取已启用的全部可采门店，不受城市筛选影响':'获取当前门店的新观测';
  }
  const job=workspaceManual.job,done=job?job.total-job.pending:0;
  $('manual-progress').hidden=!enabled||!monitoring||!job&&!workspaceManual.message;
@@ -326,7 +350,7 @@ async function workspaceStartManual(store){
  try{await workspaceManualResult(await workspaceManualPost(workspaceManual.request));}
  catch(error){
   workspaceManual.message=workspaceManualErrors[error.message]||'请求结果待确认，请重试以核对原任务';
-  if(error.message==='manual_login_required'){$('manual-password').value='';$('manual-login-note').textContent='';if(!$('manual-login-dialog').open)$('manual-login-dialog').showModal();}
+  if(error.message==='manual_login_required')workspaceShowLogin('collection');
   else if(Object.hasOwn(workspaceManualErrors,error.message))workspaceManual.request=null;
  }finally{workspaceManual.busy=false;workspaceRenderManual();}
 }
@@ -335,7 +359,8 @@ async function workspaceLoginManual(event){
  const password=$('manual-password').value;$('manual-password').value='';
  try{
   await workspaceManualPost({action:'login',password,remember:$('manual-remember').checked});workspaceManual.authorized=true;$('manual-login-dialog').close();
-  await workspaceStartManual(workspaceManual.request?.store_id??null);
+  if(workspaceLoginPurpose==='authorization')await workspaceStartAuthorization();
+  else await workspaceStartManual(workspaceManual.request?.store_id??null);
  }catch(error){$('manual-login-note').textContent=workspaceManualErrors[error.message]||'登录暂不可用，请稍后重试';}
  finally{$('manual-login-submit').disabled=false;}
 }
@@ -444,7 +469,10 @@ function workspaceNav(open){
  else{document.body.classList.toggle('nav-collapsed',!open);$('nav-toggle').setAttribute('aria-expanded',String(open));}
 }
 function workspaceInit(){
+ $('wechat-authorize').onclick=workspaceStartAuthorization;
+ $('wechat-authorize').addEventListener('animationend',event=>{if(event.animationName==='authorization-ripple')$('wechat-authorize').classList.remove('authorization-activated');});
  $('manual-all').onclick=()=>workspaceStartManual(null);$('manual-store').onclick=()=>workspaceStartManual($('store').value);
+ $('manual-login-dialog').addEventListener('close',()=>{$('manual-password').value='';});
  $('manual-login-form').onsubmit=workspaceLoginManual;$('manual-login-close').onclick=()=>{$('manual-login-dialog').close();$('manual-password').value='';};
  $('manual-view-result').onclick=()=>{const job=workspaceManual.job;if(!job)return;workspaceSetDate(job.local_date);refresh();};
  $('manual-logout').onclick=async()=>{try{await workspaceManualPost({action:'logout'});workspaceManual.authorized=false;workspaceRenderManual();}catch(_){workspaceManual.message='退出授权失败，请重试';workspaceRenderManual();}};

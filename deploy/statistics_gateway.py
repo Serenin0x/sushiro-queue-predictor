@@ -57,7 +57,7 @@ class StatisticsGateway:
     def __init__(self, hub, *, official_view=None, calendar_source='crm_remote_v1_1',
                  refresh_seconds=30, refresh_policy_file=None, model_advice_file=None,
                  research_file=None, public_origin='https://124.222.57.236', ocr_enabled=False,
-                 collection_status_file=None, manual_collection_config=None):
+                 collection_status_file=None, manual_collection_config=None, reauthorization_key_file=None):
         if (calendar_source not in {'crm_remote_v1_1', 'sapi_miniapp_gateway'}
                 or calendar_source == 'sapi_miniapp_gateway' and official_view is None):
             raise ValueError('calendar_source_requires_configured_view')
@@ -75,6 +75,11 @@ class StatisticsGateway:
             from sushiwait.cityscope import APPROVED_STORES as STORES
             self.manual_settings = settings(manual_collection_config)
             self.manual = ManualCollection(self.manual_settings['queue_file'],STORES)
+        self.reauthorization_key_file = reauthorization_key_file
+        if reauthorization_key_file is not None:
+            from sushiwait.credentials import _read_private_file
+            if self.manual is None or len(_read_private_file(reauthorization_key_file)) != 32:
+                raise ValueError('reauthorization_settings_invalid')
         self.manual_lock = asyncio.Lock()
         self.ocr_clients = OrderedDict()
         self.ocr_lock = asyncio.Lock()
@@ -179,6 +184,12 @@ class StatisticsGateway:
                 await asyncio.to_thread(self.manual.logout,token)
                 extra=[(b'set-cookie',f'{COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0'.encode())]
                 result={'authorized':False}
+            elif action=='reauthorize' and set(value)=={'schema_version','action'}:
+                if self.reauthorization_key_file is None:
+                    raise ManualError('reauthorization_unavailable',503)
+                from sushiwait.authorizationlink import issue_link
+                path=await asyncio.to_thread(issue_link,self.reauthorization_key_file,self.public_origin)
+                result={'authorized':True,'path':path}
             elif action in {'status','request'}:
                 expected={'schema_version','action'} if action=='status' else {'schema_version','action','request_id','store_id'}
                 if set(value)!=expected:raise ManualError('manual_invalid_request',400)
@@ -607,7 +618,8 @@ async def serve(args):
         refresh_seconds=args.refresh_seconds, refresh_policy_file=args.refresh_policy_file, model_advice_file=args.model_advice_file,
         research_file=args.research_file, public_origin=args.public_origin, ocr_enabled=args.ocr_enabled,
         collection_status_file=args.collection_status_file,
-        manual_collection_config=getattr(args,'manual_collection_config',None))
+        manual_collection_config=getattr(args,'manual_collection_config',None),
+        reauthorization_key_file=getattr(args,'reauthorization_key_file',None))
     remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds() if app.deadline is not None else None
     if remaining is not None and remaining <= 0:
         raise ValueError('original_trial_deadline_reached')
@@ -634,6 +646,7 @@ if __name__ == '__main__':
     parser.add_argument('--config-file', required=True)
     parser.add_argument('--collection-status-file', help='Optional bounded public sampling health projection')
     parser.add_argument('--manual-collection-config', help='Optional private owner-only manual request queue settings')
+    parser.add_argument('--reauthorization-key-file', help='Private loopback broker key; requires owner session')
     parser.add_argument('--model-advice-file', help='Optional validated public Flash advice copy; never a key file')
     parser.add_argument('--ocr-enabled', action='store_true', help='Optional private on-server screenshot OCR')
     parser.add_argument('--public-origin', default='https://124.222.57.236', help='Exact HTTPS origin for private forms')

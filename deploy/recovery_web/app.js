@@ -51,11 +51,12 @@
   function render(value) {
     verification = value.verification ?? verification;
     lastState = value.state;
+    if (verification) { $('heading').textContent = '微信授权'; $('start').textContent = '打开微信二维码'; }
     if (value.state === 'resumed' || value.state === 'authorized' && verification) {
       stop(); $('heading').textContent = '授权已完成'; $('mark').textContent = '✓';
       $('qr-wrap').hidden = true; $('retry').hidden = true; $('start').hidden = true; $('login-form').hidden = true;
       $('statistics').hidden = false;
-      state(verification ? '微信授权已更新，采集继续运行。' : '新样本已经保存，采集已自动恢复。', 'success');
+      state(verification ? '微信授权已更新，系统将按原计划继续采集。' : '新样本已经保存，采集已自动恢复。', 'success');
       return true;
     }
     if (value.state === 'authorized') {
@@ -83,7 +84,7 @@
       if (value.state === 'qr_pending') { await start(); return; }
       $('login-form').hidden = !value.login_required;
       $('start').hidden = value.login_required;
-      state(value.login_required ? messages.login_required : '更新微信授权后，系统会自动继续采集。');
+      state(value.login_required ? messages.login_required : verification ? '出门前可以先扫码更新授权。授权有效期由微信决定。' : '更新微信授权后，系统会自动继续采集。');
     } catch (error) { failure(error); }
   }
   async function start() {

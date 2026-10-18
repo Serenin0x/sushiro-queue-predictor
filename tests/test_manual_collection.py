@@ -173,6 +173,8 @@ class ManualGatewayTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         root=Path(self.tmp.name).resolve();root.chmod(0o700)
         config=root/'settings.json';config.write_text(json.dumps({'schema_version':1,'queue_file':str(root/'queue.sqlite'),'owner_username':'synthetic-owner'}));config.chmod(0o600)
+        self.config=config
+        self.key=root/'internal.key';self.key.write_bytes(b'k'*32);self.key.chmod(0o600)
         self.app=gateway.StatisticsGateway(Hub(),manual_collection_config=config)
         self.app.collection_health=lambda:{'state':'running','unavailable_store_ids':[]}
 
@@ -223,3 +225,40 @@ class ManualGatewayTests(unittest.TestCase):
         cookie=self.login();response,_=self.request({'schema_version':1,'action':'logout'},cookie=cookie)
         self.assertEqual(response['status'],200);self.assertIn(b'Max-Age=0',dict(response['headers'])[b'set-cookie'])
         self.assertEqual(self.request({'schema_version':1,'action':'status'},cookie=cookie)[0]['status'],401)
+
+
+class ProactiveAuthorizationGatewayTests(unittest.TestCase):
+    login=ManualGatewayTests.login
+    request=ManualGatewayTests.request
+    def setUp(self):
+        ManualGatewayTests.setUp(self)
+        self.app=gateway.StatisticsGateway(Hub(),manual_collection_config=self.config,reauthorization_key_file=self.key)
+        self.app.collection_health=lambda:{'state':'closed'}
+
+    def test_closed_owner_can_issue_link_without_queue_or_source_calls(self):
+        cookie=self.login();value={'schema_version':1,'action':'reauthorize'}
+        with patch('sushiwait.authorizationlink.issue_link',return_value='/recover/#'+'A'*43) as issue:
+            self.assertEqual(self.request(value)[0]['status'],401);issue.assert_not_called()
+            response,body=self.request(value,cookie=cookie)
+            self.assertEqual(response['status'],200);self.assertEqual(body['path'],'/recover/#'+'A'*43)
+            issue.assert_called_once_with(self.key,'https://124.222.57.236')
+        self.assertIsNone(self.app.manual.status())
+
+    def test_issue_cannot_override_scope_and_remains_origin_protected(self):
+        cookie=self.login();value={'schema_version':1,'action':'reauthorize'}
+        with patch('sushiwait.authorizationlink.issue_link') as issue:
+            for kwargs in [dict(origin='https://other.invalid'),dict(scheme='http'),dict(query=b'x=1'),dict(method='GET')]:
+                self.assertNotEqual(self.request(value,cookie=cookie,**kwargs)[0]['status'],200)
+            for extra in [{'account':'2'},{'verification':False},{'url':'https://other.invalid'}]:
+                self.assertEqual(self.request({**value,**extra},cookie=cookie)[0]['status'],400)
+            issue.assert_not_called()
+
+    def test_existing_fault_is_not_cleared_and_private_errors_are_not_exposed(self):
+        cookie=self.login()
+        with patch('sushiwait.authorizationlink.issue_link',side_effect=ManualError('reauthorization_blocked',409)):
+            response,body=self.request({'schema_version':1,'action':'reauthorize'},cookie=cookie)
+        self.assertEqual(response['status'],409);self.assertEqual(body,{'error_code':'reauthorization_blocked'})
+        self.assertIsNone(self.app.manual.status())
+
+    def test_reauthorization_requires_configured_owner_authentication(self):
+        with self.assertRaises(ValueError):gateway.StatisticsGateway(Hub(),reauthorization_key_file=self.key)
