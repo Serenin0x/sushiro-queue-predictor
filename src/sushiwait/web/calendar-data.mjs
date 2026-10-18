@@ -3,6 +3,13 @@ import {cityById, calendar2026} from './calendar-directory.mjs';
 import {SAVED_SOURCE,savedCalendarCells} from './saved-statistics.mjs';
 
 export {shanghaiDate};
+// Display interpretation from the reviewed mainland client binding (FIELD_MAPPING.md).
+// Keep archive count_unit and raw values intact; CRM's separate count has no such binding.
+export function countMetric(detail) {
+  if(detail?.source==='sapi_miniapp_gateway')return {label:'已签到等待桌数',axis:'已签到等待（桌）',unit:'桌'};
+  const unit=({tables:'桌',table:'桌',people:'人',persons:'人',groups:'组'})[detail?.summary?.count_unit]||'';
+  return {label:'接口原始数量',axis:`原始数量（${unit||'单位待核实'}）`,unit};
+}
 // Display-only memory: keep the same scope in place while the controller reads.
 // It never supplies numbers to latestQueue or revives a failed response as fresh.
 export function createDisplayCache(limit=4) {

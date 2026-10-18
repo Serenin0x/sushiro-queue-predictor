@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {createDisplayCache,directory,calendarForScope,dayKind,moveMonth,queuePresentation,recentRecords,plots,nearestPoint,timeText,shanghaiDate} from '../src/sushiwait/web/calendar-data.mjs';
+import {createDisplayCache,directory,calendarForScope,dayKind,moveMonth,queuePresentation,recentRecords,plots,nearestPoint,timeText,shanghaiDate,countMetric} from '../src/sushiwait/web/calendar-data.mjs';
 import {createStatisticsClient,createStatisticsController} from '../src/sushiwait/web/statistics-client.mjs';
 const fixture=JSON.parse(await readFile(new URL('../docs/design/integration/statistics.synthetic.json',import.meta.url),'utf8'));
 const copy=v=>JSON.parse(JSON.stringify(v));let passed=0;
@@ -47,6 +47,10 @@ await check('valid empty lists, stale responses and historical day remain distin
 await check('single quantity stream and nearest real observation, no interpolation',()=>{
   const chart=plots(fixture.day_detail);assert.deepEqual(chart.quantity,chart.dine.rawCount);assert.equal(chart.quantity.length,3);
   const points=chart.dine.reference.flat();const near=nearestPoint(points,points[0].at+10000);assert.equal(near.label,'0012');assert.equal(near.at,points[0].at);assert.equal(timeText(points[0].at),'20:00:00');
+  const official={...copy(fixture.day_detail),source:'sapi_miniapp_gateway'};official.summary.count_unit='unknown';const before=JSON.stringify(official);
+  assert.deepEqual(countMetric(official),{label:'已签到等待桌数',axis:'已签到等待（桌）',unit:'桌'});assert.equal(JSON.stringify(official),before,'display units must not rewrite archived metadata or numbers');
+  assert.equal(countMetric(fixture.day_detail).unit,'');assert.match(countMetric(fixture.day_detail).axis,/单位待核实/);
+  assert.equal(countMetric({...fixture.day_detail,summary:{count_unit:'people'}}).unit,'人');assert.equal(countMetric(null).unit,'');
 });
 await check('all scope reads month only; one selected store reads only one detail',async()=>{
   const calls=[];const client=createStatisticsClient({fetchImpl:async path=>{calls.push(path);return {ok:true,text:async()=>JSON.stringify(path.includes('/months/')?fixture.month_index:fixture.day_detail)};}});

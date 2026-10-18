@@ -92,6 +92,12 @@ function workspacePointState(p,queue){if(p.scheduled_pause)return 'paused';if(!p
 function workspaceStateLabel(state){return {saved:'已保存',empty:'已保存，无展示号',failed:'失败或部分成功',paused:'营业边界暂停',missing:'已保存，字段未显示'}[state]||'未知';}
 function workspaceComparisonLabel(value){return {comparable_display_sets:'可比较展示集合',packet_continuity_unknown:'采集连续性未确认',first_observation:'首个观测',no_previous_observation:'无前序观测',scheduled_pause:'营业边界',run_boundary:'采集批次边界',gap:'间隔边界',insufficient:'观测不足',time_order_or_duplicate:'时间顺序或重复边界',queue_type_changed:'队列变化',number_reset:'号码重置',failed_pair:'失败边界',gap_too_large:'长间隔边界',source_changed:'来源变化'}[value]||value||'未确认';}
 function workspaceSourceLabel(value){return value==='sapi_miniapp_gateway'?'官方查询记录':value==='crm_remote_v1_1'?'已保存历史记录':'来源未确认';}
+function workspaceCountMetric(){
+ // Reviewed mainland groupQueuesCount display binding; raw archive metadata is unchanged.
+ if(detail?.source==='sapi_miniapp_gateway')return {label:'已签到等待桌数',axis:'已签到等待（桌）',unit:'桌'};
+ const unit=({tables:'桌',table:'桌',people:'人',persons:'人',groups:'组'})[detail?.summary?.count_unit]||'';
+ return {label:'接口原始数量',axis:`原始数量（${unit||'单位待核实'}）`,unit};
+}
 function workspaceRows(){return (detail?.points||[]).map((p,i)=>({p,i,key:workspacePointKey(p,i),at:Date.parse(workspacePointTime(p))}));}
 function workspaceScope(){return `${day}|${$('store').value}|${$('queue').value}|${detail?.source||referenceSource}`;}
 function workspaceFilteredRows({search=true}={}){
@@ -268,7 +274,8 @@ function workspaceSelectRecord(key,{open=false,scroll=false}={}){
 function workspaceOpenRecord(item,{returnFocus=document.activeElement}={}){
  if(!item)return;workspaceState.dialogReturnFocus=returnFocus;const {p,at}=item,queue=$('queue').value,labels=p.queues?.[queue];
  $('record-dialog-title').textContent=`${index.store_names[$('store').value]||$('store').value}，${time(at)}`;$('record-details').replaceChildren();
- const fields=[['日期',day],['记录来源',workspaceSourceLabel(detail.source)],['请求开始',p.request_started_at?time(p.request_started_at):'未记录'],['队列响应',time(p.queue_received_at)],['数量响应',time(p.count_received_at)],['保存状态',workspaceStateLabel(workspacePointState(p,queue))],['展示队列',$('queue').selectedOptions?.[0]?.textContent||queue],['原号码顺序',Array.isArray(labels)?labels.length?labels.join('、'):'成功响应但没有展示号':'字段未显示'],['原始数量',p.count_raw===null||p.count_raw===undefined?'未显示':`${p.count_raw}（单位未核实）`],['相邻间隔',p.interval_seconds===null||p.interval_seconds===undefined?'未确认':`${p.interval_seconds} 秒`],['比较状态',workspaceComparisonLabel(p.comparison_state)],['失败类别',Object.values(p.error_codes||{}).join('、')||'无已记录失败类别'],['成功语义',p.success_semantics==='one_official_detail_response_not_two_query_pair'?'一次官方门店详情响应，不是两次查询的成对记录':p.pair_ok?'原来源记录的完整观测':'请根据原保存状态核对']];
+ const count=workspaceCountMetric();
+ const fields=[['日期',day],['记录来源',workspaceSourceLabel(detail.source)],['请求开始',p.request_started_at?time(p.request_started_at):'未记录'],['队列响应',time(p.queue_received_at)],['数量响应',time(p.count_received_at)],['保存状态',workspaceStateLabel(workspacePointState(p,queue))],['展示队列',$('queue').selectedOptions?.[0]?.textContent||queue],['原号码顺序',Array.isArray(labels)?labels.length?labels.join('、'):'成功响应但没有展示号':'字段未显示'],[count.label,p.count_raw===null||p.count_raw===undefined?'未显示':`${p.count_raw} ${count.unit||'（单位未核实）'}`],['相邻间隔',p.interval_seconds===null||p.interval_seconds===undefined?'未确认':`${p.interval_seconds} 秒`],['比较状态',workspaceComparisonLabel(p.comparison_state)],['失败类别',Object.values(p.error_codes||{}).join('、')||'无已记录失败类别'],['成功语义',p.success_semantics==='one_official_detail_response_not_two_query_pair'?'一次官方门店详情响应，不是两次查询的成对记录':p.pair_ok?'原来源记录的完整观测':'请根据原保存状态核对']];
  for(const [name,value] of fields){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=String(value);$('record-details').append(dt,dd);}
  if(!$('record-dialog').open)$('record-dialog').showModal();
 }
@@ -310,6 +317,7 @@ function workspaceRenderGraphs({table=true}={}){
  if(workspaceState.chartScope!==scope){workspaceState.chartScope=scope;workspaceState.selected=null;workspaceState.page=0;workspaceState.range='all';workspaceState.from='00:00';workspaceState.to='23:59';workspaceState.lastPointKey=null;}
  const rows=workspaceFilteredRows({search:false}),data=workspaceGraphSeries(rows),latest=workspaceRows().at(-1)?.key;
  const emptyNumbers=rows.length?'所选号码位置没有可绘制的展示号':'当天没有已保存的观测';
+ const count=workspaceCountMetric();$('count-chart-title').textContent=count.label;$('count-table-title').textContent=count.label+(count.unit?`（${count.unit}）`:'');$('count').setAttribute('aria-label',count.axis+'随时间变化');
  workspaceState.lastPointKey=latest;workspaceSnapshot();workspaceDrawChart('numbers',data.series,{interactive:true,emptyText:emptyNumbers});
  workspaceDrawChart('count',data.counts,{emptyText:rows.length?'当前观测没有有效的原始数量':'当天没有已保存的观测'});workspaceDrawChart('speed',data.speed,{emptyText:rows.length?'尚无连续可比观测，无法计算推进速度':'当天没有已保存的观测'});
  $('chart-text-summary').textContent=data.series.length?`当前范围 ${rows.length} 组观测，绘制 ${data.series.length} 个原始展示号点。点选可定位记录；左右方向键选择，Enter查看详情。`:emptyNumbers+'。';
@@ -323,7 +331,7 @@ function workspaceRenderGraphs({table=true}={}){
 }
 function workspaceAxisLabel(id){
  if(id==='numbers')return '展示号码（号）';if(id==='speed')return '参考号码 / 分钟';
- const unit=detail?.summary?.count_unit;return '原始数量（'+({tables:'桌',table:'桌',people:'人',persons:'人',groups:'组'}[unit]||'单位待核实')+'）';
+ return workspaceCountMetric().axis;
 }
 function workspaceNearest(event,id='numbers'){
  const plot=workspaceState.charts.get(id);if(!plot)return null;
@@ -336,12 +344,12 @@ function workspaceHover(event,id){
  const near=workspaceNearest(event,id),tip=$(id==='numbers'?'chart-tooltip':'chart-tooltip-'+id);
  if(!near){workspaceState.hover.delete(id);tip.hidden=true;workspaceDrawChart(id,plot.series,{interactive:plot.interactive,emptyText:plot.emptyText});return;}
  workspaceState.hover.set(id,{key:near.key,series:near.series});workspaceDrawChart(id,plot.series,{interactive:plot.interactive,emptyText:plot.emptyText});
- const item=workspaceRows().find(v=>v.key===near.key);tip.hidden=false;tip.textContent=`${day} ${time(near.at)}\n${id==='numbers'?(item?.p.queues?.[$('queue').value]||[]).join('、'):near.value.toLocaleString('zh-CN',{maximumFractionDigits:2})+' '+workspaceAxisLabel(id)}\n${workspaceStateLabel(workspacePointState(item?.p||{},$('queue').value))}`;
+ const item=workspaceRows().find(v=>v.key===near.key),unit=id==='count'?(workspaceCountMetric().unit||'（单位未核实）'):workspaceAxisLabel(id);tip.hidden=false;tip.textContent=`${day} ${time(near.at)}\n${id==='numbers'?(item?.p.queues?.[$('queue').value]||[]).join('、'):near.value.toLocaleString('zh-CN',{maximumFractionDigits:2})+' '+unit}\n${workspaceStateLabel(workspacePointState(item?.p||{},$('queue').value))}`;
  tip.style.left=Math.min(Math.max(near.x+12,8),Math.max(8,plot.width-195))+'px';tip.style.top=Math.max(8,near.y-65)+'px';
 }
 function workspaceCSV(){
  const rows=workspaceOrderedRows(),quote=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';
- const lines=[['门店编号','门店名称','日期','记录来源','请求开始时间','队列响应时间','队列','第1位原展示号','第2位原展示号','第3位原展示号','原始数量（单位未核实）','保存状态','比较状态'].map(quote).join(',')];
+ const count=workspaceCountMetric(),lines=[['门店编号','门店名称','日期','记录来源','请求开始时间','队列响应时间','队列','第1位原展示号','第2位原展示号','第3位原展示号',count.label+`（${count.unit||'单位未核实'}）`,'保存状态','比较状态'].map(quote).join(',')];
  for(const {p} of rows){const labels=p.queues?.[$('queue').value]||[];lines.push([$('store').value,index.store_names[$('store').value]||'',day,detail.source,p.request_started_at||'',p.queue_received_at||'',$('queue').value,labels[0]??'',labels[1]??'',labels[2]??'',p.count_raw??'',workspaceStateLabel(workspacePointState(p,$('queue').value)),p.comparison_state||''].map(quote).join(','));}
  return '\ufeff'+lines.join('\r\n')+'\r\n';
 }

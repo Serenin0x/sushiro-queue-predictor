@@ -1,5 +1,5 @@
 import {createStatisticsClient, createStatisticsController} from './statistics-client.mjs';
-import {createDisplayCache, directory, scopeStores, calendarForScope, dayKind, moveMonth, queuePresentation, recentRecords, plots, nearestPoint, shanghaiDate, timeText} from './calendar-data.mjs';
+import {createDisplayCache, directory, scopeStores, calendarForScope, dayKind, moveMonth, queuePresentation, recentRecords, plots, nearestPoint, shanghaiDate, timeText, countMetric} from './calendar-data.mjs';
 import {icons} from './calendar-icons.mjs';
 import {createSavedStatisticsClient,SAVED_SOURCE,savedSourceOptions} from './saved-statistics.mjs';
 
@@ -231,7 +231,8 @@ function drawCharts() {
   // Independent reference axes keep unrelated queue numbering scales apart.
   drawPlot('sw-number-plot','reference',[{key:'dine',label:'堂食',segments:chart.dine.reference},{key:'reservation',label:'预约',segments:chart.reservation.reference}]);
   drawPlot('sw-speed-plot','turnover',[{key:'dine',label:'堂食',segments:[chart.dine.turnover]},{key:'reservation',label:'预约',segments:[chart.reservation.turnover]}]);
-  drawPlot('sw-count-plot','quantity',[{key:'quantity',label:'原始数量',segments:[chart.quantity]}]);
+  const count=countMetric(display.detail);el('sw-count-title').textContent=count.label;el('sw-count-plot').setAttribute('aria-label',count.axis+'随时间变化');
+  drawPlot('sw-count-plot','quantity',[{key:'quantity',label:count.label,segments:[chart.quantity]}]);
 }
 function drawPlot(id,kind,allSeries) {
   const svg=el(id),width=Math.max(180,Math.floor(svg.getBoundingClientRect().width)),height=240;
@@ -240,7 +241,8 @@ function drawPlot(id,kind,allSeries) {
   function add(tag,attrs={},text=''){const node=document.createElementNS(svgNS,tag);for(const [k,v] of Object.entries(attrs))node.setAttribute(k,String(v));node.textContent=text;svg.append(node);return node;}
   const series=allSeries.filter(s=>s.key==='quantity'||state.series[s.key]);
   const points=series.flatMap(s=>s.segments.flat());const allPoints=allSeries.flatMap(s=>s.segments.flat());
-  const units=kind==='reference'?'首项展示号':kind==='turnover'?'展示变化 / 分钟':'原始数量 · 单位待核';
+  const count=countMetric(display.detail),units=kind==='reference'?'首项展示号':kind==='turnover'?'展示变化 / 分钟':count.axis;
+  const formatValue=point=>Number(point.value.toFixed(3)).toLocaleString('zh-CN')+(kind==='quantity'&&count.unit?' '+count.unit:'');
   add('title',{},units+'，仅实际观测，缺口断开，UTC+8');
   add('text',{x:margin.left,y:16},units);add('text',{'data-axis':'x',x:width-margin.right,y:height-5,'text-anchor':'end'},'UTC+8');
   if(!allPoints.length){add('text',{x:width/2,y:height/2,'text-anchor':'middle'},'暂无可用观测');return;}
@@ -261,7 +263,7 @@ function drawPlot(id,kind,allSeries) {
     const scale=scales.get(s.key),color=s.key==='reservation'?'var(--sw-second)':'var(--sw-red)';
     s.segments.forEach(segment=>{
       if(kind==='reference' && segment.length>1){const d=segment.map((p,i)=>(i?'L':'M')+x(p.at).toFixed(2)+' '+scale.y(value(p)).toFixed(2)).join(' ');add('path',{d,fill:'none',stroke:color,'stroke-width':1.8,...(s.key==='reservation'?{'stroke-dasharray':'5 4'}:{}),'data-series':s.key});}
-      segment.forEach(p=>{const dot=add('circle',{cx:x(p.at),cy:scale.y(value(p)),r:kind==='reference'?1.8:2.6,fill:color,'data-series':s.key,'aria-hidden':'true'});const title=document.createElementNS(svgNS,'title');title.textContent=`${timeText(p.at)} UTC+8 · ${s.label} ${kind==='reference'?p.label:Number(p.value.toFixed(3))}`;dot.append(title);});
+      segment.forEach(p=>{const dot=add('circle',{cx:x(p.at),cy:scale.y(value(p)),r:kind==='reference'?1.8:2.6,fill:color,'data-series':s.key,'aria-hidden':'true'});const title=document.createElementNS(svgNS,'title');title.textContent=`${timeText(p.at)} UTC+8 · ${s.label} ${kind==='reference'?p.label:formatValue(p)}`;dot.append(title);});
     });
   });
   const guide=add('line',{x1:left,x2:left,y1:top,y2:bottom,stroke:'var(--sw-muted)',visibility:'hidden'});
@@ -271,7 +273,7 @@ function drawPlot(id,kind,allSeries) {
     const box=svg.getBoundingClientRect(),pixel=Math.max(left,Math.min(right,(event.clientX-box.left)*width/box.width));const target=minAt+(pixel-left)/(right-left)*(maxAt-minAt);
     const nearest=nearestPoint(points,target);if(!nearest)return;guide.setAttribute('x1',x(nearest.at));guide.setAttribute('x2',x(nearest.at));guide.setAttribute('visibility','visible');
     const tooltip=el('sw-tooltip');tooltip.replaceChildren();tooltip.append(make('div','sw-tooltip-time sw-numbers',timeText(nearest.at)+' UTC+8'));
-    series.forEach(s=>{const actual=s.segments.flat().find(p=>p.at===nearest.at);const row=make('div','sw-tooltip-row');row.append(make('span','',s.label),make('span','sw-numbers',!actual?'该时刻无观测':kind==='reference'?actual.label:Number(actual.value.toFixed(3)).toLocaleString('zh-CN')));tooltip.append(row);});
+    series.forEach(s=>{const actual=s.segments.flat().find(p=>p.at===nearest.at);const row=make('div','sw-tooltip-row');row.append(make('span','',s.label),make('span','sw-numbers',!actual?'该时刻无观测':kind==='reference'?actual.label:formatValue(actual)));tooltip.append(row);});
     tooltip.hidden=false;const rootBox=root.getBoundingClientRect();tooltip.style.left=Math.max(8,Math.min(rootBox.width-tooltip.offsetWidth-8,event.clientX-rootBox.left+12))+'px';tooltip.style.top=box.top-rootBox.top+top+'px';
   }
   const hide=()=>{el('sw-tooltip').hidden=true;guide.setAttribute('visibility','hidden');};
