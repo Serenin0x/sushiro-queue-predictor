@@ -207,39 +207,42 @@ input:focus-visible,select:focus-visible{outline-offset:1px;box-shadow:0 0 0 4px
 @container(min-width:1120px){.monitor-store-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .manual-heading-actions{display:flex;align-items:center;gap:18px}.monitor-detail-heading>.manual-collect-button{margin-left:auto}.manual-collect-button{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;min-height:36px!important;padding:7px 14px!important;font-size:12px!important;font-weight:500!important;background:#f5edef!important;border-color:transparent!important;color:#a92738!important;border-radius:4px!important;transition:background .16s,transform .12s}.manual-collect-button:hover:enabled{background:#eedfe3!important}.manual-collect-button:active:enabled{transform:translateY(1px)}.manual-collect-button:disabled{color:#959da8!important;background:#edf0f3!important;opacity:.8}.manual-progress{display:flex;align-items:center;gap:10px;padding:12px 0;border-block:1px solid #e1e6ed;margin:0 0 22px;min-width:0}.manual-progress p{margin:0;flex:1;font-size:13px;color:#4c596b}.manual-progress button{font-size:11px!important;padding:5px 8px!important;min-height:30px!important}.manual-progress-light{width:7px;height:7px;flex:none;border-radius:50%;background:#638779}.manual-progress[data-state=running] .manual-progress-light{background:#b72435;animation:manual-pulse 1.3s ease-in-out infinite}.manual-login-dialog{width:min(400px,calc(100vw - 40px));padding:26px;border:1px solid #dce2e9;border-radius:5px;box-shadow:0 20px 70px #1d2b4426}.manual-login-dialog::backdrop{background:#16243b55;backdrop-filter:blur(3px)}.manual-login-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}.manual-login-heading h2{font-size:18px;margin:0}.manual-login-heading button{border:0!important;background:none!important;padding:0 6px!important;font-size:23px!important;color:#7e8998!important}.manual-login-dialog label{display:grid;gap:10px;font-size:13px;color:#637084}.manual-login-dialog input[type=password]{width:100%;height:42px;padding:9px 12px;border:1px solid #dce2e9;border-radius:4px;font-size:15px}.manual-login-dialog .manual-remember{display:flex;align-items:center;gap:8px;margin-top:17px;font-size:12px}.manual-login-dialog input[type=checkbox]{width:15px;height:15px;accent-color:#b72435}.manual-login-dialog p{min-height:18px;font-size:12px;color:#b72435;margin:12px 0}.manual-login-dialog button[type=submit]{width:100%;border-radius:4px!important;min-height:40px!important}.manual-collect-button[hidden],.manual-progress[hidden]{display:none!important}@keyframes manual-pulse{50%{opacity:.35;box-shadow:0 0 0 4px #b7243510}}@media(max-width:650px){.manual-heading-actions{gap:10px}.manual-progress{flex-wrap:wrap}.manual-progress p{flex-basis:calc(100% - 22px)}.monitor-detail-heading{flex-wrap:wrap}.manual-collect-button{font-size:11px!important;padding:7px 10px!important}}@media(prefers-reduced-motion:reduce){.manual-progress-light{animation:none!important}.manual-collect-button{transition:none!important}}
 
-/* Proactive authorization stays a single quiet, circular action. */
-.authorization-entry{display:flex;align-items:center;gap:12px;padding:12px 8px 18px}
-button.authorization-orb{flex:0 0 48px;width:48px;height:48px;border:1px solid #c8dfd4;border-radius:50%;padding:12px;color:#27734f;background:#edf6f0;box-shadow:inset 0 0 0 4px #f7fbf8;display:grid;place-items:center;transition:background .18s,color .18s,box-shadow .18s,transform .18s}
-.authorization-orb svg{width:24px;height:24px;transition:transform .2s}
-button.authorization-orb:hover{color:#185f3e;background:#e0f0e6;border-color:#a9ccb8;box-shadow:inset 0 0 0 4px #f0f8f3,0 3px 10px #255d4010}
-button.authorization-orb:hover svg{transform:scale(1.06)}
-button.authorization-orb:active{transform:scale(.95)}
-button.authorization-orb:focus-visible{outline:2px solid #27734f;outline-offset:4px}
-.authorization-orb[aria-busy="true"] svg{animation:authorization-breathe 1s ease-in-out infinite}
-.authorization-copy{display:flex;flex-direction:column;gap:4px;min-width:0;color:#34443c;font-size:13px}
+/* A luminous scanning orb, isolated to the owner's proactive action. */
+.authorization-entry{display:flex;align-items:center;gap:15px;padding:18px 8px 24px}
+button.authorization-orb{position:relative;isolation:isolate;overflow:visible;flex:0 0 56px;width:56px;height:56px;display:grid;place-items:center;padding:14px;border:1px solid #a3f4e454;border-radius:50%;color:#d4fff5;background:radial-gradient(ellipse at 30% 15%,#288783 0%,#103d44 40%,#0b1e30 76%);box-shadow:inset 0 1px 5px #d5fff640,inset 0 -8px 14px #030e20b0,0 5px 14px #0b444426;transition:transform .3s cubic-bezier(.16,1,.3,1),box-shadow .3s,color .3s}
+button.authorization-orb::before{content:"";position:absolute;inset:-3px;border-radius:50%;padding:2px;background:conic-gradient(from 0deg,#75ffe7 0deg,#5acafb00 88deg,#6194fe 163deg,#ab8dff25 208deg,#aaffec 286deg,#75ffe7 360deg);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;animation:authorization-ring 5.6s linear infinite}
+.authorization-light{position:absolute;inset:1px;border-radius:50%;overflow:hidden;pointer-events:none}
+.authorization-light::before{content:"";position:absolute;inset:-50%;background:linear-gradient(115deg,transparent 37%,#bbfff450 47%,#efffff80 49%,transparent 60%);transform:translateX(-80%);animation:authorization-sheen 6s ease-in-out infinite}
+.authorization-light::after{content:"";position:absolute;inset:8px;border-radius:50%;background:radial-gradient(ellipse at 50% 0%,#50f4c91f,transparent 70%);box-shadow:inset 0 1px 0 #c6fff824}
+.authorization-orb svg{width:26px;height:26px;position:relative;z-index:1;filter:drop-shadow(0 0 4px #72ffe67a);transition:transform .3s,filter .3s}
+.authorization-orbit{position:absolute;inset:-8px;border:1px solid #70baa52b;border-top-color:#77eaca99;border-bottom-color:#72bafb55;border-radius:50%;pointer-events:none;animation:authorization-orbit 12s linear infinite}
+.authorization-orbit::after{content:"";position:absolute;top:7px;right:4px;width:4px;height:4px;background:#bbfff3;border-radius:50%;box-shadow:0 0 5px #3de5b9,0 0 10px #4fe6ca}
+.authorization-code{transform-origin:12px 12px}
+.authorization-scan{opacity:.5;stroke:#81ffe0;stroke-width:1.4;filter:drop-shadow(0 0 2px #45ffd1);animation:authorization-scan-idle 6s ease-in-out infinite}
+button.authorization-orb:hover,button.authorization-orb:focus-visible{color:#f4fffc;border-color:#b0ffef99;background:radial-gradient(ellipse at 30% 15%,#379c99,#134c52 40%,#0b2038 78%);transform:translateY(-2px) scale(1.06);box-shadow:inset 0 1px 6px #d5fff66b,inset 0 -8px 14px #030e20a0,0 0 18px #51ddbd45,0 6px 20px #255f7040}
+button.authorization-orb:is(:hover,:focus-visible)::before{animation-duration:1.8s}
+.authorization-orb:is(:hover,:focus-visible) svg{filter:drop-shadow(0 0 5px #7cffde);transform:scale(1.04)}
+.authorization-orb:is(:hover,:focus-visible) .authorization-orbit{animation-duration:3s;border-top-color:#80ffe0;border-bottom-color:#84caff}
+.authorization-orb:is(:hover,:focus-visible) .authorization-scan{animation:authorization-sweep 1.5s ease-in-out infinite}
+.authorization-orb:is(:hover,:focus-visible) .authorization-code{animation:authorization-code 1.5s ease-in-out infinite}
+button.authorization-orb:active{transform:scale(.92);box-shadow:inset 0 2px 12px #0007,0 0 24px #60efd040}
+button.authorization-orb:focus-visible{outline:2px solid #409b87;outline-offset:10px}
+.authorization-orb::after{content:"";position:absolute;inset:-3px;border:2px solid #52e7bb;border-radius:50%;box-shadow:0 0 12px #80f7dc55,inset 0 0 8px #80f7dc33;opacity:0;pointer-events:none}
+.authorization-orb.authorization-activated::after{animation:authorization-ripple .8s cubic-bezier(.16,1,.3,1)}
+.authorization-orb[aria-busy="true"]::before{animation-duration:1s}
+.authorization-orb[aria-busy="true"] .authorization-scan{animation:authorization-sweep .85s ease-in-out infinite}
+.authorization-copy{display:flex;flex-direction:column;gap:5px;min-width:0;color:#34443c;font-size:13px}
 .authorization-copy small{color:#7a8981;font-size:11px}
 .authorization-status{font-size:12px;line-height:1.6;color:#8b383f;margin:0 8px 12px;overflow-wrap:anywhere}
 .manual-login-purpose{font-size:13px;line-height:1.8;color:var(--muted,#718096);margin:0}
-.nav-collapsed .authorization-entry{padding:12px 0 18px;justify-content:center}
+.nav-collapsed .authorization-entry{padding:18px 0 24px;justify-content:center}
 .nav-collapsed .authorization-copy,.nav-collapsed .authorization-status{display:none}
-@keyframes authorization-breathe{50%{opacity:.4;transform:scale(.9)}}
-@media(max-width:840px){.nav-collapsed .authorization-entry{padding:12px 8px 18px;justify-content:flex-start}.nav-collapsed .authorization-copy{display:flex}.nav-collapsed .authorization-status:not([hidden]){display:block}}
-@media(prefers-reduced-motion:reduce){button.authorization-orb,.authorization-orb svg{transition:none}.authorization-orb[aria-busy="true"] svg{animation:none}}
-
-/* A tiny scanner: slow orbit at rest, sweep on attention, ripple on tap. */
-button.authorization-orb{position:relative;isolation:isolate;overflow:visible}
-.authorization-orbit{position:absolute;inset:-5px;border:1px solid transparent;border-top-color:#a7cdb5;border-radius:50%;pointer-events:none;animation:authorization-orbit 10s linear infinite}
-.authorization-orbit::after{content:"";position:absolute;top:5px;right:3px;width:4px;height:4px;background:#66a880;border-radius:50%;box-shadow:0 0 5px #66a88035}
-.authorization-code{transform-origin:12px 12px}
-.authorization-scan{opacity:.35;transform:translateY(0);stroke-width:1.2}
-.authorization-orb:is(:hover,:focus-visible) .authorization-orbit{animation-duration:3s;border-top-color:#599f73}
-.authorization-orb:is(:hover,:focus-visible) .authorization-scan{animation:authorization-sweep 1.8s ease-in-out infinite}
-.authorization-orb:is(:hover,:focus-visible) .authorization-code{animation:authorization-code 1.8s ease-in-out infinite}
-.authorization-orb::after{content:"";position:absolute;inset:-3px;border:1px solid #76b38c;border-radius:50%;opacity:0;pointer-events:none}
-.authorization-orb.authorization-activated::after{animation:authorization-ripple .7s cubic-bezier(.16,1,.3,1)}
-.authorization-orb[aria-busy="true"] .authorization-orbit{animation-duration:1s}
-@keyframes authorization-orbit{to{transform:rotate(360deg)}}
-@keyframes authorization-sweep{0%,100%{transform:translateY(-5px);opacity:0}15%,75%{opacity:.85}85%{transform:translateY(5px);opacity:0}}
-@keyframes authorization-code{0%,100%{opacity:1}45%{opacity:.35;transform:scale(.91)}65%{opacity:1;transform:scale(1.04)}}
-@keyframes authorization-ripple{0%{opacity:.75;transform:scale(.94)}100%{opacity:0;transform:scale(1.55)}}
-@media(prefers-reduced-motion:reduce){.authorization-orbit,.authorization-orb:is(:hover,:focus-visible) .authorization-scan,.authorization-orb:is(:hover,:focus-visible) .authorization-code,.authorization-orb.authorization-activated::after{animation:none}.authorization-orb:hover svg{transform:none}}
+@keyframes authorization-ring{to{transform:rotate(360deg)}}
+@keyframes authorization-orbit{to{transform:rotate(-360deg)}}
+@keyframes authorization-sheen{0%,48%,100%{transform:translateX(-80%)}68%,80%{transform:translateX(80%)}}
+@keyframes authorization-scan-idle{0%,48%,82%,100%{transform:translateY(-4px);opacity:.15}53%,72%{opacity:.9}77%{transform:translateY(5px);opacity:.2}}
+@keyframes authorization-sweep{0%,100%{transform:translateY(-5px);opacity:0}15%,75%{opacity:1}85%{transform:translateY(5px);opacity:0}}
+@keyframes authorization-code{0%,100%{opacity:1}45%{opacity:.45;transform:scale(.92)}65%{opacity:1;transform:scale(1.05)}}
+@keyframes authorization-ripple{0%{opacity:.9;transform:scale(.94)}100%{opacity:0;transform:scale(1.8)}}
+@media(max-width:840px){.nav-collapsed .authorization-entry{padding:18px 8px 24px;justify-content:flex-start}.nav-collapsed .authorization-copy{display:flex}.nav-collapsed .authorization-status:not([hidden]){display:block}}
+@media(prefers-reduced-motion:reduce){button.authorization-orb,.authorization-orb svg{transition:none}.authorization-orb::before,.authorization-orbit,.authorization-light::before,.authorization-scan,.authorization-orb:is(:hover,:focus-visible)::before,.authorization-orb:is(:hover,:focus-visible) .authorization-scan,.authorization-orb:is(:hover,:focus-visible) .authorization-code,.authorization-orb.authorization-activated::after,.authorization-orb[aria-busy="true"]::before,.authorization-orb[aria-busy="true"] .authorization-scan{animation:none}button.authorization-orb:hover,.authorization-orb:hover svg{transform:none}}
