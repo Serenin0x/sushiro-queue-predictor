@@ -53,3 +53,23 @@
 .database-toolbar{border-bottom:1px solid #e9edf1}
 @media(pointer:coarse){:is(.tracking-tools,.ticket-row-actions,.ticket-result-tools,.database-pagination,.database-pagination>div,.composer-actions,.composer-footer,.dialog-heading)>button{min-height:44px}.database-workspace :is(input,select){min-height:44px;height:auto;font-size:16px}}
 @media(prefers-reduced-motion:reduce){:is(.tracking-tools,.ticket-row-actions,.ticket-result-tools,.database-pagination,.database-pagination>div,.composer-actions,.composer-footer,.dialog-heading)>button{transition:none;transform:none!important}.ticket-refresh[aria-busy=true]::before,#research-refresh[aria-busy=true]::before{animation:none}}
+
+/* Compact recommendations and a single, non-navigating hourly explanation. */
+.insight-workspace #insight-back{display:inline-flex;align-items:center;gap:7px;background:none;border:0;color:#788496;padding:0;min-height:30px;margin:0 0 9px;font-size:12px}
+.insight-workspace #insight-back:hover{color:#ad263b;background:none}.insight-workspace #insight-back[hidden]{display:none}
+.insight-ticket-disclosure{margin:0;border:0;border-bottom:1px solid #e5e9ee;border-radius:0;background:#fff}
+.insight-ticket-disclosure>summary{display:flex;align-items:center;gap:20px;cursor:pointer;list-style:none;min-height:30px}
+.insight-ticket-disclosure>summary::-webkit-details-marker{display:none}.insight-disclosure-title{font-size:16px;font-weight:600;color:#26364b}
+#insight-ticket-summary{margin-left:auto;font-size:12px;color:#8992a0}.insight-disclosure-action{display:inline-flex;align-items:center;gap:8px;color:#7d8999;font-size:12px;white-space:nowrap}
+.insight-disclosure-action svg{transition:transform .18s ease}.insight-ticket-disclosure[open]>.insight-disclosure-action svg,.insight-ticket-disclosure[open]>summary svg{transform:rotate(180deg)}
+.insight-ticket-disclosure .when-open,.insight-ticket-disclosure[open] .when-closed{display:none}.insight-ticket-disclosure[open] .when-open{display:inline}
+.insight-ticket-disclosure[open]>summary{margin-bottom:25px}.insight-ticket-disclosure>summary:hover .insight-disclosure-action{color:#ad263b}
+.insight-heat-popover{position:fixed;z-index:1200;width:320px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto;box-sizing:border-box;background:#fff;border:1px solid #dce2e9;border-radius:5px;box-shadow:0 7px 28px #24334c1c;padding:17px 18px;color:#43536a;font-size:12px;animation:heat-popover-in .14s ease-out}
+.insight-heat-popover[hidden]{display:none}.heat-popover-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.heat-popover-heading h3{font-size:14px;font-weight:600;margin:0;overflow-wrap:anywhere}
+.heat-popover-heading button{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;min-height:30px;padding:0;border:0;border-radius:3px;background:transparent;color:#8390a0}.heat-popover-heading button:hover{color:#ad263b;background:#fbecef}
+.heat-popover-period{color:#8b95a3;font-size:11px;margin:2px 0 16px}.heat-popover-value{display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding-bottom:16px;border-bottom:1px solid #edf0f3}.heat-popover-value>span{color:#7a8797}.heat-popover-value strong{font-size:20px;font-weight:550;color:#a91f35;font-variant-numeric:tabular-nums}
+.insight-heat-popover dl{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;margin:16px 0}.insight-heat-popover dt{color:#8a95a3;font-size:11px;margin-bottom:5px}.insight-heat-popover dd{margin:0;font-variant-numeric:tabular-nums}.heat-popover-explanation{line-height:1.75;color:#8190a2;margin:0;font-size:11px}
+.heat-cell[aria-expanded=true]{outline:2px solid #a91f35;outline-offset:2px}.heat-cell:focus-visible{outline:2px solid #a91f35;outline-offset:2px}
+@keyframes heat-popover-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:700px){.insight-ticket-disclosure>summary{gap:10px;flex-wrap:wrap}.insight-disclosure-title{font-size:15px}.insight-disclosure-action{margin-left:auto}#insight-ticket-summary{margin-left:0}.heat-popover-heading button{width:36px;height:36px;min-height:36px}}
+@media(prefers-reduced-motion:reduce){.insight-heat-popover{animation:none}.insight-disclosure-action svg{transition:none}}

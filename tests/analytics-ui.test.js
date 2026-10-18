@@ -1,17 +1,17 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-class Node{constructor(){this.children=[];this.value='';this.disabled=false;this.textContent='';this.dataset={};}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(k,v){this[k]=v;}scrollIntoView(){}}
+class Node{constructor(){this.children=[];this.value='';this.disabled=false;this.textContent='';this.dataset={};this.style={};this.isConnected=true;}append(...v){this.children.push(...v);}replaceChildren(...v){this.children=v;}setAttribute(k,v){this[k]=v;}scrollIntoView(){}getBoundingClientRect(){return {left:200,top:220,bottom:260,width:100,height:300};}focus(){this.focused=true;}contains(n){return this===n||this.children.some(c=>c.contains?.(n));}}
 const nodes=new Map(),$=id=>{if(!nodes.has(id))nodes.set(id,new Node());return nodes.get(id);},events={},requests=[];
-let section='intelligence';
+let section='intelligence',delayedReport=null,navigations=0;
 const selection={from:'2026-10-01',to:'2026-10-16',source:'sapi_miniapp_gateway',queue:'ordinary',store_id:''};
-const row={store_id:'3014',store_name:'合成门店',city:'北京',observations:20,successful:20,visible:10,covered_slots:10,expected_slots:44,sampling_gaps:0,coverage_percent:22.7,days_observed:1,comparable_intervals:8,readiness_score:20,readiness_level:'待积累',coverage_from:'2026-10-15',unread_dates:[],read_failures:0,hourly:Array.from({length:12},(_,n)=>({hour:n+10,rate:1,active_ratio:50,observations:2,days:1})),daily:[],gaps:[],gap_count:0,suggestions:[{priority:'high',text:'合成补采建议'}]};
+const row={store_id:'3014',store_name:'合成门店',city:'北京',observations:20,successful:20,visible:10,covered_slots:10,expected_slots:44,sampling_gaps:0,coverage_percent:22.7,days_observed:1,comparable_intervals:8,readiness_score:20,readiness_level:'待积累',coverage_from:'2026-10-15',unread_dates:[],read_failures:0,hourly:Array.from({length:12},(_,n)=>({hour:n+10,rate:1,active_ratio:50,observations:2,visible:1,empty:1,failed:0,days:1})),daily:[],gaps:[],gap_count:0,suggestions:[{priority:'high',text:'合成补采建议'}]};
 const report={selection,stores:[row],report_id:'a'.repeat(64),generated_at:'2026-10-16T00:00:00Z',archive_start:'2026-10-15',archive_end:'2026-10-15',errors:[],incomplete:false};
-const context={crypto:require('node:crypto').webcrypto,Uint8Array,window:{addEventListener:(name,fn)=>events[name]=fn},document:{visibilityState:'visible',getElementById:$,createElement:()=>new Node(),createElementNS:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},setInterval:()=>0,Date,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},fetch:async(path,options)=>{const body=options?.body&&JSON.parse(options.body);requests.push({path,body});return {ok:true,json:async()=>body?.action==='report'?{...report,selection:body.selection}:body?{state:'queued'}:path.includes('collection/health')?{state:'closed',next_open_at:'2026-10-16T11:00:00+08:00'}:{report_id:report.report_id,request_id:requests.filter(r=>r.body?.action==='explain').at(-1)?.body?.request_id,state:'running'}};}};
+const context={crypto:require('node:crypto').webcrypto,Uint8Array,window:{addEventListener:(name,fn)=>events[name]=fn},document:{documentElement:{clientWidth:390,clientHeight:844},visibilityState:'visible',getElementById:$,createElement:()=>new Node(),createElementNS:()=>new Node(),addEventListener:(name,fn)=>events[name]=fn},setInterval:()=>0,Date,Intl,Blob,AbortSignal,navigator:{sendBeacon:()=>true},fetch:async(path,options)=>{const body=options?.body&&JSON.parse(options.body);requests.push({path,body});if(body?.action==='report'&&delayedReport)await delayedReport;return {ok:true,json:async()=>body?.action==='report'?{...report,selection:body.selection}:body?{state:'queued'}:path.includes('collection/health')?{state:'closed',next_open_at:'2026-10-16T11:00:00+08:00'}:{report_id:report.report_id,request_id:requests.filter(r=>r.body?.action==='explain').at(-1)?.body?.request_id,state:'running'}};}};
 vm.createContext(context);vm.runInContext(fs.readFileSync('src/sushiwait/web/analytics-ui.js','utf8'),context);
 const api=context.window.SushiWaitAnalytics,settle=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  $('insight-source').value='sapi_miniapp_gateway';$('insight-queue').value='ordinary';
- api.attach({today:()=>selection.to,section:()=>section,navigateStore(){}});await settle();
+ api.attach({today:()=>selection.to,section:()=>section,navigateStore(){navigations++;}});await settle();
  assert.equal($('insight-period').value,'30');
  assert.equal($('insight-from').value,'2026-09-17');
  assert.equal($('insight-ai-run').disabled,true);
@@ -23,11 +23,25 @@ const api=context.window.SushiWaitAnalytics,settle=()=>new Promise(r=>setImmedia
  context.document.visibilityState='visible';events.visibilitychange();await settle();
  assert.equal($('insight-ai-run').disabled,false,'returning to a waiting report must allow a new explicit request');
  assert.equal(paidIntent().length,1,'returning without clicking must not renew the old demand');
+ const allNodes=n=>[n,...n.children.flatMap(allNodes)],cells=()=>allNodes($('insight-heatmap')).filter(n=>n.className?.split(' ').includes('heat-cell'));
+ const callsBeforeHeat=requests.length,first=cells()[0],second=cells()[1];
+ first.onclick();assert.equal($('insight-heat-popover').hidden,false);assert.equal(first['aria-expanded'],'true');assert.equal($('insight-store').value,'');assert.equal(navigations,0);assert.equal(requests.length,callsBeforeHeat,'opening a cell must not navigate, request data or invoke AI');
+ assert.equal($('insight-heat-period').textContent,'北京 · 10:00–11:00');assert($('insight-heat-explanation').textContent.includes('1 / 2'));assert.equal($('insight-heat-value').children[1].textContent,'50.0%');assert(parseInt($('insight-heat-popover').style.left)<=278,'popover remains within mobile viewport');
+ second.onclick();assert.equal(first['aria-expanded'],'false');assert.equal(second['aria-expanded'],'true');assert($('insight-heat-period').textContent.includes('11:00–12:00'));
+ events.keydown({key:'Escape',preventDefault(){}});assert.equal($('insight-heat-popover').hidden,true);assert.equal(second.focused,true);
+ first.onclick();events.click({target:$('insight-title')});assert.equal($('insight-heat-popover').hidden,true);
+ first.onclick();events.scroll({target:$('insight-heatmap')});assert.equal($('insight-heat-popover').hidden,true);
+ $('insight-heat-mode').value='speed';row.hourly[0].rate=null;$('insight-heat-mode').onchange();cells()[0].onclick();assert.equal($('insight-heat-value').children[1].textContent,'暂无有效数据');assert($('insight-heat-explanation').textContent.includes('可比较'));$('insight-heat-close').onclick();row.hourly[0].rate=1;
+ $('insight-city').value='北京';$('insight-city').onchange();const originalFrom=$('insight-from').value;
  $('insight-store').value='3014';$('insight-store').onchange();await $('insight-ai-run').onclick();
+ assert.equal($('insight-back').hidden,false);assert.equal($('insight-title').textContent,'合成门店 · 智慧分析');
  assert(requests.some(r=>r.body?.action==='report'&&r.body.selection.store_id==='3014'));
  assert.equal(paidIntent().at(-1).body.selection.store_id,'3014');
  const previous=paidIntent().at(-1).body.request_id;await api.refresh();assert.notEqual(paidIntent().at(-1).body.request_id,previous);assert(requests.some(r=>r.body?.action==='report'&&r.body.fresh===true));
  section='tickets';api.notify();await settle();assert.equal($('insight-ai-run').disabled,false);
+ section='intelligence';$('insight-back').onclick();await settle();assert.equal($('insight-back').hidden,true);assert.equal($('insight-store').value,'');assert.equal($('insight-city').value,'北京');assert.equal($('insight-from').value,originalFrom);assert.equal($('insight-title').textContent,'门店数据研究');
+ $('insight-store').value='3014';$('insight-store').onchange();let release;delayedReport=new Promise(resolve=>release=resolve);const beforeLate=paidIntent().length,starting=$('insight-ai-run').onclick();$('insight-back').onclick();release();await starting;delayedReport=null;assert.equal(paidIntent().length,beforeLate,'a late single-store report cannot restart AI after returning');assert.equal($('insight-ai-result').children.length,0);assert.equal($('insight-store').value,'');
+ const html=fs.readFileSync('src/sushiwait/web/statistics.html','utf8');assert.match(html,/<details id="insight-ticket-section"[^>]*>/);assert(!/<details id="insight-ticket-section"[^>]*\bopen\b/.test(html),'sample advice starts collapsed');
  $('insight-from').value='2000-01-01';const beforeRange=requests.length;await api.refresh();assert.equal(requests.length,beforeRange);assert($('insight-status').textContent.includes('366'));
- console.log('analytics visible demand, release/re-entry and independent store scope passed');
+ console.log('analytics demand, independent scope, cell popover, return navigation and collapsed advice passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
