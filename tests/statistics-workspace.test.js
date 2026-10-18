@@ -28,14 +28,15 @@ const points=[
 ].map(v=>({request_started_at:`2026-10-13T18:${v.minute}:00+08:00`,queue_received_at:v.ok?`2026-10-13T18:${v.minute}:01+08:00`:null,count_received_at:v.ok?`2026-10-13T18:${v.minute}:01+08:00`:null,pair_ok:v.ok,scheduled_pause:false,queues:v.numbers===null?null:{mixedQueue:v.numbers,reservationQueue:[]},count_raw:v.ok?v.numbers?.length??0:null,comparison_state:v.comparison,interval_seconds:v.interval??null,error_codes:v.ok?{}:{detail:'read_failed'}}));
 const row=id=>({store_id:id,observations:6,successful_pairs:5,failed_pairs:1,scheduled_pause_slots:0,expected_background_slots_so_far:6,observed_background_slots:5,observed_slot_fraction_so_far:5/6,last_observation_at:'2026-10-13T18:15:01+08:00'});
 const month={source:'sapi_miniapp_gateway',api_profile:'miniapp_gateway',month:'2026-10',days:{'2026-10-13':{'3014':row('3014'),'3004':row('3004')}},store_names:{3014:'合成大融城',3004:'合成西单',2009:'合成世豪'},configured_store_ids:['3014','3004','2009'],unavailable_store_ids:[]};
-let deferredMonth=null,resolveMonth=null,deferredStore=null,resolveStore=null;
+let deferredMonth=null,resolveMonth=null,deferredStore=null,resolveStore=null,deferredDay=null,resolveDay=null;
 const location={pathname:'/statistics-legacy',search:'?section=analysis&date=2026-10-13&store=3014'};
 const context={console,Intl,Date:Clock,Math,Number,String,Object,Array,RegExp,JSON,Promise,Set,Map,URL,URLSearchParams,AbortSignal,setInterval:()=>0,clearInterval(){},document,window:{devicePixelRatio:1,location,matchMedia:()=>({matches:false}),addEventListener(name,fn){listeners[name]=fn;},history:{pushState(a,b,url){routes.push(url);location.search=url.slice(url.indexOf('?'));},replaceState(a,b,url){location.search=url.slice(url.indexOf('?'));}}}};
 let health={schema_version:1,state:'running',active_store_count:2,unavailable_store_ids:[],display_date:'2026-10-13',display_switch_at:'2026-10-14T11:00:00+08:00'};
 context.fetch=async path=>{reads.push(path);if(path==='/api/v1/collection/health')return {ok:true,json:async()=>health};if(path.includes('/statistics/settings'))return {ok:true,json:async()=>({schema_version:1,poll_seconds:600})};
- if(path.includes('/months/')||path==='/api/v1/days'){if(deferredMonth){await deferredMonth;deferredMonth=null;}return {ok:true,json:async()=>month};}
+ if(path.includes('/months/')||path==='/api/v1/days'){if(deferredMonth){await deferredMonth;deferredMonth=null;}return {ok:true,json:async()=>({...month,month:path.match(/months\/(\d{4}-\d{2})/)?.[1]||month.month})};}
  const match=path.match(/stores\/(\d+)\/days\/(\d{4}-\d{2}-\d{2})/);assert(match,'unexpected public path '+path);
  if(deferredStore&&match[1]==='3004'){await deferredStore;deferredStore=null;}
+ if(deferredDay&&match[2]==='2026-10-14'){await deferredDay;deferredDay=null;}
  return {ok:true,json:async()=>({source:'sapi_miniapp_gateway',requested_store_id:match[1],local_date:match[2],points:match[2]==='2026-10-13'?points:[],graph_truncated:false})};
 };
 vm.createContext(context);vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),context);
@@ -45,6 +46,21 @@ assert.equal(run('archiveReadStatus({days:{},store_names:{}})'),'归档加载中
  await settle();assert.equal($('store').value,'3014');assert.equal(run('engineeringSection'),'analysis');assert.equal(run('detail.points.length'),6);
  assert.equal($('snapshot-state').textContent,'等待更新');assert.equal($('snapshot-numbers').children[0].textContent,'—');assert.equal($('snapshot-reservation').children[0].textContent,'—');assert.equal($('records-page-note').textContent,'6 条观测，第 1 / 1 页');
  const actual=run('workspaceGraphSeries(workspaceRows())');assert.equal(actual.series.length,3);assert.equal(actual.speed.length,1);assert.equal(actual.speed[0].value,8*60/180);assert.equal(actual.series[2].connect,false,'failed/unknown continuation cannot be joined');
+ // A restored all-off form must not hide archived data or survive a date round trip.
+ for(const i of [1,2,3])$('series-'+i).checked=false;
+ run('graphs()');assert.equal($('series-1').checked,true);assert.equal(run('workspaceState.chartPositions.length'),3);
+ // Switching to the second position is preserved; switching off the last one is rejected.
+ $('series-2').checked=true;$('series-2').onchange();$('series-1').checked=false;$('series-1').onchange();
+ assert.equal(run('workspaceState.chartPositions.length'),2);assert(run('workspaceState.chartPositions.every(v=>v.series===1)'));
+ $('series-2').checked=false;$('series-2').onchange();assert.equal($('series-2').checked,true);
+ run("workspaceSetDate('2026-10-14')");await settle();assert.equal(run('workspaceState.chartPositions.length'),0);assert.match($('chart-text-summary').textContent,/当天没有已保存的观测/);
+ $('numbers').listeners.pointerleave();assert.equal(run('workspaceState.charts.get("numbers").emptyText'),'当天没有已保存的观测');
+ run("workspaceSetDate('2026-10-13')");await settle();assert.equal($('series-1').checked,false);assert.equal($('series-2').checked,true);assert.equal(run('workspaceState.chartPositions.length'),2);
+ deferredDay=new Promise(r=>resolveDay=r);run("workspaceSetDate('2026-10-14')");await settle();run("workspaceSetDate('2026-10-13')");await settle();resolveDay();await settle();assert.equal(run('detail.local_date'),'2026-10-13');assert.equal(run('workspaceState.chartPositions.length'),2,'a late empty date must not erase the restored curve');
+ run("workspaceSetDate('2026-09-30')");await settle();assert.equal(run('workspaceState.chartPositions.length'),0);run("workspaceSetDate('2026-10-13')");await settle();assert.equal($('series-2').checked,true);assert.equal(run('workspaceState.chartPositions.length'),2,'cross-month return preserves the chosen position');
+ // Position absence is distinct from a day with no archive, and hover retains that message.
+ $('queue').value='reservationQueue';$('queue').onchange();assert.match($('chart-text-summary').textContent,/所选号码位置/);assert.equal(run('workspaceState.charts.get("numbers").emptyText'),'所选号码位置没有可绘制的展示号');
+ $('queue').value='mixedQueue';$('queue').onchange();$('series-1').checked=true;$('series-1').onchange();$('series-2').checked=false;$('series-2').onchange();
  const selected=run('workspaceRows()[1].key');run('workspaceSelectRecord(workspaceRows()[1].key)');assert.equal(run('workspaceState.selected'),selected);
  $('records-size').value='2';$('records-size').onchange();$('records-next').onclick();assert.equal(run('workspaceState.page'),1);
  await run('refresh()');assert.equal(run('workspaceState.range'),'all');assert.equal(run('workspaceState.selected'),selected);assert.equal(run('workspaceState.page'),1);

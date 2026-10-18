@@ -164,7 +164,12 @@ function workspaceRenderOverview(){
  $('overview-page-note').textContent=`${workspaceState.overviewPage+1} / ${pages}`;$('overview-previous').disabled=workspaceState.overviewPage===0;$('overview-next').disabled=workspaceState.overviewPage>=pages-1;
  $('date-title').textContent=day;$('summary').textContent=Object.keys(all).length?'':'无已保存观测';
 }
-function workspaceDrawChart(id,series,{interactive=false}={}){
+function workspaceEnsureSeries(preferred=1){
+ // Keep at least one position visible, including restored browser form state.
+ if([1,2,3].some(i=>$('series-'+i).checked))return false;
+ $('series-'+preferred).checked=true;return true;
+}
+function workspaceDrawChart(id,series,{interactive=false,emptyText='当前范围没有可绘制的有效观测'}={}){
  const canvas=$(id),rect=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,3),width=Math.max(180,rect.width),height=interactive?(rect.height||300):220;
  canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
  const c=canvas.getContext('2d');c.scale(dpr,dpr);c.clearRect(0,0,width,height);
@@ -182,7 +187,7 @@ function workspaceDrawChart(id,series,{interactive=false}={}){
  const divisions=width<450?2:4;c.setLineDash([2,5]);
  for(let i=0;i<=divisions;i++){const xx=pad.left+w*i/divisions;c.strokeStyle='#f1f3f6';c.beginPath();c.moveTo(xx,pad.top);c.lineTo(xx,pad.top+h);c.stroke();c.fillStyle='#718094';c.textAlign=i===0?'left':i===divisions?'right':'center';c.fillText(time(minX+(maxX-minX)*i/divisions).slice(0,5),xx,height-14);}
  c.setLineDash([]);
- if(!valid.length){c.textAlign='left';c.fillStyle='#8c96a3';c.fillText('当前范围没有可绘制的有效观测',pad.left+12,pad.top+25);}
+ if(!valid.length){c.textAlign='left';c.fillStyle='#8c96a3';c.fillText(emptyText,pad.left+12,pad.top+25);}
  const colors=['#b4212b','#d09c54','#61878b'],positions=[];
  const joined=new Set();let before=new Map();
  for(const item of valid){const prior=before.get(item.series||0);if(item.connect&&prior&&item.i===prior.i+1&&(id!=='numbers'||item.value>=prior.value)){joined.add(prior);joined.add(item);}before.set(item.series||0,item);}
@@ -193,7 +198,7 @@ function workspaceDrawChart(id,series,{interactive=false}={}){
   if(workspaceState.selected===item.key){c.strokeStyle='#fff';c.lineWidth=2;c.stroke();c.strokeStyle=colors[item.series||0];c.globalAlpha=.2;c.lineWidth=5;c.beginPath();c.arc(px,py,7,0,Math.PI*2);c.stroke();c.globalAlpha=1;}
   positions.push({...item,x:px,y:py});previous.set(item.series||0,item);
  }
- workspaceState.charts.set(id,{positions,width,height,pad,series,interactive});
+ workspaceState.charts.set(id,{positions,width,height,pad,series,interactive,emptyText});
  const hover=workspaceState.hover.get(id),hovered=positions.find(v=>v.key===hover?.key&&v.series===hover?.series);
  if(hovered){c.strokeStyle='#8a97a7';c.lineWidth=1;c.setLineDash([3,4]);c.beginPath();c.moveTo(hovered.x,pad.top);c.lineTo(hovered.x,pad.top+h);c.moveTo(pad.left,hovered.y);c.lineTo(width-pad.right,hovered.y);c.stroke();c.setLineDash([]);c.fillStyle='#b4212b';c.beginPath();c.arc(hovered.x,hovered.y,5,0,Math.PI*2);c.fill();c.strokeStyle='#fff';c.lineWidth=2;c.stroke();}
  if(interactive){workspaceState.chartPositions=positions;workspaceState.chartWidth=width;workspaceState.chartHeight=height;
@@ -300,12 +305,14 @@ function workspaceRenderTable(){
 }
 function workspaceRenderGraphs({table=true}={}){
  if(!taskWorkspace||!detail||detail.requested_store_id!==$('store').value||detail.local_date!==day)return;
+ workspaceEnsureSeries();
  const scope=workspaceScope();
  if(workspaceState.chartScope!==scope){workspaceState.chartScope=scope;workspaceState.selected=null;workspaceState.page=0;workspaceState.range='all';workspaceState.from='00:00';workspaceState.to='23:59';workspaceState.lastPointKey=null;}
  const rows=workspaceFilteredRows({search:false}),data=workspaceGraphSeries(rows),latest=workspaceRows().at(-1)?.key;
- workspaceState.lastPointKey=latest;workspaceSnapshot();workspaceDrawChart('numbers',data.series,{interactive:true});
- workspaceDrawChart('count',data.counts);workspaceDrawChart('speed',data.speed);
- $('chart-text-summary').textContent=data.series.length?`当前范围 ${rows.length} 组观测，绘制 ${data.series.length} 个原始展示号点。点选可定位记录；左右方向键选择，Enter查看详情。`:'当前范围没有可绘制的纯数字展示号；空数组、失败和非数字原标签仍保留在采样记录中。';
+ const emptyNumbers=rows.length?'所选号码位置没有可绘制的展示号':'当天没有已保存的观测';
+ workspaceState.lastPointKey=latest;workspaceSnapshot();workspaceDrawChart('numbers',data.series,{interactive:true,emptyText:emptyNumbers});
+ workspaceDrawChart('count',data.counts,{emptyText:rows.length?'当前观测没有有效的原始数量':'当天没有已保存的观测'});workspaceDrawChart('speed',data.speed,{emptyText:rows.length?'尚无连续可比观测，无法计算推进速度':'当天没有已保存的观测'});
+ $('chart-text-summary').textContent=data.series.length?`当前范围 ${rows.length} 组观测，绘制 ${data.series.length} 个原始展示号点。点选可定位记录；左右方向键选择，Enter查看详情。`:emptyNumbers+'。';
  const selected=workspaceRows().find(v=>v.key===workspaceState.selected);
  $('selected-record-open').disabled=!selected;$('selected-record-text').textContent=selected?`${time(selected.at)}，${(selected.p.queues?.[$('queue').value]||[]).join('、')||workspaceStateLabel(workspacePointState(selected.p,$('queue').value))}，${workspaceStateLabel(workspacePointState(selected.p,$('queue').value))}`:'选择一个采样点查看记录。';
  $('quality-strip').replaceChildren();
@@ -327,8 +334,8 @@ function workspaceNearest(event,id='numbers'){
 function workspaceHover(event,id){
  const plot=workspaceState.charts.get(id);if(!plot)return;
  const near=workspaceNearest(event,id),tip=$(id==='numbers'?'chart-tooltip':'chart-tooltip-'+id);
- if(!near){workspaceState.hover.delete(id);tip.hidden=true;workspaceDrawChart(id,plot.series,{interactive:plot.interactive});return;}
- workspaceState.hover.set(id,{key:near.key,series:near.series});workspaceDrawChart(id,plot.series,{interactive:plot.interactive});
+ if(!near){workspaceState.hover.delete(id);tip.hidden=true;workspaceDrawChart(id,plot.series,{interactive:plot.interactive,emptyText:plot.emptyText});return;}
+ workspaceState.hover.set(id,{key:near.key,series:near.series});workspaceDrawChart(id,plot.series,{interactive:plot.interactive,emptyText:plot.emptyText});
  const item=workspaceRows().find(v=>v.key===near.key);tip.hidden=false;tip.textContent=`${day} ${time(near.at)}\n${id==='numbers'?(item?.p.queues?.[$('queue').value]||[]).join('、'):near.value.toLocaleString('zh-CN',{maximumFractionDigits:2})+' '+workspaceAxisLabel(id)}\n${workspaceStateLabel(workspacePointState(item?.p||{},$('queue').value))}`;
  tip.style.left=Math.min(Math.max(near.x+12,8),Math.max(8,plot.width-195))+'px';tip.style.top=Math.max(8,near.y-65)+'px';
 }
@@ -354,7 +361,8 @@ function workspaceInit(){
  $('monitor-status').onclick=()=>{const open=$('monitor-status-reason').hidden;$('monitor-status-reason').hidden=!open;$('monitor-status').setAttribute('aria-expanded',String(open));};
  workspaceClock();setInterval(workspaceClock,1000);
  for(const [id,amount] of [['previous-day',-1],['next-day',1]])$(id).onclick=()=>{const value=new Date(day+'T00:00:00Z');value.setUTCDate(value.getUTCDate()+amount);workspaceSetDate(value.toISOString().slice(0,10));};$('today-day').onclick=()=>workspaceSetDate(today());
- for(let i=1;i<=3;i++)$('series-'+i).onchange=graphs;
+ workspaceEnsureSeries();
+ for(let i=1;i<=3;i++)$('series-'+i).onchange=()=>{if(workspaceEnsureSeries(i))$('workspace-announcement').textContent='至少保留一条号码曲线';graphs();};
  for(const id of ['records-search','records-sort','records-size'])$(id)[id==='records-search'?'oninput':'onchange']=()=>{workspaceState.page=0;workspaceState.pageAnchor=null;workspaceRenderTable();};
  $('records-previous').onclick=()=>{workspaceState.page=Math.max(0,workspaceState.page-1);workspaceState.pageAnchor=null;workspaceRenderTable();};$('records-next').onclick=()=>{workspaceState.page++;workspaceState.pageAnchor=null;workspaceRenderTable();};$('records-export').onclick=workspaceExport;
 
@@ -365,7 +373,7 @@ function workspaceInit(){
  $('record-dialog').addEventListener('click',event=>{if(event.target===$('record-dialog')){const r=$('record-dialog').getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)$('record-dialog').close();}});
  for(const id of ['numbers','count','speed']){
   $(id).addEventListener('pointermove',event=>workspaceHover(event,id));
-  $(id).addEventListener('pointerleave',()=>{const plot=workspaceState.charts.get(id);workspaceState.hover.delete(id);$(id==='numbers'?'chart-tooltip':'chart-tooltip-'+id).hidden=true;if(plot)workspaceDrawChart(id,plot.series,{interactive:plot.interactive});});
+  $(id).addEventListener('pointerleave',()=>{const plot=workspaceState.charts.get(id);workspaceState.hover.delete(id);$(id==='numbers'?'chart-tooltip':'chart-tooltip-'+id).hidden=true;if(plot)workspaceDrawChart(id,plot.series,{interactive:plot.interactive,emptyText:plot.emptyText});});
   $(id).addEventListener('click',event=>{const near=workspaceNearest(event,id);if(near)workspaceSelectRecord(near.key);});
  }
  $('numbers').addEventListener('keydown',event=>{const rows=workspaceFilteredRows({search:false});if(!rows.length)return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();const current=rows.findIndex(v=>v.key===workspaceState.selected),position=current<0?(event.key==='ArrowLeft'?rows.length-1:0):Math.min(rows.length-1,Math.max(0,current+(event.key==='ArrowRight'?1:-1)));workspaceSelectRecord(rows[position].key);}else if(event.key==='Enter'&&workspaceState.selected){event.preventDefault();workspaceOpenRecord(workspaceRows().find(v=>v.key===workspaceState.selected));}});
