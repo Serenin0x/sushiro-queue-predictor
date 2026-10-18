@@ -146,7 +146,7 @@ def requires_scan(root, block):
         return False
     day = block['value']['day'].replace('-', '')
     config_path=Path(root)/'daily-config.json'
-    expanded=config_path.exists() and read(config_path).get('schema_version')==2
+    expanded=config_path.exists() and read(config_path).get('schema_version') in (2,3)
     directory = Path(root) / (('five-cities-' if expanded else 'five-stores-') + day) / 'refresh-diagnostics'
     if not directory.exists():
         return False

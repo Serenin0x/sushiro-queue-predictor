@@ -17,6 +17,7 @@ from sushiwait.cadence import CALENDAR_POLICY, next_sample_at
 from sushiwait.credentials import _read_private_file
 from sushiwait.packets import encoded
 from sushiwait.storage import SnapshotStore
+from sushiwait.cityscope import EXPANDED_SCOPE_ID, CITIES, ADDITIONAL_CITIES, APPROVED_STORES
 
 UTC = timezone.utc
 POLICY = 'store-isolation-v1'
@@ -79,6 +80,8 @@ def is_transient(row):
 class Fleet:
     def __init__(self, day, plan, old_usage, now):
         self.day, self.plan = Path(day), plan
+        self.interleaved = plan.get('fleet_scope') == EXPANDED_SCOPE_ID
+        self.rank = {store:index for index,store in enumerate(plan['store_ids'])}
         self.path = self.day / 'fleet-state.json'
         self.db = SnapshotStore(self.day / 'observations.sqlite')
         digest = hashlib.sha256(encoded(plan)).hexdigest()
@@ -89,10 +92,13 @@ class Fleet:
                 "WHERE data_origin='live' AND api_profile='miniapp_gateway' ORDER BY id").fetchall()
             if len(rows) != old_usage or any(r[1] not in plan['store_ids'] for r in rows):
                 raise ValueError('fleet_inherited_usage_invalid')
+            initial = max(now,instant(plan['windows'][0]['start']))
+            end = instant(plan['windows'][0]['end'])
             self.value = {'schema_version': 1, 'policy': POLICY, 'plan_sha256': digest,
                 'issued': old_usage, 'successful': 0, 'failed': 0, 'pending': None,
                 'last_progress_at': None, 'rate_limit_until': None, 'rate_limit_streak': 0,
-                'stores': {s: [now.isoformat(), 0, 0] for s in plan['store_ids']}}
+                'stores': {s: [(min(end,initial+timedelta(seconds=1.4*self.rank[s]))
+                    if self.interleaved else now).isoformat(), 0, 0] for s in plan['store_ids']}}
             for row in rows:
                 self.finish(row, persist=False)
             save(self.path, self.value)
@@ -186,7 +192,18 @@ class Fleet:
         candidates = [s for s, item in self.value['stores'].items()
                       if item[1] < rounds and instant(item[0]) <= now]
         return min(candidates, key=lambda s: (self.value['stores'][s][1] != 0,
-                   instant(self.value['stores'][s][0]), self.plan['store_ids'].index(s))) if candidates else None
+                   instant(self.value['stores'][s][0]), self.rank[s])) if candidates else None
+
+    def dispatch_delay(self, now):
+        """Reconstruct the shared start gate after a process restart, too."""
+        if not self.interleaved:return 0.0
+        row=self.db.db.execute("SELECT received_at,payload_json FROM samples WHERE "
+            "data_origin='live' AND api_profile='miniapp_gateway' ORDER BY id DESC LIMIT 1").fetchone()
+        if not row:return 0.0
+        payload=json.loads(row[1]);received=instant(row[0])
+        started=instant((payload.get('timing') or {}).get('request_started_at') or row[0])
+        if started>received or received>now:raise ValueError('fleet_clock_invalid')
+        return max(0.0,(started+timedelta(seconds=1.4)-now).total_seconds())
 
     def reserve(self, store):
         if self.value['pending'] is not None or self.value['issued'] >= self.plan['ordinary_query_limit']:
@@ -206,6 +223,51 @@ class Fleet:
 def request_delay(policy, elapsed):
     # One request at a time; even overdue stores never start in a burst.
     return max(0,1.4-max(0,elapsed)) if policy==CALENDAR_POLICY else 2.1
+
+
+def check_directory(fleet, client, now):
+    """One separately journaled directory GET, after normal in-window renewal.
+
+    A directory outage cannot stop healthy stores. A shared 429 still defers
+    every source request. Unknown/reserved checks are never replayed.
+    """
+    marker=fleet.day/'directory-check.json'
+    if not fleet.interleaved or marker.exists():return False
+    save(marker,{'schema_version':1,'state':'reserved','at':now.isoformat(),
+                 'maximum_directory_gets':1})
+    value={'schema_version':1,'state':'unavailable','at':now.isoformat(),
+           'maximum_directory_gets':1}
+    try:
+        result=client.fetch_stores()
+        value.update(http_status=result.http_status,error_code=result.error_code)
+        if result.ok:
+            from sushiwait.observations import normalize_directory
+            selected={}
+            for row in normalize_directory(result.payload,api_profile='miniapp_gateway'):
+                area=row['normalized']['area'].get('value')
+                city=next((c for c in (*CITIES,*ADDITIONAL_CITIES)
+                    if type(area) is str and area.startswith(c)),None)
+                if city:selected[row['store_id']]=city
+            configured=set(fleet.plan['store_ids'])
+            missing=sorted(configured-set(selected),key=int)
+            additional=sorted(set(selected)-configured,key=int)
+            changed=[s for s in configured&set(selected)
+                     if selected[s]!=APPROVED_STORES[s]['city']]
+            value.update(state='verified' if not (missing or additional or changed) else 'changed',
+                selected_stores=len(selected),missing=missing,additional=additional[:256],
+                changed_cities=sorted(changed,key=int),received_at=result.received_at)
+    except Exception:
+        value.update(state='unavailable',error_code='directory_check_unavailable')
+    if value.get('http_status')==429:
+        fleet.value['rate_limit_streak']+=1
+        seconds=min(7200,900*2**min(3,fleet.value['rate_limit_streak']-1))
+        retry=(result.transport or {}).get('retry_after_seconds')
+        if type(retry) is int and retry>=0:seconds=max(seconds,retry)
+        fleet.value['rate_limit_until']=min(instant(fleet.plan['windows'][0]['end']),
+            now+timedelta(seconds=seconds)).isoformat()
+        save(fleet.path,fleet.value)
+    save(marker,value)
+    return True
 
 
 def run(service, root, day, plan, ledger, stopped):
@@ -249,6 +311,9 @@ def run(service, root, day, plan, ledger, stopped):
                 'cadence':plan['cadence'], 'store_ids':plan['store_ids'], **fleet.status()})
             if limited:
                 stopped.wait(1); continue
+            delay=fleet.dispatch_delay(now)
+            if delay:
+                stopped.wait(min(1,delay));continue
             controller.ensure_refresh(start, end, now=now)
             store = manual_target(now) or fleet.due(now)
             if store is None:
@@ -258,13 +323,16 @@ def run(service, root, day, plan, ledger, stopped):
             if cli._authorization_stop_code(cli.describe_authorization(context.authorization, now=now)):
                 raise ValueError('fleet_auth_timing_stop')
             client = cli.client_for(SimpleNamespace(api_profile='miniapp_gateway'), credentials=context)
+            started=time.monotonic()
+            if check_directory(fleet,client,now):
+                stopped.wait(request_delay(plan['cadence'],time.monotonic()-started));continue
             fleet.reserve(store)
             started=time.monotonic()
             cli.observe(client, store, fleet.db, api_profile='miniapp_gateway')
             fleet.reconcile()
             manual_target(datetime.now(UTC))
-            # The new weekend target needs 83 starts in 120 seconds. Space
-            # actual starts, keep one in flight, and never catch up in a burst.
+            # Space actual starts, keep one in flight, and never catch up in
+            # a burst when the configured fleet exceeds a plateau's capacity.
             stopped.wait(request_delay(plan['cadence'],time.monotonic()-started))
     finally:
         if manual is not None:

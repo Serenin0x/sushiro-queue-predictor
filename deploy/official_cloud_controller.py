@@ -461,10 +461,11 @@ def collect_arguments(root,store_ids,rounds,task,resume,start,end, *, interval=9
     if cadence:
         args += ['--cadence',cadence]
     if len(store_ids) > 5:
-        from sushiwait.cityscope import SCOPE_ID, validate_scope
-        if not validate_scope(SCOPE_ID, store_ids):
+        from sushiwait.cityscope import scope_for_stores
+        try:scope_id=scope_for_stores(store_ids)
+        except ValueError:
             raise TrialError('cloud_campaign_plan_invalid')
-        args += ['--fleet-scope',SCOPE_ID]
+        args += ['--fleet-scope',scope_id]
     if resume:
         args.append('--resume-task')
     return args

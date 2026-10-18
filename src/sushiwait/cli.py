@@ -719,7 +719,7 @@ def build_parser() -> argparse.ArgumentParser:
     collect = commands.add_parser("collect", help="少量门店有界采样；默认首错停止，可显式容忍有限5xx")
     collect.add_argument("--api-profile", choices=API_PROFILES, default="legacy")
     collect.add_argument("--store-id", action="append", required=True)
-    collect.add_argument("--fleet-scope", choices=("five-cities-v1",), help="Explicit approved five-city scope")
+    collect.add_argument("--fleet-scope", choices=("five-cities-v1","fifteen-cities-v1"), help="Explicit owner-approved city scope")
     collect.add_argument("--interval", type=int, default=60)
     collect.add_argument('--cadence', choices=('meal-peaks-v1',),
                          help='平滑午晚高峰3分钟、其它10分钟；须使用持久任务及600秒基础周期')

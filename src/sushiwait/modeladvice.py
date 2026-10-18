@@ -17,7 +17,7 @@ from .deepseek import DeepSeekError, MODEL, _Ledger, _cost, _https_post, _key, _
 from .displayreplay import SOURCE, _boundary, _iso, _points, _time
 from .intake import _canonical
 from .outcomes import _json
-from .cityscope import STORES
+from .cityscope import APPROVED_STORES as STORES
 
 POLICY = 'public_display_scenarios_v1'
 MAX_PROJECTION_BYTES = 262144

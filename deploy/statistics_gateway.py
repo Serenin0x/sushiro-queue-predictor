@@ -72,7 +72,7 @@ class StatisticsGateway:
         self.manual = None
         if manual_collection_config is not None:
             from sushiwait.manualcollection import ManualCollection, settings
-            from sushiwait.cityscope import STORES
+            from sushiwait.cityscope import APPROVED_STORES as STORES
             self.manual_settings = settings(manual_collection_config)
             self.manual = ManualCollection(self.manual_settings['queue_file'],STORES)
         self.manual_lock = asyncio.Lock()
@@ -247,7 +247,7 @@ class StatisticsGateway:
             if reason:result.update(state='needs_attention',reason_code=reason)
         if value.get('isolation_policy')=='store-isolation-v1':
             ids=value.get('unavailable_store_ids',[])
-            if type(ids) is not list or any(type(i) is not str or not i.isdigit() for i in ids) or len(ids)>83:
+            if type(ids) is not list or any(type(i) is not str or not i.isdigit() for i in ids) or len(ids)>128:
                 raise ValueError('invalid_collection_health')
             result['unavailable_store_ids']=ids
             result['active_store_count']=len(value.get('store_ids',[]))-len(ids)

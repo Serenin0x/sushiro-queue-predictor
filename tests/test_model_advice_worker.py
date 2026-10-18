@@ -33,7 +33,8 @@ class WorkerTests(unittest.TestCase):
     def test_no_viewer_no_provider_call_and_no_source_query(self):
         self.tick();self.assertEqual(self.calls,[])
         self.assertEqual(self.requests,['/api/v1/collection/health'])
-        self.assertEqual(len(json.loads(self.output.read_text())['supported_store_ids']),83)
+        from sushiwait.cityscope import APPROVED_STORES
+        self.assertEqual(set(json.loads(self.output.read_text())['supported_store_ids']),set(APPROVED_STORES))
 
     def test_expanded_store_thinking_is_published_as_computing_then_ready(self):
         self.now=self.now.replace(hour=3,minute=36)

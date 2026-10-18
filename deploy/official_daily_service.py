@@ -55,9 +55,9 @@ def configured_stores(config):
 
 def read_config(root):
     value = campaign.legacy._decode(_read_private_file(root / 'daily-config.json'))
-    if (set(value) != {'schema_version','first_day','source','supplier_root','archive_groups'}
-            or value['schema_version'] not in (1,2)
-            or value['first_day'] != ('2026-10-15' if value['schema_version']==1 else '2026-10-16')
+    if (set(value) != ({'schema_version','first_day','source','supplier_root','archive_groups','fleet_scope'} if value.get('schema_version')==3 else {'schema_version','first_day','source','supplier_root','archive_groups'})
+            or value['schema_version'] not in (1,2,3)
+            or value['first_day'] != {1:'2026-10-15',2:'2026-10-16',3:'2026-10-19'}[value['schema_version']]
             or set(value['source']) != {'app_id','source_version','package_sha256'}
             or value['supplier_root'] != '/home/ubuntu/sushiwait-official-cloud-e0462-20261012'
             or type(value['archive_groups']) is not list):
@@ -68,9 +68,12 @@ def read_config(root):
                 or [g.get('name') for g in groups] != ['primary','extra']):
             raise ValueError('daily_archive_scope_invalid')
     else:
-        from sushiwait.cityscope import STORES as allowed, SCOPE_ID, validate_scope
+        from sushiwait.cityscope import SCOPE_ID, EXPANDED_SCOPE_ID, scope_stores, validate_scope
+        scope = EXPANDED_SCOPE_ID if value['schema_version']==3 else SCOPE_ID
+        allowed = scope_stores(scope)
+        if value.get('fleet_scope',scope)!=scope:raise ValueError('daily_archive_scope_invalid')
         stores=configured_stores(value)
-        if (not 1<=len(groups)<=64 or not validate_scope(SCOPE_ID,stores)
+        if (not 1<=len(groups)<=64 or not validate_scope(scope,stores)
                 or set(stores)!=set(allowed) or len({g.get('name') for g in groups})!=len(groups)
                 or len({g.get('archive') for g in groups})!=len(groups)):
             raise ValueError('daily_archive_scope_invalid')
@@ -87,7 +90,7 @@ def make_plan(config, at):
     if start.date().isoformat() < config['first_day']:
         raise ValueError('daily_start_not_reached')
     stores=configured_stores(config)
-    expanded=config['schema_version']==2
+    expanded=config['schema_version']>=2
     cadence=daily_policy(start) if expanded else 'meal-peaks-v1'
     rounds = campaign.legacy.planned_rounds(start, end, cadence)
     plan = {**config['source'], 'schema_version': 4 if expanded else 3,
@@ -95,7 +98,10 @@ def make_plan(config, at):
             'store_ids': stores, 'interval_seconds': 600, 'cadence': cadence,
             'windows': [{'start': start.isoformat(), 'end': end.isoformat()}],
             'ordinary_query_limit': rounds * len(stores), 'renewal_limit': 14}
-    if expanded: plan['fleet_scope']='five-cities-v1'
+    if expanded: plan['fleet_scope']=config.get('fleet_scope','five-cities-v1')
+    if config['schema_version']==3:
+        from sushiwait.cityscope import interleaved_stores
+        plan['store_ids']=interleaved_stores(stores)
     campaign.validate_plan(plan)
     return plan
 
@@ -231,7 +237,7 @@ def run_collection(root, config, stopped):
             publish_status(root, 'collection', {'state': 'starting', 'day': day_text,
                            'opened_at': start.isoformat(), 'closes_at': end.isoformat(),
                            'cadence': plan['cadence'], 'store_ids': configured_stores(config)})
-            if config['schema_version']==2 and (root/'fleet-policy.json').exists():
+            if config['schema_version']>=2 and (root/'fleet-policy.json').exists():
                 policy=reauthorization.read(root/'fleet-policy.json')
                 if policy != {'schema_version':1,'policy':'store-isolation-v1'}:
                     raise ValueError('fleet_policy_invalid')

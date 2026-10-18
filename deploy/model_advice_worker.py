@@ -9,7 +9,7 @@ from sushiwait.calendar import date_features
 from sushiwait.cadence import CHINA, period_after, daily_policy
 from sushiwait.modeladvice import POLICY, MAX_PROJECTION_BYTES, public_context, public_projection, suggest_weights
 from sushiwait.ticketresearch import TicketResearch
-from sushiwait.cityscope import STORES
+from sushiwait.cityscope import APPROVED_STORES as STORES
 
 READ_ORIGIN = 'http://127.0.0.1:18900'
 

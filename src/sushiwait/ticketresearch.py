@@ -16,7 +16,7 @@ from statistics import median
 
 from .displayarrival import POLICY as ARRIVAL_POLICY, label_ticket_arrival, ticket_timing
 from .displayreplay import SHANGHAI, _points, _boundary, _time
-from .cityscope import STORES
+from .cityscope import APPROVED_STORES as STORES
 
 MODES = {'auto', 'nonthinking', 'thinking', 'algorithm'}
 _CREATE = (
