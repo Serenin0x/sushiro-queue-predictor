@@ -1,7 +1,8 @@
 """Public saved statistics and optional owner-scoped ticket research.
 
-Private POST forms require the exact HTTPS origin. No query credentials,
-collector control, account sessions or filesystem downloads are exposed.
+Private POST forms require the exact HTTPS origin. Optional manual collection
+needs a separate owner session and only queues work for the existing collector.
+Query credentials, account sessions and filesystem downloads are never exposed.
 """
 import argparse
 import asyncio
@@ -56,7 +57,7 @@ class StatisticsGateway:
     def __init__(self, hub, *, official_view=None, calendar_source='crm_remote_v1_1',
                  refresh_seconds=30, refresh_policy_file=None, model_advice_file=None,
                  research_file=None, public_origin='https://124.222.57.236', ocr_enabled=False,
-                 collection_status_file=None):
+                 collection_status_file=None, manual_collection_config=None):
         if (calendar_source not in {'crm_remote_v1_1', 'sapi_miniapp_gateway'}
                 or calendar_source == 'sapi_miniapp_gateway' and official_view is None):
             raise ValueError('calendar_source_requires_configured_view')
@@ -68,6 +69,13 @@ class StatisticsGateway:
         self.research_clients = OrderedDict()
         self.ocr_enabled = ocr_enabled
         self.collection_status_file = collection_status_file
+        self.manual = None
+        if manual_collection_config is not None:
+            from sushiwait.manualcollection import ManualCollection, settings
+            from sushiwait.cityscope import STORES
+            self.manual_settings = settings(manual_collection_config)
+            self.manual = ManualCollection(self.manual_settings['queue_file'],STORES)
+        self.manual_lock = asyncio.Lock()
         self.ocr_clients = OrderedDict()
         self.ocr_lock = asyncio.Lock()
         self.research_lock = asyncio.Lock()
@@ -132,6 +140,61 @@ class StatisticsGateway:
     def polling_seconds(self):
         return self.polling_settings()['poll_seconds']
 
+    async def manual_request(self, scope, receive):
+        from http.cookies import SimpleCookie
+        from sushiwait.manualcollection import COOKIE, SESSION_SECONDS, ManualError, verify_owner
+        headers = dict(scope.get('headers',[]))
+        if (scope.get('scheme')!='https' or scope.get('query_string')
+                or scope.get('raw_path',scope['path'].encode())!=scope['path'].encode()
+                or headers.get(b'origin',b'').decode()!=self.public_origin
+                or headers.get(b'content-type',b'').split(b';')[0]!=b'application/json'):
+            raise ManualError('manual_invalid_request',400)
+        raw = bytearray()
+        for _ in range(8):
+            event = await receive()
+            if event['type']!='http.request':raise ManualError('manual_invalid_request',400)
+            raw.extend(event.get('body',b''))
+            if len(raw)>2048:raise ManualError('manual_invalid_request',400)
+            if not event.get('more_body',False):break
+        else:raise ManualError('manual_invalid_request',400)
+        from sushiwait.storage import _unique_object
+        value = json.loads(raw,object_pairs_hook=_unique_object)
+        if type(value) is not dict or type(value.get('schema_version')) is not int or value['schema_version']!=1:
+            raise ManualError('manual_invalid_request',400)
+        action = value.get('action');extra = []
+        if action=='login':
+            if set(value)!={'schema_version','action','password','remember'} or type(value['remember']) is not bool:
+                raise ManualError('manual_invalid_request',400)
+            peer=str(scope.get('client',('unknown',))[0])
+            token=await asyncio.to_thread(self.manual.login,peer,value['password'],
+                lambda password:verify_owner(self.manual_settings['owner_username'],password))
+            cookie=f'{COOKIE}={token}; Path=/; Secure; HttpOnly; SameSite=Strict'
+            if value['remember']:cookie+=f'; Max-Age={SESSION_SECONDS}'
+            extra=[(b'set-cookie',cookie.encode())];result={'authorized':True}
+        else:
+            cookie=SimpleCookie();cookie.load(headers.get(b'cookie',b'').decode())
+            token=cookie[COOKIE].value if COOKIE in cookie else ''
+            await asyncio.to_thread(self.manual.authenticate,token)
+            if action=='logout' and set(value)=={'schema_version','action'}:
+                await asyncio.to_thread(self.manual.logout,token)
+                extra=[(b'set-cookie',f'{COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0'.encode())]
+                result={'authorized':False}
+            elif action in {'status','request'}:
+                expected={'schema_version','action'} if action=='status' else {'schema_version','action','request_id','store_id'}
+                if set(value)!=expected:raise ManualError('manual_invalid_request',400)
+                health=await asyncio.to_thread(self.collection_health)
+                now=datetime.now(timezone.utc)
+                if health['state'] not in {'running','starting'} and health.get('reason_code')!='cloud_rate_limited':
+                    await asyncio.to_thread(self.manual.stop_active,'business_closed' if health['state']=='closed' else 'collection_paused',now)
+                if action=='request':
+                    if health['state']!='running':raise ManualError('manual_business_closed' if health['state']=='closed' else 'manual_collection_unavailable')
+                    job=await asyncio.to_thread(self.manual.submit,value['request_id'],value['store_id'],now,
+                        excluded=health.get('unavailable_store_ids',[]))
+                else:job=await asyncio.to_thread(self.manual.status)
+                result={'authorized':True,'job':job,'collection_state':health['state']}
+            else:raise ManualError('manual_invalid_request',400)
+        return 200,json.dumps(result,ensure_ascii=False).encode(),'application/json',extra
+
     def collection_health(self, now=None):
         from sushiwait.credentials import _read_private_file
         value = json.loads(_read_private_file(self.collection_status_file))
@@ -194,6 +257,7 @@ class StatisticsGateway:
                     result.update(state='needs_attention',reason_code='public_sync_stopped')
             except Exception:result.update(state='needs_attention',reason_code='public_sync_stopped')
         # Fixed diagnostic codes only; never arbitrary supplier messages.
+        if self.manual is not None:result.update(manual_collection_enabled=True,manual_store_ids=list(self.manual.stores))
         return result
 
     async def research_request(self, scope, receive):
@@ -400,7 +464,17 @@ class StatisticsGateway:
         if scope['type'] != 'http':
             return
         path = scope['path']
-        if scope['method']=='POST' and path=='/api/v1/research/screenshots/recognize' and self.ocr_enabled and self.research_file is not None:
+        extra_headers=[]
+        if scope['method']=='POST' and path=='/api/v1/collection/manual' and self.manual is not None:
+            from sushiwait.manualcollection import ManualError
+            try:
+                async with self.manual_lock:
+                    status,body,mime,extra_headers=await asyncio.wait_for(self.manual_request(scope,receive),timeout=12)
+            except ManualError as error:
+                status,body,mime=error.status,json.dumps({'error_code':error.code}).encode(),'application/json'
+            except Exception:
+                status,body,mime=503,b'{"error_code":"manual_collection_unavailable"}','application/json'
+        elif scope['method']=='POST' and path=='/api/v1/research/screenshots/recognize' and self.ocr_enabled and self.research_file is not None:
             try:
                 status,body,mime=await asyncio.wait_for(self.screenshot_request(scope,receive),timeout=30)
             except Exception:
@@ -504,7 +578,7 @@ class StatisticsGateway:
                 body = body.replace(marker, marker + f' data-statistics-poll-seconds="{seconds}"'.encode(), 1)
             except Exception:
                 status, body, mime = 503, b'Calendar settings unavailable', 'text/plain; charset=utf-8'
-        headers = [(b'content-type', mime.encode()), (b'content-length', str(len(body)).encode()),
+        headers = extra_headers+[(b'content-type', mime.encode()), (b'content-length', str(len(body)).encode()),
             (b'cache-control', b'no-store'), (b'x-content-type-options', b'nosniff'),
             (b'referrer-policy', b'no-referrer'),
             (b'content-security-policy', b"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")]
@@ -532,7 +606,8 @@ async def serve(args):
     app = StatisticsGateway(hub, official_view=official, calendar_source=args.calendar_source,
         refresh_seconds=args.refresh_seconds, refresh_policy_file=args.refresh_policy_file, model_advice_file=args.model_advice_file,
         research_file=args.research_file, public_origin=args.public_origin, ocr_enabled=args.ocr_enabled,
-        collection_status_file=args.collection_status_file)
+        collection_status_file=args.collection_status_file,
+        manual_collection_config=getattr(args,'manual_collection_config',None))
     remaining = (app.deadline - datetime.now(timezone.utc)).total_seconds() if app.deadline is not None else None
     if remaining is not None and remaining <= 0:
         raise ValueError('original_trial_deadline_reached')
@@ -558,6 +633,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config-file', required=True)
     parser.add_argument('--collection-status-file', help='Optional bounded public sampling health projection')
+    parser.add_argument('--manual-collection-config', help='Optional private owner-only manual request queue settings')
     parser.add_argument('--model-advice-file', help='Optional validated public Flash advice copy; never a key file')
     parser.add_argument('--ocr-enabled', action='store_true', help='Optional private on-server screenshot OCR')
     parser.add_argument('--public-origin', default='https://124.222.57.236', help='Exact HTTPS origin for private forms')

@@ -22,6 +22,7 @@ if(taskWorkspace){engineeringSections.overview=["门店监测",""];engineeringSe
 // Saved city directory shared with the calendar; unknown future IDs stay explicitly unclassified.
 const workspaceCityById={"1":"广州","2":"广州","3":"广州","4":"广州","5":"广州","6":"广州","7":"广州","8":"广州","9":"佛山","10":"广州","11":"佛山","12":"广州","13":"广州","15":"广州","16":"武汉","17":"东莞","18":"广州","19":"东莞","21":"武汉","23":"东莞","24":"武汉","25":"广州","26":"惠州","27":"广州","28":"广州","29":"广州","30":"广州","31":"珠海","32":"广州","34":"厦门","35":"江门","36":"珠海","37":"广州","38":"广州","39":"佛山","40":"广州","41":"武汉","42":"长沙","43":"珠海","44":"武汉","45":"广州","1001":"深圳","1002":"深圳","1003":"深圳","1004":"深圳","1005":"深圳","1006":"深圳","1007":"深圳","1008":"深圳","1009":"深圳","1010":"深圳","1011":"深圳","1012":"深圳","1013":"深圳","1014":"深圳","1015":"深圳","1016":"深圳","1017":"深圳","1018":"深圳","1019":"深圳","2001":"成都","2003":"成都","2004":"成都","2006":"重庆","2007":"重庆","2008":"成都","2009":"成都","2010":"西安","2011":"成都","3001":"天津","3002":"天津","3003":"天津","3004":"北京","3005":"北京","3006":"北京","3007":"天津","3008":"苏州","3009":"北京","3010":"苏州","3011":"杭州","3012":"北京","3013":"北京","3014":"北京","3015":"北京","3016":"北京","3017":"苏州","3018":"杭州","3019":"北京","3020":"杭州","3021":"杭州","3022":"宁波","3023":"北京","3024":"无锡","3025":"上海","3026":"上海","3027":"苏州","3028":"苏州","3029":"北京","3030":"北京","3031":"北京","3032":"上海","3033":"上海","3034":"上海","3035":"北京","3036":"上海","3037":"济南","3038":"北京","3039":"杭州","3040":"上海","3041":"上海","3042":"北京","3043":"金华","3044":"宁波","3045":"北京","3046":"宁波","3047":"绍兴","3048":"绍兴","3049":"杭州","3050":"北京","3051":"上海","3052":"宁波","3053":"北京","3054":"南京","3055":"南京","3056":"绍兴","3057":"嘉兴","3058":"杭州","3059":"温州","3060":"北京","3061":"金华","3062":"南通","3063":"嘉兴","3064":"青岛","3065":"南京","3066":"上海","3067":"石家庄","3068":"杭州","3069":"青岛","3070":"上海","3071":"合肥","3072":"上海","3073":"上海","3074":"北京","3076":"温州","3078":"天津","3079":"镇江","3080":"济南"};
 const workspaceState={city:"all",from:"00:00",to:"23:59",range:"all",page:0,selected:null,chartPositions:[],chartScope:null,lastPointKey:null,readError:false,restoring:false,routeStore:null,overviewPage:0,charts:new Map(),hover:new Map(),seenScope:null,seenKeys:new Set(),newKeys:new Map()};
+const workspaceManual={authorized:false,busy:false,job:null,timer:null,checked:false,message:'',request:null,view:null,completed:null,syncing:false};
 let workspaceHealth=null,workspaceLastBoundaryCheck=0;
 let workspaceSessionAuto=taskWorkspace&&!new URLSearchParams(window.location.search).has('date');
 let workspaceInitialSection="overview";
@@ -74,6 +75,7 @@ function selectEngineeringSection(section){
     $('monitor-date').hidden=hideScope||section==='experience';$('monitor-metrics').hidden=section!=='overview';$('monitor-search').hidden=section!=='overview';
     $('nav-overview').classList.toggle('nav-current',monitoring);if(monitoring)$('nav-overview').setAttribute('aria-current','page');
     $('workspace-meta').hidden=monitoring;$('engineering-title').hidden=section==='analysis';
+    workspaceRenderManual();
 
   }
   if(section==="prediction"&&taskWorkspace&&detail)loadHistory($("store").value,day);
@@ -256,6 +258,86 @@ function workspaceRenderHealth(){
  $('monitor-status').dataset.state=state||'unknown';$('monitor-status-label').textContent=labels[state]||'状态未知';
  const reasons={heartbeat_stale:'采集心跳超时',collection_not_started:'开采时间已到，尚未收到观测',collection_progress_stale:'采样进度未按计划更新',public_sync_stopped:'网页同步或统计汇总异常',cloud_rate_limited:'上游请求限流',cloud_refresh_failed:'授权更新失败',cloud_trial_halted:'共享授权保护已暂停采集'};
  $('monitor-status-reason').textContent=reasons[workspaceHealth?.reason_code]||(workspaceHealth?.next_open_at?`下次开采 ${new Date(workspaceHealth.next_open_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}`:state==='running'?'采集运行中':state==='completed'?'本轮采集已结束':'暂时无法确认采集状态');
+ workspaceRenderManual();
+}
+function workspaceRenderManual(){
+ if(!taskWorkspace)return;
+ const enabled=workspaceHealth?.manual_collection_enabled===true,monitoring=['overview','analysis'].includes(engineeringSection),running=workspaceManual.job?.state==='running';
+ for(const id of ['manual-all','manual-store']){
+  const button=$(id),outside=id==='manual-store'&&!workspaceHealth?.manual_store_ids?.includes($('store').value);button.hidden=!enabled;button.disabled=workspaceManual.busy||running||workspaceManual.syncing||workspaceHealth?.state!=='running'||outside;
+  button.setAttribute('aria-busy',String(workspaceManual.busy||running));button.title=outside?'此门店尚未启用采集':workspaceHealth?.state==='closed'?'营业外暂停，开采后可手动获取':workspaceHealth?.state!=='running'?'采集暂不可用，请查看采集状态':id==='manual-all'?'获取已启用的五城全部可采门店，不受城市筛选影响':'获取当前门店的新观测';
+ }
+ const job=workspaceManual.job,done=job?job.total-job.pending:0;
+ $('manual-progress').hidden=!enabled||!monitoring||!job&&!workspaceManual.message;
+ $('manual-progress').dataset.state=running?'running':'complete';
+ const reason={awaiting_automatic_slot:'等待下一轮采样',collection_paused:'采集已暂停',business_closed:'营业时间结束',manual_expired:'本次获取已超时'}[job?.error_code];
+ $('manual-progress-text').textContent=workspaceManual.message||(job?(running?`${reason||'正在获取'} ${done} / ${job.total} 家`:`${reason?reason+'，':''}已获取 ${job.successful} 家`)+(job.failed?`，失败 ${job.failed} 家`:'')+(job.skipped?`，跳过 ${job.skipped} 家`:'')+(workspaceManual.syncing?'，正在同步统计':''):'');
+ $('manual-view-result').hidden=!job||job.state==='running';$('manual-logout').hidden=!workspaceManual.authorized;
+ if(enabled&&!workspaceManual.checked){workspaceManual.checked=true;workspacePollManual();}
+}
+const workspaceManualErrors={manual_login_required:'请先完成采集授权',manual_login_failed:'管理密码不正确或登录暂不可用',manual_login_limited:'登录尝试过多，请稍后再试',manual_business_closed:'营业外暂停，开采后可手动获取',manual_collection_unavailable:'采集暂不可用，请查看采集状态',manual_no_available_stores:'没有可采集的门店，隔离门店不会重试',manual_recent_request:'刚完成一轮获取，请稍后再试',manual_job_running:'已有其他采集任务正在进行',manual_invalid_request:'请求无效，请刷新页面后重试'};
+async function workspaceManualPost(value){
+ const response=await fetch('/api/v1/collection/manual',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({schema_version:1,...value}),signal:AbortSignal.timeout(12000)});
+ const data=await response.json();if(!response.ok)throw Error(data.error_code||'manual_collection_unavailable');return data;
+}
+function workspaceScheduleManual(){
+ if(workspaceManual.timer!==null)clearTimeout(workspaceManual.timer);
+ workspaceManual.timer=workspaceManual.job?.state==='running'?setTimeout(workspacePollManual,3000):null;
+}
+async function workspaceManualResult(data){
+ workspaceManual.authorized=true;workspaceManual.job=data.job||null;workspaceManual.message='';
+ const job=workspaceManual.job;
+ if(job?.state==='completed'&&workspaceManual.completed!==job.request_id){
+  workspaceManual.completed=job.request_id;workspaceManual.request=null;
+  const view=workspaceManual.view;
+  // Do not move someone who navigated away while collection was in progress.
+  if(view&&view.day===day&&view.section===engineeringSection&&view.store===$('store').value){
+   if(day!==job.local_date)workspaceSetDate(job.local_date);
+   await workspaceSyncManual(job,0);
+  }
+ }
+ workspaceRenderManual();workspaceScheduleManual();
+}
+async function workspaceSyncManual(job,attempt){
+ if(!['overview','analysis'].includes(engineeringSection)||day!==job.local_date){workspaceManual.syncing=false;return;}
+ workspaceManual.syncing=true;workspaceRenderManual();await refresh();
+ const expected=(job.targets||[]).filter(t=>['saved','failed'].includes(t.state)&&t.sample_at);
+ const synced=expected.every(t=>Date.parse(index.days[job.local_date]?.[t.store_id]?.last_observation_at)>=Date.parse(t.sample_at));
+ if(!synced&&attempt<10)setTimeout(()=>workspaceSyncManual(job,attempt+1),3000);
+ else{workspaceManual.syncing=false;if(!synced)workspaceManual.message='采集已保存，统计同步尚未完成，可稍后读取最新';}
+ workspaceRenderManual();
+}
+async function workspacePollManual(){
+ try{await workspaceManualResult(await workspaceManualPost({action:'status'}));}
+ catch(error){
+  if(error.message==='manual_login_required'){workspaceManual.authorized=false;workspaceManual.job=null;}
+  else if(workspaceManual.job?.state==='running')workspaceManual.message='采集进度暂时读取失败，正在重试';
+  workspaceRenderManual();workspaceScheduleManual();
+ }
+}
+async function workspaceStartManual(store){
+ if(workspaceManual.busy||workspaceManual.syncing||workspaceManual.job?.state==='running')return;
+ if(workspaceManual.request&&workspaceManual.request.store_id!==store){await workspacePollManual();if(workspaceManual.job?.state==='running')return;}
+ workspaceManual.view={day,section:engineeringSection,store:$('store').value};
+ if(!workspaceManual.request||workspaceManual.request.store_id!==store){
+  const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);workspaceManual.request={action:'request',request_id:[...bytes].map(v=>v.toString(16).padStart(2,'0')).join(''),store_id:store};
+ }
+ workspaceManual.busy=true;workspaceManual.message='正在提交采集任务';workspaceRenderManual();
+ try{await workspaceManualResult(await workspaceManualPost(workspaceManual.request));}
+ catch(error){
+  workspaceManual.message=workspaceManualErrors[error.message]||'请求结果待确认，请重试以核对原任务';
+  if(error.message==='manual_login_required'){$('manual-password').value='';$('manual-login-note').textContent='';if(!$('manual-login-dialog').open)$('manual-login-dialog').showModal();}
+  else if(Object.hasOwn(workspaceManualErrors,error.message))workspaceManual.request=null;
+ }finally{workspaceManual.busy=false;workspaceRenderManual();}
+}
+async function workspaceLoginManual(event){
+ event.preventDefault();$('manual-login-submit').disabled=true;$('manual-login-note').textContent='正在验证';
+ const password=$('manual-password').value;$('manual-password').value='';
+ try{
+  await workspaceManualPost({action:'login',password,remember:$('manual-remember').checked});workspaceManual.authorized=true;$('manual-login-dialog').close();
+  await workspaceStartManual(workspaceManual.request?.store_id??null);
+ }catch(error){$('manual-login-note').textContent=workspaceManualErrors[error.message]||'登录暂不可用，请稍后重试';}
+ finally{$('manual-login-submit').disabled=false;}
 }
 function workspaceClock(){
  if(!taskWorkspace||document.visibilityState==='hidden')return;$('monitor-clock').textContent=time(Date.now());
@@ -362,6 +444,10 @@ function workspaceNav(open){
  else{document.body.classList.toggle('nav-collapsed',!open);$('nav-toggle').setAttribute('aria-expanded',String(open));}
 }
 function workspaceInit(){
+ $('manual-all').onclick=()=>workspaceStartManual(null);$('manual-store').onclick=()=>workspaceStartManual($('store').value);
+ $('manual-login-form').onsubmit=workspaceLoginManual;$('manual-login-close').onclick=()=>{$('manual-login-dialog').close();$('manual-password').value='';};
+ $('manual-view-result').onclick=()=>{const job=workspaceManual.job;if(!job)return;workspaceSetDate(job.local_date);refresh();};
+ $('manual-logout').onclick=async()=>{try{await workspaceManualPost({action:'logout'});workspaceManual.authorized=false;workspaceRenderManual();}catch(_){workspaceManual.message='退出授权失败，请重试';workspaceRenderManual();}};
  if(window.matchMedia('(max-width: 840px)').matches){$('workspace-sidebar').inert=true;$('nav-toggle').setAttribute('aria-expanded','false');}
  $('overview-search').oninput=()=>{workspaceState.overviewPage=0;workspaceRenderOverview();};
  $('overview-previous').onclick=()=>{workspaceState.overviewPage=Math.max(0,workspaceState.overviewPage-1);workspaceRenderOverview();};$('overview-next').onclick=()=>{workspaceState.overviewPage++;workspaceRenderOverview();};

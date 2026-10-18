@@ -107,6 +107,29 @@ assert.equal(run('archiveReadStatus({days:{},store_names:{}})'),'归档加载中
  // At the scheduled boundary even a still-closed collector must show the new empty day.
  health={...health,display_date:'2026-10-14',display_switch_at:'2026-10-15T11:00:00+08:00'};at=Date.parse('2026-10-14T11:00:00+08:00');await run('refresh()');assert.equal(run('day'),'2026-10-14');assert.equal($('summary').textContent,'无已保存观测');assert.equal($('snapshot-numbers').children[0].textContent,'—');assert.equal($('snapshot-total').textContent,'0');
  run("workspaceSetDate('2026-10-13')");await settle();await run('refresh()');assert.equal(run('day'),'2026-10-13','manual history remains pinned');
+ // Manual collection has an explicit owner login and sends one idempotent job,
+ // independently of the selected city. It never turns archive refresh into a GET.
+ context.crypto=require('node:crypto').webcrypto;context.setTimeout=()=>1;context.clearTimeout=()=>{};
+ const archiveFetch=context.fetch,manualPosts=[];let manualAuthorized=false,manualJob=null;
+ context.fetch=async(path,options)=>{
+  if(path!=='/api/v1/collection/manual')return archiveFetch(path,options);
+  assert.equal(options.method,'POST');assert.equal(options.credentials,'same-origin');const value=JSON.parse(options.body);manualPosts.push(value);
+  if(value.action==='login'){manualAuthorized=true;return {ok:true,json:async()=>({authorized:true})};}
+  if(!manualAuthorized)return {ok:false,json:async()=>({error_code:'manual_login_required'})};
+  if(value.action==='request')manualJob={request_id:value.request_id,store_id:value.store_id,state:'running',total:2,pending:2,successful:0,failed:0,skipped:0,local_date:'2026-10-14'};
+  return {ok:true,json:async()=>({authorized:true,job:manualJob,collection_state:'running'})};
+ };
+ health={...health,state:'running',manual_collection_enabled:true,manual_store_ids:['3014']};run('workspaceHealth={state:"running",manual_collection_enabled:true,manual_store_ids:["3014"]};workspaceRenderManual()');await settle();
+ assert.equal($('manual-all').hidden,false);await $('manual-all').onclick();assert.equal($('manual-login-dialog').open,true);
+ const requestId=manualPosts.find(v=>v.action==='request').request_id;
+ $('manual-password').value='synthetic-test-only';await run('workspaceLoginManual({preventDefault(){}})');
+ assert.equal($('manual-password').value,'');assert.equal($('manual-login-dialog').open,false);assert.equal($('manual-all').disabled,true);
+ assert.deepEqual(manualPosts.filter(v=>v.action==='request').map(v=>[v.request_id,v.store_id]),[[requestId,null],[requestId,null]]);
+ const sent=manualPosts.length;await $('manual-all').onclick();assert.equal(manualPosts.length,sent,'active job rejects duplicate button clicks');
+ manualJob={...manualJob,state:'completed',pending:0,successful:2,targets:['3014','3004'].map(store=>({store_id:store,state:'saved',sample_at:'2026-10-14T11:01:00+08:00'}))};await run('workspacePollManual()');assert.match($('manual-progress-text').textContent,/已获取 2 家/);assert.equal(run('workspaceManual.syncing'),true,'archive lag cannot be displayed as fully synced');assert.equal($('manual-all').disabled,true);
+ month.days['2026-10-14']=Object.fromEntries(['3014','3004'].map(store=>[store,{...row(store),local_date:'2026-10-14',last_observation_at:'2026-10-14T11:01:00+08:00'}]));await run('workspaceSyncManual(workspaceManual.job,1)');assert.equal(run('workspaceManual.syncing'),false);assert.equal($('manual-all').disabled,false);
+ await $('manual-store').onclick();assert.equal(manualPosts.at(-1).store_id,'3014');
+ run('workspaceHealth.state="closed";workspaceRenderManual()');assert.equal($('manual-all').disabled,true);assert.equal($('manual-store').disabled,true);
  assert(reads.every(p=>(p.startsWith('/api/v1/')||p==='/model-advice.json')&&!p.includes('4045')));
  console.log('workspace async selection, private drafts, chart boundaries, quality states, pagination, route restoration and CSV isolation passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

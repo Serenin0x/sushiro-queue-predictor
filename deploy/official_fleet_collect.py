@@ -216,10 +216,28 @@ def run(service, root, day, plan, ledger, stopped):
         expected_app_id=plan['app_id'], expected_source_version=plan['source_version'],
         expected_package_sha256=plan['package_sha256'])
     controller = service.campaign.legacy.Controller(day, plan, source, ledger)
+    manual = None
+    if (Path(root)/'manual-collection.json').exists():
+        try:
+            from sushiwait.manualcollection import ManualCollection, settings
+            manual = ManualCollection(settings(Path(root)/'manual-collection.json')['queue_file'],plan['store_ids'])
+        except Exception:
+            print('{"event":"manual_collection_queue_unavailable"}',flush=True)
+    def manual_target(now):
+        nonlocal manual
+        if manual is not None:
+            try:return manual.next_store(fleet,now)
+            except Exception:
+                print('{"event":"manual_collection_queue_unavailable"}',flush=True)
+                manual = None
+        return None
     try:
         while not stopped.is_set():
             now = datetime.now(UTC)
             if now >= end - timedelta(seconds=16):
+                if manual is not None:
+                    try:manual.stop_active('business_closed',now)
+                    except Exception:print('{"event":"manual_collection_progress_unavailable"}',flush=True)
                 ledger.finish(0)
                 return
             if now < start:
@@ -232,7 +250,7 @@ def run(service, root, day, plan, ledger, stopped):
             if limited:
                 stopped.wait(1); continue
             controller.ensure_refresh(start, end, now=now)
-            store = fleet.due(now)
+            store = manual_target(now) or fleet.due(now)
             if store is None:
                 stopped.wait(1); continue
             context, digest = controller.context()
@@ -244,8 +262,12 @@ def run(service, root, day, plan, ledger, stopped):
             started=time.monotonic()
             cli.observe(client, store, fleet.db, api_profile='miniapp_gateway')
             fleet.reconcile()
+            manual_target(datetime.now(UTC))
             # The new weekend target needs 83 starts in 120 seconds. Space
             # actual starts, keep one in flight, and never catch up in a burst.
             stopped.wait(request_delay(plan['cadence'],time.monotonic()-started))
     finally:
+        if manual is not None:
+            try:manual.stop_active('collection_paused',datetime.now(UTC))
+            except Exception:print('{"event":"manual_collection_progress_unavailable"}',flush=True)
         fleet.close()
