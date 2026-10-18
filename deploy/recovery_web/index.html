@@ -4,35 +4,69 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>恢复采集 | SUSHIWAIT</title>
+  <meta name="color-scheme" content="dark">
+  <title>微信授权 | SUSHIWAIT</title>
   <link rel="stylesheet" href="/recover/style.css">
-  <script src="/recover/app.js?v=20261015-e0521" defer></script>
+  <script src="/recover/app.js?v=20261019-e0556" defer></script>
 </head>
 <body>
+  <div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
   <main>
-    <a class="brand" href="/statistics" aria-label="SUSHIWAIT 返回主日历"><img src="/brand-wordmark.svg" alt="SUSHIWAIT" width="180" height="30"></a>
-    <section class="card">
-      <div class="status-mark" id="mark" aria-hidden="true">↗</div>
-      <h1 id="heading">恢复采集</h1>
-      <p id="message" role="status" aria-live="polite">正在检查授权状态</p>
-      <form id="login-form" hidden>
-        <label for="password">授权管理密码</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="512">
-        <button type="submit">验证并继续</button>
-      </form>
-      <button id="start" type="button" hidden>重新授权</button>
-      <div id="qr-wrap" hidden>
-        <img id="qr" alt="微信授权二维码">
-        <p id="scan-hint">请在另一块屏幕打开此页，再用微信扫一扫</p>
-        <button class="secondary" id="save-qr" type="button" hidden>系统保存</button>
-        <a class="secondary" id="download-qr" download>下载二维码</a>
-        <a class="secondary" id="open-qr" target="_blank" rel="noopener noreferrer">打开原图</a>
-        <button class="secondary" id="copy-link" type="button">复制授权链接</button>
-        <input id="share-link" type="text" readonly aria-label="授权链接" hidden>
+    <header class="page-header">
+      <a class="brand" href="/statistics" aria-label="SUSHIWAIT 返回主日历"><img src="/brand-wordmark.svg" alt="SUSHIWAIT" width="180" height="30"></a>
+      <a class="back-link" href="/statistics-legacy?section=overview"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></svg>返回工作台</a>
+    </header>
+    <section class="card" data-stage="checking" aria-labelledby="heading">
+      <div class="auth-copy">
+        <div class="stage-tag"><span aria-hidden="true"></span><span id="state-label">连接授权服务</span></div>
+        <h1 id="heading">微信授权</h1>
+        <p id="message" role="status" aria-live="polite">正在检查授权状态</p>
+        <ol class="auth-steps" aria-label="授权流程">
+          <li id="auth-step-1" data-state="active"><span class="step-number" aria-hidden="true">01</span><span>确认身份</span></li>
+          <li id="auth-step-2"><span class="step-number" aria-hidden="true">02</span><span>微信扫码</span></li>
+          <li id="auth-step-3"><span class="step-number" aria-hidden="true">03</span><span>自动接续</span></li>
+        </ol>
+        <p class="auth-note">请使用原来的微信账号。<br>授权完成后，系统按原计划继续采集。</p>
       </div>
-      <button class="secondary" id="retry" type="button" hidden>刷新二维码</button>
-      <a class="statistics" id="statistics" href="/statistics" hidden>查看采集</a>
+      <div class="auth-panel">
+        <div class="panel-light" aria-hidden="true"></div>
+        <div class="portal-visual" id="portal-visual" aria-hidden="true">
+          <div class="portal-ring ring-outer"></div><div class="portal-ring ring-inner"></div>
+          <div class="orb-core"><div class="orb-sheen"></div>
+            <div class="status-mark" id="mark">
+              <svg class="mark-scanner" viewBox="0 0 48 48"><path d="M16 8h-5a3 3 0 0 0-3 3v5m24-8h5a3 3 0 0 1 3 3v5M8 32v5a3 3 0 0 0 3 3h5m16 0h5a3 3 0 0 0 3-3v-5"/><g class="scanner-code"><path d="M17 17h4v4h-4zm10 0h4v4h-4zm-10 10h4v4h-4zm10 0h4m-4 0v4h4"/></g><path class="scanner-beam" d="M12 24h24"/></svg>
+              <svg class="mark-check" viewBox="0 0 48 48"><path d="m13 25 8 8 15-18"/></svg>
+              <svg class="mark-alert" viewBox="0 0 48 48"><path d="M24 13v15m0 7h.01"/></svg>
+            </div>
+          </div>
+          <span class="success-wave"></span><span class="success-spark spark-one"></span><span class="success-spark spark-two"></span><span class="success-spark spark-three"></span><span class="success-spark spark-four"></span>
+        </div>
+        <form id="login-form" hidden>
+          <label for="password">授权管理密码</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="512" placeholder="输入现有管理密码">
+          <button id="login-submit" class="primary" type="submit"><span>验证并继续</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+        </form>
+        <button id="start" class="primary" type="button" hidden><span>打开微信二维码</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+        <div id="qr-wrap" hidden>
+          <div class="qr-frame"><span class="qr-corner corner-one" aria-hidden="true"></span><span class="qr-corner corner-two" aria-hidden="true"></span><span class="qr-corner corner-three" aria-hidden="true"></span><span class="qr-corner corner-four" aria-hidden="true"></span><img id="qr" alt="微信授权二维码" width="250" height="250"></div>
+          <p id="scan-hint">用微信扫一扫对准二维码</p>
+          <div class="qr-expiry"><span id="qr-countdown">二维码准备中</span><progress id="qr-lifetime" max="120" value="120" aria-label="二维码剩余有效时间"></progress></div>
+          <div class="qr-actions">
+            <button class="secondary" id="save-qr" type="button" hidden>系统保存</button>
+            <a class="secondary" id="download-qr" download>下载二维码</a>
+            <a class="secondary" id="open-qr" target="_blank" rel="noopener noreferrer">打开原图 ↗</a>
+            <button class="secondary" id="copy-link" type="button">复制授权链接</button>
+          </div>
+          <input id="share-link" type="text" readonly aria-label="授权链接" hidden>
+          <p class="save-hint">手机保存遇到限制时，可在 Safari 打开后使用系统保存。微信仍可能要求另一块屏幕展示二维码。</p>
+        </div>
+        <button class="secondary retry-button" id="retry" type="button" hidden>刷新二维码</button>
+        <button class="secondary retry-button" id="recheck" type="button" hidden>重新检查状态</button>
+        <p id="interaction-note" class="interaction-note" role="status" aria-live="polite" hidden></p>
+        <a class="statistics primary" id="statistics" href="/statistics-legacy?section=overview" hidden>返回工作台 <span aria-hidden="true">↗</span></a>
+      </div>
     </section>
+    <footer><span class="secure-dot" aria-hidden="true"></span>加密连接<span class="footer-separator">·</span>仅更新原账号授权</footer>
   </main>
 </body>
 </html>

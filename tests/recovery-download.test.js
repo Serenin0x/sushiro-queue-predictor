@@ -3,14 +3,14 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const source=fs.readFileSync(path.join(__dirname,'../deploy/recovery_web/app.js'),'utf8');
 (async()=>{
  const nodes=new Map(),card={dataset:{}},ticket='a'.repeat(32),handoffs=[];let now=1000;
- const node=id=>nodes.get(id)||nodes.set(id,{hidden:true,disabled:false,value:'',textContent:'',href:'',listeners:{},
+ const node=id=>nodes.get(id)||nodes.set(id,{hidden:true,disabled:false,value:'',textContent:'',href:'',listeners:{},dataset:{},setAttribute(){},removeAttribute(){},
   addEventListener(event,fn){this.listeners[event]=fn;},querySelector(){return node(id+'-button');},focus(){},select(){}}).get(id);
  class Clock extends Date {static now(){return now;}}
  const context={URL,Date:Clock,Error,JSON,Map,console,
   location:{origin:'https://124.222.57.236',pathname:'/recover/',hash:'#'+'A'.repeat(43)},
   sessionStorage:{getItem(){return null;},setItem(){}},history:{replaceState(state,title,url){handoffs.push(url);}},navigator:{clipboard:{async writeText(){}}},
   document:{hidden:false,getElementById:node,querySelector(){return card;},addEventListener(){}},
-  setTimeout(){return 1;},clearTimeout(){},
+  window:{addEventListener(){}},setInterval(){return 1;},clearInterval(){},setTimeout(){return 1;},clearTimeout(){},
   async fetch(url){return {ok:true,async json(){
    if(url==='/recover/api/status')return {state:'issued',login_required:false,verification:true};
    if(url==='/recover/api/qr')return {image_url:'/recover/image/'+ticket};
@@ -18,7 +18,7 @@ const source=fs.readFileSync(path.join(__dirname,'../deploy/recovery_web/app.js'
   }};}
  };
  vm.runInNewContext(source,context,{filename:'recovery-app.js'});
- await Promise.resolve();await Promise.resolve();await node('start').listeners.click();
+ for(let i=0;i<12;i++)await Promise.resolve();await node('start').listeners.click();
  assert.equal(node('download-qr').href,'/recover/download/'+ticket);
  assert.equal(node('open-qr').href,'/recover/image/'+ticket);
  let prevented=false;node('download-qr').listeners.click({preventDefault(){prevented=true;}});
